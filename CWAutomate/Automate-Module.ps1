@@ -684,7 +684,7 @@ PROCESS
     $Time = Date
     $CheckAutomateWinRM = {
         Write-Verbose "Invoke Confirm-Automate -Silent"
-        Invoke-Expression(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/Braingears/PowerShell/master/Automate-Module.psm1')
+        Invoke-Expression(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/CWAutomate/Automate-Module.psm1')
         Confirm-Automate -Silent
         Write $Global:Automate
     }
@@ -694,10 +694,10 @@ PROCESS
         $Force = $Args[2]
         $Silent = $Args[3]
         $Transcript = $Args[4]
-        Invoke-Expression(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/Braingears/PowerShell/master/Automate-Module.psm1')
+        Invoke-Expression(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/CWAutomate/Automate-Module.psm1')
         Install-Automate -Server $Server -LocationID $LocationID -Transcript
     }
-    $WMICMD = 'powershell.exe -Command "Invoke-Expression(New-Object Net.WebClient).DownloadString(''https://raw.githubusercontent.com/Braingears/PowerShell/master/Automate-Module.psm1''); '
+    $WMICMD = 'powershell.exe -Command "Invoke-Expression(New-Object Net.WebClient).DownloadString(''https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/CWAutomate/Automate-Module.psm1''); '
     $WMIPOSH = "Install-Automate -Server $Server -LocationID $LocationID -Transcript"
     $WMIArg = Write-Output "$WMICMD$WMIPOSH"""
     $WinRMConectivity = "N/A"
@@ -709,7 +709,7 @@ PROCESS
     # Now Trying WinRM
     If ($Computer -eq $env:COMPUTERNAME) {
         Write-Verbose "Installing Automate on Local Computer - $Computer"
-        Invoke-Expression(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/Braingears/PowerShell/master/Automate-Module.psm1')
+        Invoke-Expression(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/CWAutomate/Automate-Module.psm1')
         Install-Automate -Server $Server -LocationID $LocationID -Show:$Show -Transcript:$Transcript
     } Else {        # Remote Computer
         If (!$Silent) {Write-Host "$($Time) - Now Checking $($COMPUTER)"}
