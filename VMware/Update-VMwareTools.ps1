@@ -60,6 +60,12 @@ function Test-RegistryValue {
     }
 }
 
+#Check if the computer is a VMware VM
+if ((Get-WmiObject win32_computersystem).Manufacturer -ne 'VMware, Inc.') {
+    Write-Output 'Computer is not a VMware VM. Script will exit'
+    Exit
+}
+
 #Find the URL to the latest version
 $LatestVersionExe = (Invoke-WebRequest -Uri https://packages.vmware.com/tools/releases/latest/windows/x64/).Links.href | Where-Object { $_ -match 'VMware-tools-.*\.exe' }
 $LatestVersionFullURL = "https://packages.vmware.com/tools/releases/latest/windows/x64/" + "$LatestVersionExe"
