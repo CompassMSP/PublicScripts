@@ -1,6 +1,6 @@
 <#
 
-**This script will cause the computer to reboot**
+**This script might cause the computer to reboot**
 
 This script updates VMware tools to the latest avalible version.
 
@@ -129,12 +129,13 @@ if($VmToolsShouldBeUpdated){
     if ($InstallVCx64) {
         Write-Output 'Installing VC Redist x64'
         (New-Object System.Net.WebClient).DownloadFile('https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x64.exe', 'C:\Windows\Temp\vc_redist.x64.exe')
-        Start-Process -Wair -FilePath 'C:\Windows\Temp\vc_redist.x64.exe' -ArgumentList '/Q /restart' -PassThru
+        $VCx64Proc = Start-Process -Wait -FilePath 'C:\Windows\Temp\vc_redist.x64.exe' -ArgumentList '/Q /restart' -PassThru
     }
     if ($InstallVCx86) {
         Write-Output 'Installing VC Redist x86'
         (New-Object System.Net.WebClient).DownloadFile('https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x86.exe', 'C:\Windows\Temp\vc_redist.x86.exe')
-        Start-Process -Wair -FilePath 'C:\Windows\Temp\VC_redist.x86.exe' -ArgumentList '/Q /restart' -PassThru
+        $VCx86Proc = Start-Process -Wait -FilePath 'C:\Windows\Temp\VC_redist.x86.exe' -ArgumentList '/Q /restart' -PassThru
+
     }
 
     Write-Output 'Downloading VMware Tools'
@@ -145,8 +146,10 @@ if($VmToolsShouldBeUpdated){
     Write-Output 'Installing VMware Tools'
 
     #Install VMware Tools
-    Start-Process -Wait -FilePath 'C:\Windows\Temp\VMwareTools.exe' -ArgumentList '/s /v /qn /l c:\windows\temp\VMToolsInstall.log'
+    $VMToolsInstallProc = Start-Process -Wait -FilePath 'C:\Windows\Temp\VMwareTools.exe' -ArgumentList '/s /v /qn /l c:\windows\temp\VMToolsInstall.log' -PassThru
 
-    #Reboot the computer to complete the install
-    Restart-Computer -Force
+    #Reboot if Required
+    if ($VCx64Proc.ExitCode -eq '3010' -or $VCx86Proc.ExitCode -eq '3010' -or $VMToolsInstallProc.ExitCode -eq '3010') {
+        Restart-Computer -Force
+    }
 }
