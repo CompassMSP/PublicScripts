@@ -84,7 +84,24 @@ if ($TSMode -eq '1') {
     #Check to make sure UPDs are enabled
     if((Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Terminal Server\ClusterSettings' -Name UvhdEnabled -Value 1) -or
 	(Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\FSLogix\Profiles' -Name 'Enabled' -ValueData 1)){
-        schtasks /create /RU SYSTEM /ST 04:00 /SC DAILY /TN "$ScheduledTaskName" /TR "%SYSTEMROOT%\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass C:\BIN\DelProf2\Remove-LocalUPDProfiles.ps1" /F
+
+        #region createScheduledTask
+        $ScheduledTaskAction = New-ScheduledTaskAction -Execute '%SYSTEMROOT%\System32\WindowsPowerShell\v1.0\powershell.exe' -Argument '-ExecutionPolicy Bypass C:\BIN\DelProf2\Remove-LocalUPDProfiles.ps1'
+
+        $ScheduledTaskTrigger = @(
+            $(New-ScheduledTaskTrigger -Daily -At 4AM),
+            $(New-ScheduledTaskTrigger -AtStartup )
+        )
+
+        $ScheduledTaskPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM'
+
+        $ScheduledTaskSettingsSet = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+
+        $ScheduledTask = New-ScheduledTask -Action $ScheduledTaskAction -Trigger $ScheduledTaskTrigger -Principal $ScheduledTaskPrincipal -Settings $ScheduledTaskSettingsSet
+
+        Register-ScheduledTask -TaskName $ScheduledTaskName -InputObject $ScheduledTask
+        #endregion createScheduledTask
+        
         Write-Host 'Make sure that C:\BIN\DelProf2\Remove-LocalUPDProfiles.ps1 and C:\BIN\DelProf2\DelProf2.exe exist' -BackgroundColor Yellow -ForegroundColor Black
     }
     else {
