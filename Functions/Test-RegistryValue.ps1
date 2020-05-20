@@ -23,7 +23,7 @@ function Test-RegistryValue {
         [string]$Name,
 
         [parameter(Position = 3)]
-        [ValidateNotNullOrEmpty()]$ValueData
+        $ValueData
     )
 
     #Add Regdrive if it is not present
