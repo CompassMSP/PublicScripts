@@ -5,6 +5,7 @@ All data on the selected drive will be deleted
 
 Andy Morales
 #>
+#Requires -Modules ActiveDirectory -Version 5 -RunAsAdministrator
 
 $FSLDiskLabel = 'FSLogixDisks'
 $AclAdGroupName = 'ACL_FSLogix_FullControl'
