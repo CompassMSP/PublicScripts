@@ -22,8 +22,8 @@ function Test-RegistryValue {
     param (
         [parameter(Mandatory = $true,
             Position = 1,
-            HelpMessage = 'Registry::HKEY_LOCAL_MACHINE\SYSTEM')]
-        [ValidatePattern('Registry::.*')]
+            HelpMessage = 'HKEY_LOCAL_MACHINE\SYSTEM')]
+        [ValidatePattern('Registry::.*|HKEY_')]
         [ValidateNotNullOrEmpty()]
         [String]$Path,
 
@@ -33,9 +33,18 @@ function Test-RegistryValue {
         [string]$Name,
 
         [parameter(Position = 3)]
-        [ValidateNotNullOrEmpty()]$ValueData
+        $ValueData
     )
+
+    Set-StrictMode -Version 2.0
+
+    #Add Regdrive if it is not present
+    if ($Path -notmatch 'Registry::.*'){
+        $Path = 'Registry::' + $Path
+    }
+
     try {
+        #Reg key with value
         if ($ValueData) {
             if ((Get-ItemProperty -Path $Path -ErrorAction Stop | Select-Object -ExpandProperty $Name -ErrorAction Stop) -eq $ValueData) {
                 return $true
@@ -44,6 +53,7 @@ function Test-RegistryValue {
                 return $false
             }
         }
+        #Key key without value
         else {
             $RegKeyCheck = Get-ItemProperty -Path $Path -ErrorAction Stop | Select-Object -ExpandProperty $Name -ErrorAction Stop
             if ($null -eq $RegKeyCheck) {

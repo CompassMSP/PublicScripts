@@ -29,11 +29,13 @@ function Test-RegistryValue {
         [string]$Name,
 
         [parameter(Position = 3)]
-        [ValidateNotNullOrEmpty()]$ValueData
+        $ValueData
     )
 
+    Set-StrictMode -Version 2.0
+
     #Add Regdrive if it is not present
-    if ($Path -notmatch 'Registry::.*') {
+    if ($Path -notmatch 'Registry::.*'){
         $Path = 'Registry::' + $Path
     }
 
