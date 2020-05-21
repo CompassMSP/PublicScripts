@@ -26,6 +26,8 @@ function Test-RegistryValue {
         $ValueData
     )
 
+    Set-StrictMode -Version 2.0
+
     #Add Regdrive if it is not present
     if ($Path -notmatch 'Registry::.*'){
         $Path = 'Registry::' + $Path
