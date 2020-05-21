@@ -39,7 +39,7 @@ function Test-RegistryValue {
     Set-StrictMode -Version 2.0
 
     #Add Regdrive if it is not present
-    if ($Path -notmatch 'Registry::.*'){
+    if ($Path -notmatch 'Registry::.*') {
         $Path = 'Registry::' + $Path
     }
 
@@ -71,7 +71,7 @@ function Test-RegistryValue {
 }
 
 #Check if the computer is a VMware VM
-if ((Get-WmiObject win32_computersystem).Manufacturer -ne 'VMware, Inc.') {
+if (( Get-CimInstance -ClassName win32_computersystem).Manufacturer -ne 'VMware, Inc.') {
     Write-Output 'Computer is not a VMware VM. Script will exit'
     Exit
 }
@@ -80,26 +80,26 @@ if ((Get-WmiObject win32_computersystem).Manufacturer -ne 'VMware, Inc.') {
 $LatestVersionExe = (Invoke-WebRequest -Uri https://packages.vmware.com/tools/releases/latest/windows/x64/).Links.href | Where-Object { $_ -match 'VMware-tools-.*\.exe' }
 $LatestVersionFullURL = "https://packages.vmware.com/tools/releases/latest/windows/x64/" + "$LatestVersionExe"
 
-if(Test-Path "C:\Program Files\VMware\VMware Tools\vmtoolsd.exe"){
+if (Test-Path "C:\Program Files\VMware\VMware Tools\vmtoolsd.exe") {
     #Get the file version of the update package, and the installed package
     [version]$ToolsInstalledVersion = ('{0}.{1}.{2}' -f ((Get-Item -Path "C:\Program Files\VMware\VMware Tools\vmtoolsd.exe").VersionInfo.fileversion).split('.') )
     #Check the x86 version so that the script works on x86 and x64
     [Version]$ToolsUpdateVersion = ('{0}.{1}.{2}' -f ([regex]::Match("$LatestVersionExe", '\d{1,2}\.\d{1,2}\.\d{1,2}').value).split('.') )
 
     #Check to see if the update is newer than the installed version
-    If ($ToolsUpdateVersion -gt $ToolsInstalledVersion){
+    If ($ToolsUpdateVersion -gt $ToolsInstalledVersion) {
         $VmToolsShouldBeUpdated = $true
     }
-    else{
+    else {
         $VmToolsShouldBeUpdated = $false
     }
 }
 #If vmtoolsd.exe was not found then VM tools are probably not installed
-else{
+else {
     $VmToolsShouldBeUpdated = $true
 }
 
-if($VmToolsShouldBeUpdated){
+if ($VmToolsShouldBeUpdated) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
     #Detect if VC Redist 2015 is installed
