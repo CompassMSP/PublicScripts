@@ -1,26 +1,5 @@
 ﻿
 function Write-Log {
-    [CmdletBinding()]
-    Param
-    (
-        [Parameter(Mandatory = $true,
-            ValueFromPipelineByPropertyName = $true)]
-        [ValidateNotNullOrEmpty()]
-        [Alias("LogContent")]
-        [string]$Message,
-
-        [Parameter(Mandatory = $false)]
-        [Alias('LogPath')]
-        [string]$Path,
-
-        [Parameter(Mandatory = $false)]
-        [ValidateSet("Error", "Warn", "Info")]
-        [string]$Level = "Info",
-
-        [Parameter(Mandatory = $false)]
-        [switch]$NoClobber
-    )
-
     <#
     .Synopsis
     Write-Log writes a message to a specified log file with the current time stamp.
@@ -63,6 +42,26 @@ function Write-Log {
     .LINK
     https://gallery.technet.microsoft.com/scriptcenter/Write-Log-PowerShell-999c32d0
     #>
+    [CmdletBinding()]
+    Param
+    (
+        [Parameter(Mandatory = $true,
+            ValueFromPipelineByPropertyName = $true)]
+        [ValidateNotNullOrEmpty()]
+        [Alias("LogContent")]
+        [string]$Message,
+
+        [Parameter(Mandatory = $false)]
+        [Alias('LogPath')]
+        [string]$Path,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet("Error", "Warn", "Info")]
+        [string]$Level = "Info",
+
+        [Parameter(Mandatory = $false)]
+        [switch]$NoClobber
+    )
 
     Begin {
         # Set VerbosePreference to Continue so that verbose messages are displayed.
