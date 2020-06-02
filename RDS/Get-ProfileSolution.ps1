@@ -1,4 +1,3 @@
-
 <#
 This script will identify which profile solution is applied to a computer.
 
