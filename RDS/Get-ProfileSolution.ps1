@@ -71,7 +71,7 @@ function Test-RegistryValue {
 }
 
 $ProfileSolution = @()
-#Will be used to find how many profile solutions have been enabled (ideally the final number should be just 1)
+#Will be used to find how many profile solutions have been enabled (ideally the final number should be just 1, or 0 for local)
 $ProfileSolutionCount = 0
 
 if (Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\FSLogix\Profiles' -Name 'Enabled' -ValueData '1') {
