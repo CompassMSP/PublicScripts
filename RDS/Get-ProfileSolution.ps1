@@ -2,7 +2,7 @@
 <#
 This script will identify which profile solution is applied to a computer.
 
-Standard windows profiles will yield a blank output.
+Standard windows profiles will return "Local".
 
 The script will also detect if multiple profile solutions are enabled and throw an error
 
@@ -40,7 +40,7 @@ function Test-RegistryValue {
     Set-StrictMode -Version 2.0
 
     #Add Regdrive if it is not present
-    if ($Path -notmatch 'Registry::.*'){
+    if ($Path -notmatch 'Registry::.*') {
         $Path = 'Registry::' + $Path
     }
 
@@ -80,7 +80,7 @@ if (Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\FSLogix\Prof
     if (Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\FSLogix\ODFC' -Name 'Enabled' -ValueData '1') {
         $ProfileSolution += 'FSL Profiles + ODFC'
     }
-    else{
+    else {
         $ProfileSolution += 'FSL Profiles'
     }
     $ProfileSolutionCount++
@@ -103,16 +103,24 @@ if (Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\
     if (Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\FSLogix\ODFC' -Name 'Enabled' -ValueData '1') {
         $ProfileSolution += 'UPD + FSL ODFC'
     }
-    else{
+    else {
         $ProfileSolution += 'UPD'
     }
 
     $ProfileSolutionCount++
 }
 
-if($ProfileSolutionCount -gt 1){
-    #If there is more than one profile solution in place something is wrong. Append ERROR to the output.
-    $ProfileSolution = 'ERROR: ' + ($ProfileSolution -join ' ')
+Switch ($ProfileSolutionCount) {
+    { $_ -eq 0 } {
+        #No profile solutions found, must be local
+        $ProfileSolution = 'Local'
+        BREAK
+    }
+    { $_ -gt 1 } {
+        #If there is more than one profile solution in place something is wrong. Append ERROR to the output.
+        $ProfileSolution = 'ERROR: ' + ($ProfileSolution -join ' ')
+        BREAK
+    }
 }
 
 #Return all profile solutions found. If nothing was found return a blank value to clear the field in the RMM.
