@@ -185,6 +185,27 @@ ps64 -args $result -command {
         }
     }
 
+    #RDwebClient
+    if ([environment]::OSVersion.Version -gt [version]('{0}.{1}.{2}.{3}' -f '10.0.0.0'.split('.'))) {
+        try {
+            Import-Module RDWebClientManagement -ErrorAction Stop
+        }
+        catch {
+            Write-Log -Path $LogPath -Level Info -Message "Could not import RDWebClientManagement it's likely not installed"
+            BREAK
+        }
+
+        try{
+            Import-RDWebClientBrokerCert $pfxpath -ErrorAction Stop
+            Install-RDWebClientPackage -ErrorAction Stop
+            Publish-RDWebClientPackage -Type Production -Latest -ErrorAction Stop
+        }
+        catch{
+            Write-Log -Path $LogPath -Level Error -Message "Ran into an error publishing RDWebClient"
+            $ErrorCount++
+        }
+    }
+
     if ($ErrorCount -gt 0) {
         Send-MailMessage -To $NotificationsEmail -From 'LERdgCertificates@compassmsp.com' -Subject "Error During Certificate renewal on $($RDConBrokerFqdn)" -Body "See attached" -SmtpServer $SMTPRelay -Attachments $LogPath
     }
