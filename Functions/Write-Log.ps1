@@ -1,5 +1,4 @@
-﻿
-function Write-Log {
+﻿function Write-Log {
     <#
     .Synopsis
     Write-Log writes a message to a specified log file with the current time stamp.
@@ -51,7 +50,7 @@ function Write-Log {
         [Alias("LogContent")]
         [string]$Message,
 
-        [Parameter(Mandatory = $false)]
+        [Parameter(Mandatory = $true)]
         [Alias('LogPath')]
         [string]$Path,
 
@@ -60,15 +59,20 @@ function Write-Log {
         [string]$Level = "Info",
 
         [Parameter(Mandatory = $false)]
-        [switch]$NoClobber
+        [switch]$NoClobber,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$DaiyMode
     )
 
     Begin {
         # Set VerbosePreference to Continue so that verbose messages are displayed.
         $VerbosePreference = 'Continue'
+        if ($DaiyMode) {
+            $Path = $Path.Replace('.', "-$(Get-Date -UFormat "%Y%m%d").")
+        }
     }
     Process {
-
         # If the file already exists and NoClobber was specified, do not write to the log.
         if ((Test-Path $Path) -AND $NoClobber) {
             Write-Error "Log file $Path already exists, and you specified NoClobber. Either delete the file or specify a different name."
@@ -78,7 +82,7 @@ function Write-Log {
         # If attempting to write to a log file in a folder/path that doesn't exist create the file including the path.
         elseif (!(Test-Path $Path)) {
             Write-Verbose "Creating $Path."
-            $NewLogFile = New-Item $Path -Force -ItemType File
+            New-Item $Path -Force -ItemType File
         }
 
         else {
@@ -105,7 +109,24 @@ function Write-Log {
         }
 
         # Write log entry to $Path
-        "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append
+        #try to write to the log file. Rety if it is locked
+        $StopWriteLogloop = $false
+        [int]$WriteLogRetrycount = "0"
+        do {
+            try {
+                "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append -ErrorAction Stop
+                $StopWriteLogloop = $true
+            }
+            catch {
+                if ($WriteLogRetrycount -gt 5) {
+                    $StopWriteLogloop = $true
+                }
+                else {
+                    Start-Sleep -Milliseconds 500
+                    $WriteLogRetrycount++
+                }
+            }
+        }While ($StopWriteLogloop -eq $false)
     }
     End {
     }
