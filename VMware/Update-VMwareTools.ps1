@@ -291,7 +291,7 @@ if ($VmToolsShouldBeUpdated) {
     #Download VMware Tools
     (New-Object System.Net.WebClient).DownloadFile("$LatestVersionFullURL", 'C:\Windows\Temp\VMwareTools.exe')
 
-    Write-Log -Level Info -Path $LogPath -Message 'Installing VMware Tools'
+    Write-Log -Level Info -Path $LogPath -Message 'Installing VMware Tools. Check C:\windows\temp\VMToolsInstall.log for more info'
 
     #Install VMware Tools
     $VMToolsInstallProc = Start-Process -Wait -FilePath 'C:\Windows\Temp\VMwareTools.exe' -ArgumentList '/s /v /qn /l c:\windows\temp\VMToolsInstall.log' -PassThru
