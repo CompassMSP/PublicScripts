@@ -212,7 +212,7 @@ if (( Get-CimInstance -ClassName win32_computersystem).Manufacturer -ne 'VMware,
 }
 
 #Find the URL to the latest version
-$LatestVersionExe = (Invoke-WebRequest -Uri https://packages.vmware.com/tools/releases/latest/windows/x64/ -UseBasicParsing).Links.href  | Where-Object { $_ -match 'VMware-tools-.*\.exe' }
+$LatestVersionExe = (Invoke-WebRequest -Uri 'https://packages.vmware.com/tools/releases/latest/windows/x64/' -UseBasicParsing).Links.href  | Where-Object { $_ -match 'VMware-tools-.*\.exe' }
 $LatestVersionFullURL = "https://packages.vmware.com/tools/releases/latest/windows/x64/" + "$LatestVersionExe"
 
 if (Test-Path "C:\Program Files\VMware\VMware Tools\vmtoolsd.exe") {
