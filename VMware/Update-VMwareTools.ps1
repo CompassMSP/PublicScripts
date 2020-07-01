@@ -301,6 +301,8 @@ if ($VmToolsShouldBeUpdated) {
         Write-Log -Level Info -Path $LogPath -Message 'Rebooting Computer'
         Restart-Computer -Force
     }
+
+    Write-Log -Level Info -Path $LogPath -Message 'Done updating VMware tools'
 }
 else {
     Write-Log -Level Info -Path $LogPath -Message 'There is no need to update VMware Tools'
