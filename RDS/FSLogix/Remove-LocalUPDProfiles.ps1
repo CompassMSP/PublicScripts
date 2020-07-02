@@ -1,6 +1,6 @@
 <#
 
-This script deletes local profile data on an RDS server that has UPDs or FSL Profiles. When UPDs are enabled user files will sometimes be left behind. This can cause some unexpected resuults with applications.
+This script deletes local profile data on an RDS server that has UPDs or FSL Profiles. When UPDs are enabled user files will sometimes be left behind. This can cause some unexpected results with applications.
 
 The script has a failsafe that does not run if UPDs or FSL Profiles become disabled at any point.
 
