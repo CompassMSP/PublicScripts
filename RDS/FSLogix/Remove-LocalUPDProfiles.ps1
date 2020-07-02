@@ -67,6 +67,70 @@ function Test-RegistryValue {
         return $false
     }
 }
+Function Get-RDSActiveSessions {
+    <#
+    .SYNOPSIS
+        Returns open sessions of a local workstation
+    .DESCRIPTION
+        Get-ActiveSessions uses the command line tool qwinsta to retrieve all open user sessions on a computer regardless of how they are connected.
+    .OUTPUTS
+        A custom object with the following members:
+            UserName: [string]
+            SessionName: [string]
+            ID: [string]
+            Type: [string]
+            State: [string]
+    .NOTES
+        Author: Anthony Howell
+    .LINK
+        qwinsta
+        http://stackoverflow.com/questions/22155943/qwinsta-error-5-access-is-denied
+        https://theposhwolf.com
+    #>
+    Begin {
+        $Name = $env:COMPUTERNAME
+        $ActiveUsers = @()
+    }
+    Process {
+        $result = qwinsta /server:$Name
+        If ($result) {
+            ForEach ($line in $result[1..$result.count]) {
+                #avoiding the line 0, don't want the headers
+                $tmp = $line.split(" ") | Where-Object { $_.length -gt 0 }
+                If (($line[19] -ne " ")) {
+                    #username starts at char 19
+                    If ($line[48] -eq "A") {
+                        #means the session is active ("A" for active)
+                        $ActiveUsers += New-Object PSObject -Property @{
+                            "ComputerName" = $Name
+                            "SessionName"  = $tmp[0]
+                            "UserName"     = $tmp[1]
+                            "ID"           = $tmp[2]
+                            "State"        = $tmp[3]
+                            "Type"         = $tmp[4]
+                        }
+                    }
+                    Else {
+                        $ActiveUsers += New-Object PSObject -Property @{
+                            "ComputerName" = $Name
+                            "SessionName"  = $null
+                            "UserName"     = $tmp[0]
+                            "ID"           = $tmp[1]
+                            "State"        = $tmp[2]
+                            "Type"         = $null
+                        }
+                    }
+                }
+            }
+        }
+        Else {
+            Write-Error "Unknown error, cannot retrieve logged on users"
+        }
+    }
+    End {
+        Return $ActiveUsers
+    }
+}
 
 #Array that will store the command and all parameters
 $CommandToExecute = @()
@@ -78,14 +142,18 @@ $CommandToExecute += 'C:\BIN\DelProf2\DelProf2.exe /u'
 if (Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Terminal Server\ClusterSettings' -Name UvhdEnabled -Value 1) {
     #UvhdCleanupBin is also excluded since it is unknown what deleting it will do
     $CommandToExecute += '/ed:UvhdCleanupBin'
+
+    #Exclude logged in users
+    $CommandToExecute += "/ed:$((Get-RDSActiveSessions).username -join ' /ed:')"
 }
 
 #FSL Profiles
 if (Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\FSLogix\Profiles' -Name 'Enabled' -ValueData 1) {
-    #Exclude local_ since FSL Profiles create some local items
-    $CommandToExecute += '/ed:local_*'
+    #Exclude Currently logged in users
+    $CommandToExecute += "/ed:$((Get-RDSActiveSessions).username -join ' /ed:')"
+
+    #Exclude local_ folder of logged in users
+    $CommandToExecute += "/ed:local_$((Get-RDSActiveSessions).username -join ' /ed:Local_')"
 }
 
 Invoke-Expression -Command ($CommandToExecute -join ' ')
-#Run the command again, but remove the local_ exclusion. Replace it with delete profiles older than 3 days. This deletes older local_ files that should not be in use.
-Invoke-Expression -Command ($CommandToExecute -join ' ').Replace('/ed:local_*','/d:3')
