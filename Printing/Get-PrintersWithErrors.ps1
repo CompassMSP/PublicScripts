@@ -1,4 +1,14 @@
-$AllPrinters = Get-Printer
+<#
+Returns a list of printers that are paused or in an error state.
+
+Andy Morales
+#>
+$ExcludedPrinters = @(
+    'Example',
+    'Example2'
+)
+
+$AllPrinters = Get-Printer | Where-Object { $ExcludedPrinters -notcontains $_.name }
 
 $PrintersWithErrors = @()
 
