@@ -3,12 +3,17 @@ Returns a list of printers that are paused or in an error state.
 
 Andy Morales
 #>
-$ExcludedPrinters = @(
+$ExcludedPrinterNames = @(
     'Example',
     'Example2'
 )
 
-$AllPrinters = Get-Printer | Where-Object { $ExcludedPrinters -notcontains $_.name }
+$ExcludedDrivers = @(
+    'Example Driver',
+    'Example Driver2'
+)
+
+$AllPrinters = Get-Printer | Where-Object { $ExcludedPrinterNames -notcontains $_.name -and $ExcludedDrivers -notcontains $_.DriverName }
 
 $PrintersWithErrors = @()
 
