@@ -1,6 +1,8 @@
 <#
 Returns a list of printers that are paused or in an error state.
 
+The script is also able to delete jobs in an error state by setting $ClearErrorJobs  to true
+
 Andy Morales
 #>
 $ExcludedPrinterNames = @(
@@ -12,6 +14,9 @@ $ExcludedDrivers = @(
     'Example Driver',
     'Example Driver2'
 )
+
+#Setting this to true will attempt to delete jobs in an error state
+$ClearErrorJobs = $false
 
 $AllPrinters = Get-Printer | Where-Object { $ExcludedPrinterNames -notcontains $_.name -and $ExcludedDrivers -notcontains $_.DriverName }
 
@@ -37,6 +42,10 @@ Foreach ($Printer in $AllPrinters) {
                 PrintName = $PrintJob.PrinterName
                 Docname   = $PrintJob.DocumentName
                 JobStatus = $PrintJob.jobStatus
+            }
+            
+            if ($ClearErrorJobs) {
+                $PrintJob | Remove-PrintJob
             }
         }
     }
