@@ -1,10 +1,14 @@
 #Requires -Version 5 -RunAsAdministrator
 #https://haveibeenpwned.com/Passwords
 
-
+<#
+#These are only used if there is no access to $StoreFilesInDBFormatLink
 $HIBPHashesLink = 'https://downloads.pwnedpasswords.com/passwords/pwned-passwords-ntlm-ordered-by-hash-v6.7z'
 $HIBPHashesCompressedFile = 'C:\Temp\pwned-passwords-ntlm-ordered-by-hash.7z'
 $HIBPHashesExtractDir = 'C:\Temp\HIBP'
+#>
+$StoreFilesInDBFormatLink = 'https://rmm.compassmsp.com/softwarepackages/ADPasswordAuditStore.zip'
+$StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
 $PasswordProtectionMSIFile = 'C:\Windows\Temp\Lithnet.ActiveDirectory.PasswordProtection.msi'
 $GPOPath = 'C:\Windows\Temp\PasswordProtection.zip'
 $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
@@ -147,13 +151,15 @@ Function Remove-OldFiles {
         $HIBPHashesCompressedFile,
         $HIBPHashesExtractDir,
         $GPOPath,
-        $GPOFolder
+        $GPOFolder,
+        $StoreFilesInDBFormatLink,
+        $StoreFilesInDBFormatDirectory
     )
 
     Write-Log -Level Info -Path $LogDirectory -Message 'Deleting old files if they exist.'
 
     foreach ($item in $ItemsToDelete) {
-        Remove-Item $item -Force -Recurse -ErrorAction SilentlyContinue
+        Remove-Item -Path $item -Force -Recurse -ErrorAction SilentlyContinue
     }
 }
 Function Get-InstalledApplications {
@@ -214,42 +220,27 @@ if (Test-Path -Path 'C:\Program Files\Lithnet\Active Directory Password Protecti
 #Clean up any old files
 Remove-OldFiles
 
-if ((Get-PSDrive C).free -gt 25GB) {
+if ((Get-PSDrive C).free -gt 20GB) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-    #Install 7zip module
-    if (-not (Get-Module -Name 7Zip4PowerShell -ListAvailable)) {
-        Write-Log -Level Info -Path $LogDirectory -Message 'Installing 7zip PS module'
-
-        try {
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction Stop
-            Set-PSRepository -Name 'PSGallery' -SourceLocation "https://www.powershellgallery.com/api/v2" -InstallationPolicy Trusted -ErrorAction Stop
-            Install-Module -Name 7Zip4PowerShell -Force -ErrorAction Stop
-        }
-        catch {
-            Write-Log -Level Error -Path $LogDirectory -Message 'Ran into an issue installing the 7Zip4PowerShell module'
-            BREAK
-        }
-    }
 
     #Download HIBP Hashes
     if (-not $HIBPDBFilesExist) {
         Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes'
         New-Item -Path 'C:\Temp' -ItemType Directory -Force
 
-        (New-Object System.Net.WebClient).DownloadFile("$HIBPHashesLink", "$HIBPHashesCompressedFile")
+        (New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
 
         #Extract HIBP Hashes
         Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
 
         try {
-            Expand-7Zip -ArchiveFileName $HIBPHashesCompressedFile -TargetPath $HIBPHashesExtractDir
+            Expand-Archive -Path $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force
         }
         catch {
-            Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the 7Z file $HIBPHashesCompressedFile"
+            Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
         }
 
-        Remove-Item $HIBPHashesCompressedFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
     }
 
 
@@ -262,23 +253,6 @@ if ((Get-PSDrive C).free -gt 25GB) {
 
         Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
     }
-
-    #region Convert hashes to DB files
-    if (-not $HIBPDBFilesExist) {
-        #This will take 40min+
-        Write-Log -Level Info -Path $LogDirectory -Message 'Converting HIBP hashes to DB files. This will take 40+ mins'
-
-        try {
-            Import-Module LithnetPasswordProtection
-            Open-Store 'C:\Program Files\Lithnet\Active Directory Password Protection\Store' -ErrorAction Stop
-            Import-CompromisedPasswordHashes -Filename (Get-ChildItem -Path $HIBPHashesExtractDir).fullname -ErrorAction Stop
-        }
-        catch {
-            Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue importing hashes from $HIBPHashesExtractDir"
-            BREAK
-        }
-    }
-    #endregion Convert hashes to DB files
 
     #region Import GPO
     if (-not $GPOExistsWithCorrectSettings) {
@@ -346,7 +320,7 @@ if ((Get-PSDrive C).free -gt 25GB) {
     #endregion Import GPO
 }
 else {
-    Write-Log -Level Error -Path $LogDirectory -Message 'Not enough free space on the C drive. At least 30GB required.'
+    Write-Log -Level Error -Path $LogDirectory -Message 'Not enough free space on the C drive. At least 20GB required.'
 }
 
 #Cleanup
