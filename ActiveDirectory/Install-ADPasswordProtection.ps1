@@ -1,19 +1,64 @@
 Function Install-ADPasswordProtection {
     <#
-    This script#>
+    .SYNOPSIS
+    This script installs Lithnet AD Password Protection on the DC it is run on.
+
+    .DESCRIPTION
+    The goal of this application is to prevent users from setting known compromised passwords (P@ssw0rd) in AD.
+
+    The script will do the following:
+        Install the application on the DC
+        Create the GPO (if the server is the PDC)
+        Copy the HIBP DB into the Store location
+
+    .PARAMETER StoreFilesInDBFormatLink
+    A URL to the ZIP file where the HIBP DB files will be hosted. The script will download this ZIP and extract it directly to its store.
+
+    This file will need to be manually updated any time there is a HIBP DB update (about once or twice a year)
+
+    .PARAMETER SMTPRelay
+    SMTP server that will be used to send notifications if the script runs into any issues.
+
+    .PARAMETER NotificationEmail
+    Email address that will recieve a notification if the script runs into any issues
+
+    .PARAMETER FromEmail
+    "From" email for notifications
+
+    .EXAMPLE
+    Install-ADPasswordProtection -StoreFilesInDBFormatLink 'https://example.com/ADPasswordStore.zip' -NotificationEmail 'alerts@example.com' -SMTPRelay 'example.mail.protection.outlook.com' -FromEmail 'ADPasswordNotifications@example.com'
+
+    .LINK
+    https://github.com/lithnet/ad-password-protection
+    https://github.com/CompassMSP/PublicScripts/blob/master/ActiveDirectory/Install-ADPasswordProtection.ps1
+
+    Andy Morales
+    #>
     #Requires -Version 5 -RunAsAdministrator
 
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true,
             HelpMessage = 'https://example.com/ADPasswordStore.zip')]
-        [string]$StoreFilesInDBFormatLink
+        [string]$StoreFilesInDBFormatLink,
+
+        [Parameter(Mandatory = $true,
+            HelpMessage = 'example.mail.protection.outlook.com')]
+        [string]$SMTPRelay,
+
+        [Parameter(Mandatory = $true)]
+        [string]$NotificationEmail,
+
+        [Parameter(Mandatory = $true)]
+        [string]$FromEmail
     )
 
     $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
     $PasswordProtectionMSIFile = 'C:\Windows\Temp\Lithnet.ActiveDirectory.PasswordProtection.msi'
     $GPOPath = 'C:\Windows\Temp\PasswordProtection.zip'
     $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
+
+    $Errors = @()
 
     function Write-Log {
         <#
@@ -240,6 +285,7 @@ Function Install-ADPasswordProtection {
             }
             catch {
                 Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
+                $Errors += "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
             }
 
             Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
@@ -313,6 +359,7 @@ Function Install-ADPasswordProtection {
                 }
                 catch {
                     Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue importing the GPO from $GPOBackupFolder"
+                    $Errors += "Ran into an issue importing the GPO from $GPOBackupFolder"
                 }
             }
             else {
@@ -323,6 +370,26 @@ Function Install-ADPasswordProtection {
     }
     else {
         Write-Log -Level Error -Path $LogDirectory -Message 'Not enough free space on the C drive. At least 20GB required.'
+        $Errors += 'Not enough free space on the C drive. At least 20GB required.'
+    }
+
+    if ($Errors.count -gt 0) {
+        $EmailBody = $Errors | ForEach-Object { [PSCustomObject]@{'Errors' = $_ } } | ConvertTo-Html -Fragment -Property 'Errors' | Out-String
+
+
+
+        Send-MailMessage -To $NotificationEmail -From 'BUIWUpdates@compassmsp.com' -Subject "Ran into error installing AD Password Protection on $ENV:COMPUTERNAME" -BodyAsHtml $EmailBody -SmtpServer $SMTPRelay
+
+        $SendMailMessageParams = @{
+            To         = $NotificationEmail
+            From       = $FromEmail
+            Subject    = "Ran into error installing AD Password Protection on $ENV:COMPUTERNAME"
+            Body       = $EmailBody
+            BodyAsHtml = $true
+            SmtpServer = $SMTPRelay
+        }
+
+        Send-MailMessage @SendMailMessageParams
     }
 
     #Cleanup
