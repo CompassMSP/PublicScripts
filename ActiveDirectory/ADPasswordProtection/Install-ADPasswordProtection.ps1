@@ -20,7 +20,7 @@ Function Install-ADPasswordProtection {
     SMTP server that will be used to send notifications if the script runs into any issues.
 
     .PARAMETER NotificationEmail
-    Email address that will recieve a notification if the script runs into any issues
+    Email address that will receive a notification if the script runs into any issues
 
     .PARAMETER FromEmail
     "From" email for notifications

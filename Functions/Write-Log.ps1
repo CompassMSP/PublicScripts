@@ -33,7 +33,7 @@
     Write-Log -Message 'Log message'
     Writes the message to c:\Logs\PowerShellLog.log.
     .EXAMPLE
-    Write-Log -Message 'Restarting Server.' -Path c:\Logs\Scriptoutput.log
+    Write-Log -Message 'Restarting Server.' -Path c:\Logs\ScriptOutput.log
     Writes the content to the specified log file and creates the path and file specified.
     .EXAMPLE
     Write-Log -Message 'Folder does not exist.' -Path c:\Logs\Script.log -Level Error
@@ -109,24 +109,24 @@
         }
 
         # Write log entry to $Path
-        #try to write to the log file. Rety if it is locked
-        $StopWriteLogloop = $false
-        [int]$WriteLogRetrycount = "0"
+        #try to write to the log file. Retry if it is locked
+        $StopWriteLogLoop = $false
+        [int]$WriteLogRetryCount = "0"
         do {
             try {
                 "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append -ErrorAction Stop
-                $StopWriteLogloop = $true
+                $StopWriteLogLoop = $true
             }
             catch {
-                if ($WriteLogRetrycount -gt 5) {
-                    $StopWriteLogloop = $true
+                if ($WriteLogRetryCount -gt 5) {
+                    $StopWriteLogLoop = $true
                 }
                 else {
                     Start-Sleep -Milliseconds 500
-                    $WriteLogRetrycount++
+                    $WriteLogRetryCount++
                 }
             }
-        }While ($StopWriteLogloop -eq $false)
+        }While ($StopWriteLogLoop -eq $false)
     }
     End {
     }
