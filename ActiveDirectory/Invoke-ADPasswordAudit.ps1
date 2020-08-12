@@ -28,7 +28,7 @@ Function Invoke-ADPasswordAudit {
 
     #Identify any compromised users
     Foreach ($user in $AllActiveADUsers) {
-        if (Test-IsADUserPasswordCompromised -AccountName $user.SamAccountName) {
+        if (Test-IsADUserPasswordCompromised -AccountName $user.SamAccountName -Server $env:COMPUTERNAME) {
             $CompromisedUsers += [PSCustomObject]@{
                 Name              = $user.Name
                 SamAccountName    = $user.SamAccountName
