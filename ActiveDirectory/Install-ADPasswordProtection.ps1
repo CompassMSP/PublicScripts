@@ -321,14 +321,14 @@ Function Install-ADPasswordProtection {
                 )
 
                 Foreach ($File in $FilesToCopy) {
-                    if ($File -like '*.adml') {
-                        $Destination = "$($SYSVOLPath)\domain\Policies\PolicyDefinitions\en-US"
-                    }
-                    elseif ($File -like '*.admx') {
-                        $Destination = "$($SYSVOLPath)\domain\Policies\PolicyDefinitions"
-                    }
+                    if (Test-Path -Path $File){
+                        if ($File -like '*.adml') {
+                            $Destination = "$($SYSVOLPath)\domain\Policies\PolicyDefinitions\en-US"
+                        }
+                        elseif ($File -like '*.admx') {
+                            $Destination = "$($SYSVOLPath)\domain\Policies\PolicyDefinitions"
+                        }
 
-                    if (-not (Test-Path $Destination)) {
                         Write-Log -Level Info -Path $LogDirectory -Message "Moving $File to $Destination"
 
                         Move-Item -Path $File -Destination $Destination -Force
