@@ -74,7 +74,7 @@ function Test-RegistryValue {
 
     Set-StrictMode -Version 2.0
 
-    #Add Regdrive if it is not present
+    #Add RegDrive if it is not present
     if ($Path -notmatch 'Registry::.*'){
         $Path = 'Registry::' + $Path
     }
@@ -216,4 +216,4 @@ Foreach($Account in $LocalAccountsToDisable){
     }
 }
 
-Write-EventLog -LogName System -Source "$EventLogSourceName" -EventId 2632 -EntryType 'Information' -Message "The $($LocalAdminAccountName) Maintance script has completed"
+Write-EventLog -LogName System -Source "$EventLogSourceName" -EventId 2632 -EntryType 'Information' -Message "The $($LocalAdminAccountName) Maintenance script has completed"
