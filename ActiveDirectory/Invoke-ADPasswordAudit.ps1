@@ -47,7 +47,8 @@ Function Invoke-ADPasswordAudit {
             To         = $NotificationEmail
             From       = $FromEmail
             Subject    = "Bad passwords found on domain $((Get-WmiObject Win32_ComputerSystem).Domain)"
-            BodyAsHtml = $EmailBody
+            Body       = $EmailBody
+            BodyAsHtml = $true
             SmtpServer = $SMTPRelay
         }
 
