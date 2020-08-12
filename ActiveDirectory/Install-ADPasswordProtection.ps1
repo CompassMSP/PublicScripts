@@ -160,7 +160,9 @@ Function Install-ADPasswordProtection {
         Write-Log -Level Info -Path $LogDirectory -Message 'Deleting old files if they exist.'
 
         foreach ($item in $ItemsToDelete) {
-            Remove-Item -Path $item -Force -Recurse -ErrorAction SilentlyContinue
+            if(Test-Path -Path $item){
+                Remove-Item -Path $item -Force -Recurse -ErrorAction SilentlyContinue
+            }
         }
     }
 
