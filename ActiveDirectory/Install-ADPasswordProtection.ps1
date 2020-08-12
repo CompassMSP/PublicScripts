@@ -6,7 +6,7 @@ Function Install-ADPasswordProtection {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true,
-            HelpMessage = 'https://example.com/ADPasswordAuditStore.zip')]
+            HelpMessage = 'https://example.com/ADPasswordStore.zip')]
         [string]$StoreFilesInDBFormatLink
     )
 
