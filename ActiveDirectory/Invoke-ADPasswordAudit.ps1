@@ -6,7 +6,7 @@ Lithnet AD Password Protection must be enabled and configured on the domain. The
 Andy Morales
 #>
 Function Invoke-ADPasswordAudit {
-    #Requires -Modules LithnetPasswordProtection
+    #Requires -Modules LithnetPasswordProtection, ActiveDirectory
 
     [CmdletBinding()]
     param (
@@ -21,6 +21,7 @@ Function Invoke-ADPasswordAudit {
     )
 
     Import-Module LithnetPasswordProtection
+    Import-Module ActiveDirectory
 
     $CompromisedUsers = @()
 
