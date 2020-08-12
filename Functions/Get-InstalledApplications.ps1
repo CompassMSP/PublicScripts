@@ -13,6 +13,5 @@ Function Get-InstalledApplications {
         }
 
     }
-
     Return $InstalledApplications
 }
