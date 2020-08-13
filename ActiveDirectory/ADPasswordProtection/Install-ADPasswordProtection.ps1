@@ -376,10 +376,6 @@ Function Install-ADPasswordProtection {
     if ($Errors.count -gt 0) {
         $EmailBody = $Errors | ForEach-Object { [PSCustomObject]@{'Errors' = $_ } } | ConvertTo-Html -Fragment -Property 'Errors' | Out-String
 
-
-
-        Send-MailMessage -To $NotificationEmail -From 'BUIWUpdates@compassmsp.com' -Subject "Ran into error installing AD Password Protection on $ENV:COMPUTERNAME" -BodyAsHtml $EmailBody -SmtpServer $SMTPRelay
-
         $SendMailMessageParams = @{
             To         = $NotificationEmail
             From       = $FromEmail
