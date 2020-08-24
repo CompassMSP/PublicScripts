@@ -32,7 +32,7 @@
 
     <!--Firefox-->
     <Exclude Copy="0">AppData\Local\Mozilla\Firefox</Exclude>
-	
+
 	<!--Google Earth-->
 	<Exclude Copy="0">AppData\LocalLow\Google\GoogleEarth\Cache</Exclude>
 
@@ -40,7 +40,7 @@
 	<Exclude Copy="0">AppData\Local\WebEx\wbxcache</Exclude>
 
     <!--Chrome-->
-	<!--Removed because it would causes webpages to load incorrectly every first launch
+	<!--Removed because it would cause webpages to load incorrectly every first launch
     <Exclude Copy="0">AppData\Local\Google\Chrome\User Data\Default\Cache</Exclude>
     <Exclude Copy="0">AppData\Local\Google\Chrome\User Data\ShaderCache</Exclude>
     <Exclude Copy="0">AppData\Local\Google\Chrome\User Data\Default\Code Cache\js</Exclude>
@@ -49,9 +49,9 @@
     <Exclude Copy="0">AppData\Roaming\Google\Chrome\UserData\ShaderCache</Exclude>
     <Exclude Copy="0">AppData\Roaming\Google\Chrome\UserData\BrowserMetrics</Exclude>
 	-->
-	
+
     <!--Edge-->
-	<!--Removed because it would causes webpages to load incorrectly every first launch
+	<!--Removed because it would cause webpages to load incorrectly every first launch
     <Exclude Copy="0">AppData\Local\Microsoft\Edge Beta\User Data\Default\Cache</Exclude>
     <Exclude Copy="0">AppData\Local\Microsoft\Edge Beta\User Data\Default\Code Cache\js</Exclude>
     <Exclude Copy="0">AppData\Local\Microsoft\Edge Beta\User Data\ShaderCache</Exclude>
