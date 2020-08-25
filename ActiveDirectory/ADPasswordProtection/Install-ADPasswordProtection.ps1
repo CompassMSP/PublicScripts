@@ -194,6 +194,24 @@ Function Install-ADPasswordProtection {
         }
     }
 
+    function Expand-ZIP {
+        [CmdletBinding()]
+        param (
+            [parameter(Mandatory = $true)]
+            [String]$ZipFile,
+
+            [parameter(Mandatory = $true)]
+            [String]$OutPath
+        )
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+        if (Test-Path -Path $OutPath) {
+            Remove-Item $OutPath -Recurse -Force
+        }
+
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $OutPath)
+    }
+
     Function Remove-OldFiles {
         $ItemsToDelete = @(
             $GPOPath,
@@ -205,8 +223,13 @@ Function Install-ADPasswordProtection {
         Write-Log -Level Info -Path $LogDirectory -Message 'Deleting old files if they exist.'
 
         foreach ($item in $ItemsToDelete) {
-            if(Test-Path -Path $item){
-                Remove-Item -Path $item -Force -Recurse -ErrorAction SilentlyContinue
+            try{
+                if (Test-Path -Path $item) {
+                    Remove-Item -Path $item -Force -Recurse -ErrorAction SilentlyContinue
+                }
+            }
+            catch{
+                #item likely did not exist
             }
         }
     }
@@ -252,7 +275,7 @@ Function Install-ADPasswordProtection {
     }
 
     #Check for app installed
-    if ((Get-InstalledApplications).displayname -contains 'Lithnet Password Protection for Active Directory') {
+    if ((Get-InstalledApplications).displayName -contains 'Lithnet Password Protection for Active Directory') {
         $ADPasswordProtectionAlreadyInstalled = $true
         Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application is already installed on this computer"
     }
@@ -281,7 +304,7 @@ Function Install-ADPasswordProtection {
             Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
 
             try {
-                Expand-Archive -Path $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force
+                Expand-ZIP -ZipFile $StoreFilesInDBFormatFile -OutPath 'C:\Program Files\Lithnet\Active Directory Password Protection'
             }
             catch {
                 Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
@@ -342,7 +365,7 @@ Function Install-ADPasswordProtection {
 
                 $GPOFolder = $GPOPath.Replace('.zip', '')
 
-                Expand-Archive -LiteralPath  $GPOPath -DestinationPath $GPOFolder -Force
+                Expand-ZIP -ZipFile  $GPOPath -OutPath $GPOFolder
 
                 $GPOBackupFolder = (Get-ChildItem $GPOFolder).FullName
 
@@ -355,7 +378,7 @@ Function Install-ADPasswordProtection {
                     New-GPO -Name 'Password Protection' -ErrorAction Stop
                     Import-GPO -Path $GPOBackupFolder -TargetName 'Password Protection' -BackupGpoName $GPOBackupName -ErrorAction Stop
 
-                    New-GPLink -Name 'Password Protection' -Target (Get-ADDomain).DistinguishedName -LinkEnabled Yes -ErrorAction Stop
+                    New-GPLink -Name 'Password Protection' -Target "OU=Domain Controllers,$((Get-ADDomain).DistinguishedName)" -LinkEnabled Yes -ErrorAction Stop
                 }
                 catch {
                     Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue importing the GPO from $GPOBackupFolder"
