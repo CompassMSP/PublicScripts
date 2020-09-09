@@ -75,13 +75,13 @@ ps64 -args $result -command {
             [switch]$NoClobber,
 
             [Parameter(Mandatory = $false)]
-            [switch]$DaiyMode
+            [switch]$DailyMode
         )
 
         Begin {
             # Set VerbosePreference to Continue so that verbose messages are displayed.
             $VerbosePreference = 'Continue'
-            if ($DaiyMode) {
+            if ($DailyMode) {
                 $Path = $Path.Replace('.', "-$(Get-Date -UFormat "%Y%m%d").")
             }
         }
