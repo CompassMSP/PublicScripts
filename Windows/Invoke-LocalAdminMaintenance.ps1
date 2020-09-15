@@ -10,11 +10,12 @@ This script will do the following:
 
 Andy Morales
 #>
-$LocalAdminAccountName = 'CMSP'
+$LocalAdminAccountName = 'Compass'
 
 #The "Administrator" account should not be added to the array since it will not be properly removed from the administrators group
 $LocalAccountsToDisable = @(
-    'WDLocal'
+    'WDLocal',
+	'CMSP'
 )
 
 $EventLogSourceName = 'LocalAdminMaintScript'
