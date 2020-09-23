@@ -26,3 +26,6 @@ $MSIDestination = 'C:\Windows\Temp\UmbrellaSetup.msi'
 $MSIParams = "/i $($MSIDestination) /qn ORG_ID=$($ORG_ID) ORG_FINGERPRINT=$($ORG_FINGERPRINT) USER_ID=$($USER_ID) HIDE_UI=1"
 
 Start-Process msiexec.exe -Wait -ArgumentList $MSIParams -PassThru
+
+#Install root CA
+Invoke-Expression(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/Applications/Cisco/Install-UmbrellaRootCA.ps1')
