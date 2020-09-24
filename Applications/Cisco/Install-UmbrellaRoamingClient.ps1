@@ -13,7 +13,10 @@ Function Install-UmbrellaRoamingClient {
         [String]$ORG_FINGERPRINT,
 
         [parameter(Mandatory = $true)]
-        [String]$USER_ID
+        [String]$USER_ID,
+
+        [parameter(Mandatory = $false)]
+        [switch]$HIDE_UI
     )
 
     $MSIDestination = 'C:\Windows\Temp\UmbrellaSetup.msi'
@@ -24,7 +27,11 @@ Function Install-UmbrellaRoamingClient {
     (New-Object System.Net.WebClient).DownloadFile('http://shared.opendns.com/roaming/enterprise/release/win/production/Setup.msi', "$MSIDestination")
 
     #Install the application
-    $MSIParams = "/i $($MSIDestination) /qn ORG_ID=$($ORG_ID) ORG_FINGERPRINT=$($ORG_FINGERPRINT) USER_ID=$($USER_ID) HIDE_UI=1"
+    $MSIParams = "/i $($MSIDestination) /qn ORG_ID=$($ORG_ID) ORG_FINGERPRINT=$($ORG_FINGERPRINT) USER_ID=$($USER_ID)"
+
+    if ($HIDE_UI){
+        $MSIParams += 'HIDE_UI=1'
+    }
 
     Start-Process msiexec.exe -Wait -ArgumentList $MSIParams -PassThru
 
