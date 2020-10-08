@@ -21,16 +21,17 @@ Function Invoke-LSAAudit {
         Id           = '3065', '3066'
     }
 
-    $Events = Get-WinEvent -FilterHashtable  $WinEventHashTable
+    $Events = Get-WinEvent -FilterHashTable  $WinEventHashTable
 
     if ($Events.count -gt 0) {
-        #Filter out known events
-        $FilteredEvents = @()
 
         $EventsToExclude = @(
-            <#'CyMemDef64.dll',#>
+            'CyMemDef64.dll',
             'Signature information for another event. Match using the Correlation Id.'
         )
+
+        #Filter out known events
+        $FilteredEvents = @()
 
         Foreach ($Event in $Events) {
             if ($Event.Message -notMatch ($EventsToExclude -join '|')) {
