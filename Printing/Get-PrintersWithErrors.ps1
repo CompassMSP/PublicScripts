@@ -1,56 +1,67 @@
-<#
-Returns a list of printers that are paused or in an error state.
+Function Get-PrintersWithErrors {
+    <#
+    Returns a list of printers that are paused or in an error state.
 
-The script is also able to delete jobs in an error state by setting $ClearErrorJobs  to true
+    The script is also able to delete jobs in an error state by setting $ClearErrorJobs  to true
 
-Andy Morales
-#>
-$ExcludedPrinterNames = @(
-    'Example',
-    'Example2'
-)
+    Andy Morales
+    #>
 
-$ExcludedDrivers = @(
-    'Example Driver',
-    'Example Driver2'
-)
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $false)]
+        [switch]$ClearErrorJobs,
 
-#Setting this to true will attempt to delete jobs in an error state
-$ClearErrorJobs = $false
+        [Parameter(Mandatory = $false)]
+        [int]$OldJobDaysThreshold = 3
+    )
 
-$AllPrinters = Get-Printer | Where-Object { $ExcludedPrinterNames -notcontains $_.name -and $ExcludedDrivers -notcontains $_.DriverName }
 
-$PrintersWithErrors = @()
+    $ExcludedPrinterNames = @(
+        'Example',
+        'Example2'
+    )
 
-Foreach ($Printer in $AllPrinters) {
+    $ExcludedDrivers = @(
+        'Example Driver',
+        'Example Driver2'
+    )
 
-    if ($Printer.PrinterStatus -eq 'Paused') {
-        $PrintersWithErrors += [PSCustomObject]@{
-            Comp      = $Env:COMPUTERNAME
-            PrintName = $Printer.name
-            DocName   = 'NA'
-            JobStatus = 'Printer is paused'
-        }
-    }
+    $AllPrinters = Get-Printer | Where-Object { $ExcludedPrinterNames -notContains $_.name -and $ExcludedDrivers -notContains $_.DriverName }
 
-    $PrintJobs = $Printer | Get-PrintJob
+    $PrintersWithErrors = @()
 
-    Foreach ($PrintJob in $PrintJobs) {
-        If ($PrintJob.jobStatus -like '*Error*') {
+    Foreach ($Printer in $AllPrinters) {
+
+        if ($Printer.PrinterStatus -eq 'Paused') {
             $PrintersWithErrors += [PSCustomObject]@{
                 Comp      = $Env:COMPUTERNAME
-                PrintName = $PrintJob.PrinterName
-                Docname   = $PrintJob.DocumentName
-                JobStatus = $PrintJob.jobStatus
+                PrintName = $Printer.name
+                DocName   = 'NA'
+                JobStatus = 'Printer is paused'
             }
-            
-            if ($ClearErrorJobs) {
-                $PrintJob | Remove-PrintJob
+        }
+
+        $PrintJobs = $Printer | Get-PrintJob
+
+        Foreach ($PrintJob in $PrintJobs) {
+            #Identify jobs in an error state, or that have been queued for too many days
+            If (($PrintJob.jobStatus -like '*Error*') -or ($PrintJob.SubmittedTime -lt (Get-Date).AddDays(-$OldJobDaysThreshold))) {
+                $PrintersWithErrors += [PSCustomObject]@{
+                    Comp      = $Env:COMPUTERNAME
+                    PrintName = $PrintJob.PrinterName
+                    Docname   = $PrintJob.DocumentName
+                    JobStatus = $PrintJob.jobStatus
+                }
+
+                if ($ClearErrorJobs) {
+                    $PrintJob | Remove-PrintJob
+                }
             }
         }
     }
-}
 
-if ($PrintersWithErrors.count -gt 0) {
-    RETURN "Errors: `n$($PrintersWithErrors | Out-String)"
+    if ($PrintersWithErrors.count -gt 0) {
+        RETURN "Errors: `n$($PrintersWithErrors | Out-String)"
+    }
 }
