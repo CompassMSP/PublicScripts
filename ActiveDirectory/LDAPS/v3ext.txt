@@ -1,0 +1,8 @@
+# v3ext.txt
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectKeyIdentifier=hash
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = SERVER.example.com             #Modify this
