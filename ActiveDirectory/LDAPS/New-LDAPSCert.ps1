@@ -62,7 +62,7 @@ Function New-LDAPSCert {
     }
 
     #Import the root CA
-    Import-Certificate -FilePath 'C:\Temp\LDAPS\ca.crt' -CertStoreLocation 'Cert:\LocalMachine\Root' -Verbose
+    Import-Certificate -FilePath "$LDAPWorkingDirectory\ca.crt" -CertStoreLocation 'Cert:\LocalMachine\Root' -Verbose
 
     #Request cert
     certreq -f -new "$LDAPWorkingDirectory\request.inf" "$LDAPWorkingDirectory\ad.csr"
