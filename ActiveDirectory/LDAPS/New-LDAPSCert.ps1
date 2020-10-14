@@ -16,7 +16,7 @@ Function New-LDAPSCert {
         [String]$KeyPass, #ideally this should be a secure string, but the RMM won't accept it
 
         [parameter(Mandatory = $false)]
-        [Bool]$InstallOpenSSL
+        [switch]$InstallOpenSSL
     )
 
     $LDAPWorkingDirectory = 'C:\Temp\LDAPS'
