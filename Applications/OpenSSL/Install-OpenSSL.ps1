@@ -10,7 +10,7 @@ $OpenSslMsiPath = 'C:\Windows\Temp\OpenSSL.msi'
 #Download Application
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-(New-Object System.Net.WebClient).DownloadFile("$OpenSslUrl", "$OpenSSLMSI")
+(New-Object System.Net.WebClient).DownloadFile("$OpenSslUrl", "$OpenSslMsiPath")
 
 Start-Process msiexec.exe -Wait -ArgumentList "/i $($OpenSslMsiPath) /qn" -PassThru
 
