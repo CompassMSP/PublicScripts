@@ -1,37 +1,82 @@
-#region CreateSecureFolder
-#It is a best practice to wipe the folder once you are done running the script that relies on it.
-$FolderDirectory = 'C:\Temp\LDAPS'
+Function New-LDAPSCert.ps1 {
+    <#
+    This script requests and installs a certificate for LDAPS on a machine.
 
-New-Item -Path $FolderDirectory -ItemType Directory -Force | Out-Null
+    Requirements:
+        OpenSSL must be installed (use Install-OpenSSL)
+        The CA.cer file must be copied to C:\Temp\LDAPS
+        The ca.key file must be copied to C:\Temp\LDAPS
 
-#Remove all explicit permissions
-ICACLS ("$FolderDirectory") /reset | Out-Null
+    Andy Morales
+    #>
+    [CmdletBinding()]
+    param (
+        [parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [String]$KeyPass, #ideally this should be a secure string, but the RMM won't accept it
 
-#Add SYSTEM permission
-ICACLS ("$FolderDirectory") /grant ("SYSTEM" + ':(OI)(CI)F') | Out-Null
+        [parameter(Mandatory = $false)]
+        [Bool]$InstallOpenSSL
+    )
 
-#Give Administrators Full Control
-ICACLS ("$FolderDirectory") /grant ("Administrators" + ':(OI)(CI)F') | Out-Null
+    $LDAPWorkingDirectory = 'C:\Temp\LDAPS'
 
-#Disable Inheritance on the Folder. This is done last to avoid permission errors.
-ICACLS ("$FolderDirectory") /inheritance:r | Out-Null
-#endregion CreateSecureFolder
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$ServerFQDN = "$($ENV:COMPUTERNAME).$((Get-WmiObject Win32_ComputerSystem).Domain)"
+    if ($InstallOpenSSL){
+        Invoke-Expression(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/Applications/OpenSSL/Install-OpenSSL.ps1')
+    }
 
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    #region CreateSecureFolder
+    #It is a best practice to wipe the folder once you are done running the script that relies on it.
+    $FolderDirectory = 'C:\Temp\LDAPS'
 
-((New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/LDAPS/request.inf') -replace "`n", "`r`n") -replace 'SERVER.example.com', "$ServerFQDN" |  Out-File -FilePath 'C:\Temp\LDAPS\request.inf'
-((New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/LDAPS/v3ext.txt') -replace "`n", "`r`n") -replace 'SERVER.example.com', "$ServerFQDN"  | Out-File -FilePath 'C:\Temp\LDAPS\v3ext.txt'
-(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/LDAPS/enable_ldaps.txt') -replace "`n", "`r`n" | Out-File -FilePath 'C:\Temp\LDAPS\enable_ldaps.txt'
+    New-Item -Path $FolderDirectory -ItemType Directory -Force | Out-Null
 
-#Import the root CA
-Import-Certificate -FilePath 'C:\Temp\LDAPS\ca.crt' -CertStoreLocation 'Cert:\LocalMachine\Root' -Verbose
+    #Remove all explicit permissions
+    ICACLS ("$FolderDirectory") /reset | Out-Null
 
-#Request cert
-certreq -new request.inf ad.csr
+    #Add SYSTEM permission
+    ICACLS ("$FolderDirectory") /grant ("SYSTEM" + ':(OI)(CI)F') | Out-Null
 
+    #Give Administrators Full Control
+    ICACLS ("$FolderDirectory") /grant ("Administrators" + ':(OI)(CI)F') | Out-Null
 
-###TO DO
-#Approve the cert request
-openssl x509 -req -days 825 -in 'C:\Temp\LDAPS\ad.csr' -CA 'C:\Temp\LDAPS\ca.crt' -CAkey 'C:\Temp\LDAPS\ca.key' -extfile 'C:\Temp\LDAPS\v3ext.txt' -set_serial 01 -out 'C:\Temp\LDAPS\ad_ldaps_cert.crt'
+    #Disable Inheritance on the Folder. This is done last to avoid permission errors.
+    ICACLS ("$FolderDirectory") /inheritance:r | Out-Null
+    #endregion CreateSecureFolder
+
+    $ServerFQDN = "$($ENV:COMPUTERNAME).$((Get-WmiObject Win32_ComputerSystem).Domain)"
+
+    $FilesToDownload = @(
+        'https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/LDAPS/request.inf',
+        'https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/LDAPS/v3ext.txt',
+        'https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/LDAPS/enable_ldaps.txt'
+    )
+
+    Foreach ($File in $FilesToDownload) {
+        $String = ((New-Object Net.WebClient).DownloadString("$File") -replace "`n", "`r`n") -replace 'SERVER.example.com', "$ServerFQDN"
+
+        $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
+        [System.IO.File]::WriteAllLines("$LDAPWorkingDirectory\$(($File -split '/')[-1])", $String, $Utf8NoBomEncoding)
+    }
+
+    #Import the root CA
+    Import-Certificate -FilePath 'C:\Temp\LDAPS\ca.crt' -CertStoreLocation 'Cert:\LocalMachine\Root' -Verbose
+
+    #Request cert
+    certreq -f -new "$LDAPWorkingDirectory\request.inf" "$LDAPWorkingDirectory\ad.csr"
+
+    #Approve the cert request
+    & "C:\Program Files\OpenSSL-Win64\bin\openssl.exe" x509 -req -days 825 -in "$LDAPWorkingDirectory\ad.csr" -CA "$LDAPWorkingDirectory\ca.crt" -CAkey "$LDAPWorkingDirectory\ca.key" -extfile "$LDAPWorkingDirectory\v3ext.txt" -set_serial 01 -out "$LDAPWorkingDirectory\ad_ldaps_cert.crt" -passin "pass:$($KeyPass)"
+
+    #Install the certificate
+    certreq -accept "$LDAPWorkingDirectory\ad_ldaps_cert.crt"
+
+    #Tell AD to start using LDAPS
+    ldifde -i -f "$LDAPWorkingDirectory\enable_ldaps.txt"
+
+    #Delete local files
+    Remove-Item -Path $LDAPWorkingDirectory -Recurse -Force
+    Remove-Variable KeyPass -Force
+}
