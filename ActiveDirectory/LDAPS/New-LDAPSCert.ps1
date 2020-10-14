@@ -1,4 +1,4 @@
-Function New-LDAPSCert.ps1 {
+Function New-LDAPSCert {
     <#
     This script requests and installs a certificate for LDAPS on a machine.
 
