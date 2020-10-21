@@ -320,7 +320,7 @@ Function Install-ADPasswordProtection {
             (New-Object System.Net.WebClient).DownloadFile('https://github.com/lithnet/ad-password-protection/releases/latest/download/Lithnet.ActiveDirectory.PasswordProtection.msi', "$PasswordProtectionMSIFile")
 
             Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection MSI'
-            Start-Process msiexec.exe -Wait -ArgumentList "/i $($PasswordProtectionMSIFile) /qn" -PassThru
+            Start-Process msiexec.exe -Wait -ArgumentList "/i $($PasswordProtectionMSIFile) /qn /norestart" -PassThru
 
             Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
         }
