@@ -1,4 +1,5 @@
 function Get-GitFilesFromRepo {
+    #Import All GPOs from GitHub
     #https://gist.github.com/chrisbrownie/f20cb4508975fb7fb5da145d3d38024a
     [CmdletBinding()]
     param (
@@ -15,17 +16,14 @@ function Get-GitFilesFromRepo {
         [String]$DestinationPath
     )
 
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Add-Type -AssemblyName System.Web
+
     $baseUri = "https://api.github.com/"
     $WebArgs = "repos/$Owner/$Repository/contents/$Path"
-    $wr = Invoke-WebRequest -Uri $($baseuri + $WebArgs)
+    $wr = Invoke-WebRequest -Uri $($baseUri + $WebArgs) -UseBasicParsing
     $objects = $wr.Content | ConvertFrom-Json
     $files = $objects | Where-Object { $_.type -eq "file" } | Select-Object -exp download_url
-    $directories = $objects | Where-Object { $_.type -eq "dir" }
-
-    $directories | ForEach-Object {
-        DownloadFilesFromRepo -Owner $Owner -Repository $Repository -Path $_.path -DestinationPath $($DestinationPath + $_.name)
-    }
-
 
     if (-not (Test-Path $DestinationPath)) {
         #Destination path does not exist, create it
@@ -38,9 +36,9 @@ function Get-GitFilesFromRepo {
     }
 
     foreach ($file in $files) {
-        $fileDestination = Join-Path $DestinationPath (Split-Path $file -Leaf)
+        $fileDestination = [System.Web.HttpUtility]::UrlDecode((Join-Path $DestinationPath (Split-Path $file -Leaf)))
         try {
-            Invoke-WebRequest -Uri $file -OutFile $fileDestination -ErrorAction Stop -Verbose
+            Invoke-WebRequest -Uri $file -OutFile $fileDestination -UseBasicParsing -ErrorAction Stop -Verbose
             "Grabbed '$($file)' to '$fileDestination'"
         }
         catch {
