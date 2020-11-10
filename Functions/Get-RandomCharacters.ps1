@@ -3,7 +3,10 @@ function Get-RandomCharacters {
     [CmdletBinding()]
     param (
         [parameter(Mandatory = $false)]
-        [String]$Length = '12'
+        [String]$Length = '12',
+        
+        [parameter(Mandatory = $false)]
+        [switch]$AsSecureString
     )
 
     $RandomPassword = ''
@@ -27,6 +30,10 @@ function Get-RandomCharacters {
 
         $count++
     }Until (($RandomCharacters -cmatch '(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%-+*_=?:<>^&])(?=.*\d)') -or ($count -ge 10))
+
+    if ($AsSecureString){
+        [securestring]$RandomCharacters = ConvertTo-SecureString $RandomCharacters -AsPlainText -Force
+    }
 
     return $RandomCharacters
 }
