@@ -183,7 +183,7 @@ Function Test-AllDcConnection {
     $AllDomainControllers = (Get-ADDomainController -Filter *).name
 
     try{
-        Test-Connection -ComputerName $AllDomainControllers -Count 2 -ErrorAction Stop
+        Test-Connection -ComputerName $AllDomainControllers -Count 2 -ErrorAction Stop | Out-Null
         $AllConnectionsSucceeded = $true
     }
     catch{
@@ -214,12 +214,20 @@ if ((Get-WmiObject Win32_ComputerSystem).domainRole -eq 5) {
 
             #Find all domain controllers
             if (Test-AllDcConnection){
-                #Change the krbtgt password
-                Set-ADAccountPassword -Identity $krbtgtAccount -NewPassword (Get-RandomCharacters -Length 64 -AsSecureString) -Reset
 
-                #Force AD Replication
-                Foreach ($DC in $AllDomainControllers) {
-                    repadmin /syncall $DC (Get-ADDomain).DistinguishedName /e /A | Out-Null
+                try{
+                    #Change the krbtgt password
+                    Set-ADAccountPassword -Identity $krbtgtAccount -NewPassword (Get-RandomCharacters -Length 64 -AsSecureString) -Reset -ErrorAction Stop
+
+                    #Force AD Replication
+                    Foreach ($DC in (Get-ADDomainController -Filter *).name) {
+                        repadmin /syncall $DC (Get-ADDomain).DistinguishedName /e /A | Out-Null
+                    }
+
+                    Write-Log -Path $LogPath -Level Info -Message "Successfully changed account password"
+                }
+                catch{
+                    Write-Log -Path $LogPath -Level Error -Message "Ran into error setting account password"
                 }
             }
             else{
@@ -227,11 +235,11 @@ if ((Get-WmiObject Win32_ComputerSystem).domainRole -eq 5) {
             }
         }
         else {
-            Write-Log -Path $LogPath -Level Error -Message 'The domain/forest functional level is too low. Raise to at least 2008 to continue.'
+            Write-Log -Path $LogPath -Level Error -Message 'The domain/forest functional level is too low. Raise to 2008+ to continue.'
         }
     }
     else{
-        Write-Log -Path $LogPath -Level Information -Message "The password was changed less than 180 days ago. No need to update it."
+        Write-Log -Path $LogPath -Level Info -Message "The password was changed less than 180 days ago. No need to update it."
     }
 }
 else {
