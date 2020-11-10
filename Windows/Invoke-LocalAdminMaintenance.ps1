@@ -32,12 +32,16 @@ function Get-RandomCharacters {
     $SpecialChars = '@#$%-+*_=?:<>^&'
     $AllCharacters = $LowerCaseChars + $UpperCaseChars + $NumberChars + $SpecialChars
 
-    #generate random strings until they contain one of each character type. Put a safety on the loop so it only runs 10 times
+    #generate random strings until they contain one of each character type. Put a limit on the loop so it only runs 10 times
     DO{
-        $random = 1..$length | ForEach-Object { Get-Random -Maximum $AllCharacters.length }
-        $private:ofs = ""
+        $bytes = New-Object "System.Byte[]" $Length
+        $rnd = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+        $rnd.GetBytes($bytes)
+        $RandomCharacters = ""
 
-        $RandomCharacters = [String]$AllCharacters[$random]
+        for ( $i = 0; $i -lt $Length; $i++ ) {
+            $RandomCharacters += $AllCharacters[ $bytes[$i] % $AllCharacters.Length ]
+        }
 
         $count++
     }Until (($RandomCharacters -cmatch '(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%-+*_=?:<>^&])(?=.*\d)') -or ($count -ge 10))
