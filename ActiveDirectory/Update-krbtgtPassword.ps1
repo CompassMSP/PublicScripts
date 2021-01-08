@@ -1,6 +1,7 @@
 #Requires -Module ActiveDirectory -RunAsAdministrator
 
 $LogPath = 'C:\Windows\Temp\krbScript.txt'
+$MaxPassLifeTime = 120
 
 function Write-Log {
     <#
@@ -206,8 +207,8 @@ if ((Get-WmiObject Win32_ComputerSystem).domainRole -eq 5) {
     #Search for the account using its SID
     $krbtgtAccount = Get-ADUser -Identity "$((Get-ADDomain).domainSID.Value)-502" -Properties passwordLastSet
 
-    #Check to see if the password has been changed in the past 180 days
-    if ($krbtgtAccount.PasswordLastSet -lt (Get-Date).AddDays(-180)) {
+    #Check to see if the password has been changed in the past $MaxPassLifeTime days
+    if ($krbtgtAccount.PasswordLastSet -lt (Get-Date).AddDays(-$MaxPassLifeTime)) {
 
         #Check the forest/domain functional level
         if ((Get-ADForest).ForestMode.ToString().Substring(7, 4) -ge '2008' -and (Get-ADDomain).DomainMode.ToString().Substring(7, 4) -ge '2008') {
@@ -239,7 +240,7 @@ if ((Get-WmiObject Win32_ComputerSystem).domainRole -eq 5) {
         }
     }
     else{
-        Write-Log -Path $LogPath -Level Info -Message "The password was changed less than 180 days ago. No need to update it."
+        Write-Log -Path $LogPath -Level Info -Message "The password was changed less than $($MaxPassLifeTime) days ago. No need to update it."
     }
 }
 else {
