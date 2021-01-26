@@ -145,8 +145,6 @@ ps64 -args $result -command {
 
     $LogPath = 'C:\BIN\CertRenew\ControlCertLog.txt'
 
-    $ErrorCount = 0
-
     $ControlFQDN = $Env:COMPUTERNAME + '.' + (Get-WmiObject Win32_ComputerSystem).Domain
 
     Write-Log -Path $LogPath -Level Info -Message "Updating CW Control certificates on $($ControlFQDN)"
@@ -164,6 +162,5 @@ ps64 -args $result -command {
     }
     catch {
         Write-Log -Path $LogPath -Level Error -Message 'Ran into error importing certificate'
-        $ErrorCount++
     }
 }
