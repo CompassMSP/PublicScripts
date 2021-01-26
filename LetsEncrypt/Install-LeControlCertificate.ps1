@@ -1,6 +1,10 @@
 <#
 Place at: c:\BIN\CertRenew\Install-LeControlCertificate.ps1
 
+.LINK
+https://docs.connectwise.com/ConnectWise_Control_Documentation/On-premises/Advanced_setup/SSL_certificate_installation/Install_and_bind_an_SSL_certificate_on_a_Windows_server
+https://docs.connectwise.com/ConnectWise_Control_Documentation/On-premises/Advanced_setup/Renew_or_replace_an_existing_SSL_certificate
+
 Andy Morales
 #>
 param($result)
