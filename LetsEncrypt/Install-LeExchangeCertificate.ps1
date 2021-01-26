@@ -144,10 +144,7 @@ ps64 -args $result -command {
     }
 
     $LogPath = 'C:\BIN\CertRenew\ExchangeCertLog.txt'
-    $SMTPRelay = 'compassmsp-com.mail.protection.outlook.com'
-    $NotificationsEmail = 'LetsEncryptNotifications@compassmsp.com'
 
-    $ErrorCount = 0
     $ExchangeFQDN = $Env:COMPUTERNAME + '.' + (Get-WmiObject Win32_ComputerSystem).Domain
 
     Write-Log -Path $LogPath -Level Info -Message "Updating Exchange certificates on $($ExchangeFQDN)"
@@ -162,7 +159,7 @@ ps64 -args $result -command {
     }
     catch {
         Write-Log -Path $LogPath -Level Error -Message 'Unable to import Exchange PSSnapin. Script will exit'
-        $ErrorCount++
+        Exit
     }
 
     try {
@@ -171,10 +168,5 @@ ps64 -args $result -command {
     }
     catch {
         Write-Log -Path $LogPath -Level Error -Message "Unable to apply certificate to POP, IMAP, SMTP, IIS on $($ExchangeFQDN)"
-        $ErrorCount++
-    }
-
-    if ($ErrorCount -gt 0) {
-        Send-MailMessage -To $NotificationsEmail -From 'LERdgCertificates@compassmsp.com' -Subject "Error During Certificate renewal on $($ExchangeFQDN)" -Body "See attached" -SmtpServer $SMTPRelay -Attachments $LogPath
     }
 }

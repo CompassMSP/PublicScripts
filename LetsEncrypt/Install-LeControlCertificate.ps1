@@ -144,8 +144,6 @@ ps64 -args $result -command {
     }
 
     $LogPath = 'C:\BIN\CertRenew\ControlCertLog.txt'
-    $SMTPRelay = 'compassmsp-com.mail.protection.outlook.com'
-    $NotificationsEmail = 'LetsEncryptNotifications@compassmsp.com'
 
     $ErrorCount = 0
 
@@ -161,13 +159,11 @@ ps64 -args $result -command {
     try {
         netsh http delete sslcert ipport=0.0.0.0:443
         netsh http add sslcert ipport=0.0.0.0:443 certhash=$pfxThumbprintHash appid="{00000000-0000-0000-0000-000000000000}"
+
+        Write-Log -Path $LogPath -Level Info -Message "No issues detected during install"
     }
     catch {
         Write-Log -Path $LogPath -Level Error -Message 'Ran into error importing certificate'
         $ErrorCount++
-    }
-
-    if ($ErrorCount -gt 0) {
-        Send-MailMessage -To $NotificationsEmail -From 'LERdgCertificates@compassmsp.com' -Subject "Error During Certificate renewal on $($ExchangeFQDN)" -Body "See attached" -SmtpServer $SMTPRelay -Attachments $LogPath
     }
 }

@@ -146,10 +146,7 @@ ps64 -args $result -command {
     }
 
     $LogPath = "C:\BIN\CertRenew\RDGCertLog.txt"
-    $SMTPRelay = 'compassmsp-com.mail.protection.outlook.com'
-    $NotificationsEmail = 'LetsEncryptNotifications@compassmsp.com'
 
-    $ErrorCount = 0
     $RDConBrokerFqdn = $Env:COMPUTERNAME + '.' + (Get-WmiObject Win32_ComputerSystem).Domain
 
     Write-Log -Path $LogPath -Level Info -Message "Updating RDG certificates on $($RDConBrokerFqdn)"
@@ -164,7 +161,6 @@ ps64 -args $result -command {
     }
     catch {
         Write-Log -Path $LogPath -Level Error -Message 'Unable to import RemoteDesktop PS module. Script will exit'
-        $ErrorCount++
     }
 
     $RDRoles = @(
@@ -181,7 +177,6 @@ ps64 -args $result -command {
         }
         catch {
             Write-Log -Path $LogPath -Level Error -Message "Unable to apply certificate to $($Role) on $($RDConBrokerFqdn)"
-            $ErrorCount++
         }
     }
 
@@ -202,11 +197,6 @@ ps64 -args $result -command {
         }
         catch{
             Write-Log -Path $LogPath -Level Error -Message "Ran into an error publishing RDWebClient"
-            $ErrorCount++
         }
-    }
-
-    if ($ErrorCount -gt 0) {
-        Send-MailMessage -To $NotificationsEmail -From 'LERdgCertificates@compassmsp.com' -Subject "Error During Certificate renewal on $($RDConBrokerFqdn)" -Body "See attached" -SmtpServer $SMTPRelay -Attachments $LogPath
     }
 }
