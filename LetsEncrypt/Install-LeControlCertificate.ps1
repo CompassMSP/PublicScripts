@@ -1,13 +1,15 @@
 <#
-Modified version of the script found here:https://diverse.services/secure-an-rd-gateway-using-lets-encrypt/
+Place at: c:\BIN\CertRenew\Install-LeControlCertificate.ps1
 
-Place at: c:\BIN\CertRenew\Install-LeRdgCertificate.ps1
+.LINK
+https://docs.connectwise.com/ConnectWise_Control_Documentation/On-premises/Advanced_setup/SSL_certificate_installation/Install_and_bind_an_SSL_certificate_on_a_Windows_server
+https://docs.connectwise.com/ConnectWise_Control_Documentation/On-premises/Advanced_setup/Renew_or_replace_an_existing_SSL_certificate
 
 Andy Morales
 #>
 param($result)
 
-Set-Alias ps64 "C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe"
+Set-Alias ps64 'C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe'
 
 ps64 -args $result -command {
 
@@ -145,58 +147,24 @@ ps64 -args $result -command {
         }
     }
 
-    $LogPath = "C:\BIN\CertRenew\RDGCertLog.txt"
+    $LogPath = 'C:\BIN\CertRenew\ControlCertLog.txt'
 
-    $RDConBrokerFqdn = $Env:COMPUTERNAME + '.' + (Get-WmiObject Win32_ComputerSystem).Domain
+    $ControlFQDN = $Env:COMPUTERNAME + '.' + (Get-WmiObject Win32_ComputerSystem).Domain
 
-    Write-Log -Path $LogPath -Level Info -Message "Updating RDG certificates on $($RDConBrokerFqdn)"
+    Write-Log -Path $LogPath -Level Info -Message "Updating CW Control certificates on $($ControlFQDN)"
 
     $result = $args[0]
 
-    $pfxpath = $result.ManagedItem.CertificatePath
+    $pfxThumbprintHash = $result.ManagedItem.CertificateThumbprintHash
 
-    # Import the RemoteDesktop module
+    #Install the certificate
     try {
-        Import-Module RemoteDesktop -ErrorAction Stop
+        netsh http delete sslcert ipport=0.0.0.0:443
+        netsh http add sslcert ipport=0.0.0.0:443 certhash=$pfxThumbprintHash appid="{00000000-0000-0000-0000-000000000000}"
+
+        Write-Log -Path $LogPath -Level Info -Message "No issues detected during install"
     }
     catch {
-        Write-Log -Path $LogPath -Level Error -Message 'Unable to import RemoteDesktop PS module. Script will exit'
-    }
-
-    $RDRoles = @(
-        'RDGateway',
-        'RDWebAccess',
-        'RDRedirector',
-        'RDPublishing'
-    )
-
-    foreach ($Role in $RDRoles) {
-        try {
-            Set-RDCertificate -Role $Role -ImportPath $pfxpath -ConnectionBroker $RDConBrokerFqdn -Force
-            Write-Log -Path $LogPath -Level Info -Message "Sucessfully applied certificate to $($Role) on $($RDConBrokerFqdn)"
-        }
-        catch {
-            Write-Log -Path $LogPath -Level Error -Message "Unable to apply certificate to $($Role) on $($RDConBrokerFqdn)"
-        }
-    }
-
-    #RDwebClient
-    if ([environment]::OSVersion.Version -gt [version]('{0}.{1}.{2}.{3}' -f '10.0.0.0'.split('.'))) {
-        try {
-            Import-Module RDWebClientManagement -ErrorAction Stop
-        }
-        catch {
-            Write-Log -Path $LogPath -Level Info -Message "Could not import RDWebClientManagement it's likely not installed"
-            BREAK
-        }
-
-        try{
-            Import-RDWebClientBrokerCert $pfxpath -ErrorAction Stop
-            Install-RDWebClientPackage -ErrorAction Stop
-            Publish-RDWebClientPackage -Type Production -Latest -ErrorAction Stop
-        }
-        catch{
-            Write-Log -Path $LogPath -Level Error -Message "Ran into an error publishing RDWebClient"
-        }
+        Write-Log -Path $LogPath -Level Error -Message 'Ran into error importing certificate'
     }
 }
