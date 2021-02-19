@@ -1,6 +1,9 @@
 #POC ONLY! still needs work
 #Andy Morales
 
+$VtThresholdPercent = .001
+$AutoRunsFolder = 'C:\windows\temp\autoruns'
+
 function Expand-ZIP {
     <#
     Extracts a ZIP file to a directory. The contents of the destination will be deleted if they already exist.
@@ -17,45 +20,99 @@ function Expand-ZIP {
     )
     Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-    if (Test-Path -Path $OutPath){
+    if (Test-Path -Path $OutPath) {
         Remove-Item $OutPath -Recurse -Force
     }
 
     [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $OutPath)
 }
+function New-SecureFolder {
+    <#
+    #This script creates a folder that only administrators and system have access to.
+    #It is a best practice to wipe the folder once you are done running the script that relies on it.
 
-mkdir C:\windows\temp\autoruns -Force
+    Andy Morales
+    #>
+    [CmdletBinding()]
+    param (
+        [parameter(Mandatory = $true,
+            HelpMessage = 'C:\temp')]
+        [String]$Path
+    )
+
+    #Delete the folder if it already exists
+    if (Test-Path -Path $Path) {
+        try {
+            Remove-Item -Path $Path -Force -Recurse -ErrorAction Stop
+        }
+        catch {
+            Write-Output "Could not clear the contents of $($Path). Script will exit."
+            EXIT
+        }
+    }
+
+    #Create the folder
+    New-Item -Path $Path -ItemType Directory -Force
+
+    #Remove all explicit permissions
+    ICACLS ("$Path") /reset | Out-Null
+
+    #Add SYSTEM permission
+    ICACLS ("$Path") /grant ("SYSTEM" + ':(OI)(CI)F') | Out-Null
+
+    #Give Administrators Full Control
+    ICACLS ("$Path") /grant ("Administrators" + ':(OI)(CI)F') | Out-Null
+
+    #Disable Inheritance on the Folder. This is done last to avoid permission errors.
+    ICACLS ("$Path") /inheritance:r | Out-Null
+}
+
+#region pre-reqs
+New-SecureFolder -Path $AutoRunsFolder
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-(New-Object System.Net.WebClient).DownloadFile('https://download.sysinternals.com/files/Autoruns.zip', 'C:\windows\temp\autoruns.zip')
+$AutorunsZip = "$($AutoRunsFolder)\autoruns.zip"
+$AutoRunsBin = "$($AutoRunsFolder)\BIN"
 
-Expand-ZIP -ZipFile 'C:\windows\temp\autoruns.zip' -OutPath 'C:\windows\temp\autoruns'
+(New-Object System.Net.WebClient).DownloadFile('https://download.sysinternals.com/files/Autoruns.zip', "$AutorunsZip")
 
+Expand-ZIP -ZipFile "$($AutoRunsFolder)\autoruns.zip" -OutPath $AutoRunsBin
+#endregion pre-reqs
+
+#region runApp
 $AutorunsArgs = @(
-        "C:\Windows\Temp\autoruns\autorunsc.exe",
-        "-a * -nobanner -c -accepteula -vt -o 'C:\Windows\Temp\autoruns\output.csv'"
+    "$($AutoRunsBin)\autorunsc.exe",
+    "-a * -nobanner -c -accepteula -vt -o $($AutoRunsBin)\output.csv"
 )
 
 Invoke-Expression ($AutorunsArgs -Join ' ')
+#endregion runApp
 
-$result = Import-Csv -Path "C:\Windows\Temp\autoruns\output.csv"
+#region ReviewResults
+$result = Import-Csv -Path "$($AutoRunsBin)\output.csv"
 
-$VtThresholdPercent = .001
 $FoundThreats = @()
 
-Foreach ($item in $result){
-    #Make sure result is not empty or unkown
-    if((![string]::IsNullOrEmpty($item.'VT detection')) -and ($item.'VT detection' -ne 'Unknown')){
+Foreach ($item in $result) {
+    #Make sure result is not empty or unknown
+    if ((![string]::IsNullOrEmpty($item.'VT detection')) -and ($item.'VT detection' -ne 'Unknown')) {
         $VTResult = $item.'VT detection'.Split('|')
 
-        #add to aray if VT Result is over threshold
-        if (($VTResult[0] / $VTResult[1]) -gt $VtThresholdPercent){
+        #add to array if VT Result is over threshold
+        if (($VTResult[0] / $VTResult[1]) -gt $VtThresholdPercent) {
             $FoundThreats += $item
         }
     }
 }
+#endregion ReviewResults
 
-#Remove-item -path "C:\Windows\Temp\autoruns\output.csv" -force
+Remove-Item -Path "C:\Windows\Temp\autoruns\output.csv" -Force
 
-$FoundThreats
+#Return detected items if any exist
+if ($FoundThreats.Count -gt 0) {
+    $Result = 'DETECTED:'
+    $Result += $FoundThreats | Select-Object 'Image Path', 'VT detection' | Out-String
+
+    RETURN $Result
+}
