@@ -96,6 +96,7 @@ Function Invoke-ADPasswordAudit {
 
         Send-MailMessage @SendMailMessageParams
 
+        #Export CSV
         $CSVFolder = 'C:\Temp\ADPasswordAudit'
         New-SecureFolder -Path $CSVFolder
         $CompromisedUsers | Export-Csv -Path "$($CSVFolder)\CompromisedUsers.csv"
