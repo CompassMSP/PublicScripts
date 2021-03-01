@@ -100,5 +100,7 @@ Function Invoke-ADPasswordAudit {
         $CSVFolder = 'C:\Temp\ADPasswordAudit'
         New-SecureFolder -Path $CSVFolder
         $CompromisedUsers | Export-Csv -Path "$($CSVFolder)\CompromisedUsers.csv"
+
+        Write-Output 'CSV exported to C:\Temp\ADPasswordAudit'
     }
 }
