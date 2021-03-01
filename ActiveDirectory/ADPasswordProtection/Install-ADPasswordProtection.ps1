@@ -327,7 +327,7 @@ Function Install-ADPasswordProtection {
 
         #region Import GPO
         if (-not $GPOExistsWithCorrectSettings) {
-            if ((Get-WmiObject Win32_ComputerSystem).domainrole -eq 5) {
+            if ((Get-WmiObject Win32_ComputerSystem).domainRole -eq 5) {
                 #region Copy ADM files to central store
                 if (Test-Path 'C:\Windows\SYSVOL') {
                     $SYSVOLPath = 'C:\Windows\SYSVOL'
@@ -342,14 +342,14 @@ Function Install-ADPasswordProtection {
 
                     Expand-ZIP -ZipFile 'C:\Windows\Temp\PolicyDefinitions.zip' -OutPath "C:\Windows\Temp\ADMX"
 
-                    ROBOCOPY "C:\Windows\Temp\ADMX\PolicyDefinitions" "$($SYSVOLPath)\domain\Policies\PolicyDefinitions" /R:0 /W:0 /E /xo /dcopy:t /MT:32 /np
+                    ROBOCOPY "C:\Windows\Temp\ADMX\PolicyDefinitions" "$($SYSVOLPath)\domain\Policies\PolicyDefinitions" /R:0 /W:0 /E /xo /MT:32 /np
                 }
 
 
                 $FilesToCopy = @(
                     'C:\Windows\PolicyDefinitions\lithnet.admx',
-                    'C:\Windows\PolicyDefinitions\lithnet.activedirectory.passwordfilter.admx',
-                    'C:\Windows\PolicyDefinitions\en-US\lithnet.activedirectory.passwordfilter.adml',
+                    'C:\Windows\PolicyDefinitions\lithnet.activeDirectory.passwordFilter.admx',
+                    'C:\Windows\PolicyDefinitions\en-US\lithnet.activeDirectory.passwordFilter.adml',
                     'C:\Windows\PolicyDefinitions\en-US\lithnet.adml'
                 )
 
