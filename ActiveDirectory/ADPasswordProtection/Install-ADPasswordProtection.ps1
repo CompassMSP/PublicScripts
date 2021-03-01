@@ -336,6 +336,16 @@ Function Install-ADPasswordProtection {
                     $SYSVOLPath = 'C:\Windows\SYSVOL_DFSR'
                 }
 
+                #Update PolicyDefinitions if it does not Exists
+                if (!(Test-Path "$($SYSVOLPath)\domain\Policies\PolicyDefinitions")){
+                    (New-Object System.Net.WebClient).DownloadFile('https://github.com/CompassMSP/PublicScripts/raw/master/ActiveDirectory/PolicyDefinitions.zip','C:\Windows\Temp\PolicyDefinitions.zip')
+
+                    Expand-ZIP -ZipFile 'C:\Windows\Temp\PolicyDefinitions.zip' -OutPath "C:\Windows\Temp\ADMX"
+
+                    ROBOCOPY "C:\Windows\Temp\ADMX\PolicyDefinitions" "$($SYSVOLPath)\domain\Policies\PolicyDefinitions" /R:0 /W:0 /E /xo /dcopy:t /MT:32 /np
+                }
+
+
                 $FilesToCopy = @(
                     'C:\Windows\PolicyDefinitions\lithnet.admx',
                     'C:\Windows\PolicyDefinitions\lithnet.activedirectory.passwordfilter.admx',
