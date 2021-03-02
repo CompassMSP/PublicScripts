@@ -253,7 +253,7 @@ Function Install-ADPasswordProtection {
     }
 
     #Check if computer is a DC
-    if ((Get-WmiObject Win32_ComputerSystem).domainrole -lt 4) {
+    if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
         Write-Log -Level Info -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
         exit
     }
@@ -325,7 +325,7 @@ Function Install-ADPasswordProtection {
             Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
         }
 
-        #region Import GPO
+        #region ImportGPO
         if (-not $GPOExistsWithCorrectSettings) {
             if ((Get-WmiObject Win32_ComputerSystem).domainRole -eq 5) {
                 #region Copy ADM files to central store
@@ -399,7 +399,7 @@ Function Install-ADPasswordProtection {
                 Write-Log -Level Info -Path $LogDirectory -Message 'Computer is not the PDC. GPO will not be imported'
             }
         }
-        #endregion Import GPO
+        #endregion ImportGPO
     }
     else {
         Write-Log -Level Error -Path $LogDirectory -Message 'Not enough free space on the C drive. At least 20GB required.'
