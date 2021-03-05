@@ -91,12 +91,10 @@ Write-Progress -Activity "Checking for CVE-2021-26855 in the HttpProxy logs" -Co
 if ($allResults.Length -gt 0) {
     Write-Log "Suspicious entries found in $exchangePath\Logging\HttpProxy.  Check the .\CVE-2021-26855.csv log for specific entries."
 
+    write-log ($allResults | Select-Object DateTime, RequestId, ClientIPAddress, UrlHost, UrlStem, RoutingHint, UserAgent, AnchorMailbox, HttpStatus | Out-String)
+
     $errorFound = 1
 
-    if (Test-Path "$PSScriptRoot\CVE-2021-26855.log") {
-        Remove-Item $PSScriptRoot\CVE-2021-26855.log -Force
-    }
-    $allResults | Select-Object DateTime, RequestId, ClientIPAddress, UrlHost, UrlStem, RoutingHint, UserAgent, AnchorMailbox, HttpStatus | Export-Csv $LogPath -NoTypeInformation -Append
 }
 else {
     Write-Log "No suspicious entries found."
@@ -261,9 +259,17 @@ Write-Log " "
 Write-Log " "
 Write-Log "looking for odd aspx files"
 
-Write-Log (Get-ChildItem -Path C:\inetpub\wwwroot\aspnet_client\ -Recurse -Filter "*.aspx")
 
-Write-Log "looking for odd aspx files (default names are 'errorFE.aspx', 'ExpiredPassword.aspx','frowny.aspex','logoff.aspx','logon.aspx','OutlookCN.aspx'.'RedirSuiteServiceProxy.aspx', 'signout.aspx'"
+$oddASPX = @()
+$oddASPX += (Get-ChildItem -Path C:\inetpub\wwwroot\aspnet_client\ -Recurse -Filter "*.aspx")
+
+if($oddASPX.count -gt 0){
+    Write-Log $oddASPX
+
+    $errorFound = 1
+}
+
+Write-log "looking for odd aspx files (default names are 'errorFE.aspx', 'ExpiredPassword.aspx','frowny.aspex','logoff.aspx','logon.aspx','OutlookCN.aspx'.'RedirSuiteServiceProxy.aspx', 'signout.aspx'"
 
 try {
     Write-Log (Get-ChildItem -Path "$($exchangePath)\FrontEnd\HttpProxy\owa\auth\" -Recurse -Filter "*.aspx*" -ErrorAction stop)
