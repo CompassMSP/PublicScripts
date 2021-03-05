@@ -19,6 +19,9 @@ Once the script runs the server will need to be rebooted (the script will not re
 # Running the script
 
 Run the command below as admin on a PowerShell terminal. This will perform the actual install. Make sure to replace the parameters with the correct URL and emails.
+
+Also, make sure to run this on all domain controllers.
+
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
 ````
