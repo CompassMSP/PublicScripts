@@ -1,17 +1,12 @@
+<#
 
+Merge of the two scripts below
+https://github.com/mr-r3b00t/ExchangeMarch2021IOCHunt/blob/main/fastcheck.ps1
+https://github.com/microsoft/CSS-Exchange/blob/main/Security/Test-ProxyLogon.ps1
 
-
-# IOC CHECKS
-# mRr3b00t - use at own risk i don't have an infected system to test on
-# uses default paths
-# tested on a clean exchange 2016 server
-# run with admin rights as you need them to get to the paths
-# version 0.3
-#check this folder for asp files C:\inetpub\wwwroot\aspnet_client\system_web
-#using SHA256 for file hash checking
-#Enable following line to see the progress step through this scripts. Not required for automation.
-#$verbosepreference = "Continue"
+#>
 #Requires -RunAsAdministrator
+
 Function Write-Log {
     param(
         [Parameter(Mandatory = $true)][String]$msg
