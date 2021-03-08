@@ -5,7 +5,6 @@ https://github.com/mr-r3b00t/ExchangeMarch2021IOCHunt/blob/main/fastcheck.ps1
 https://github.com/microsoft/CSS-Exchange/blob/main/Security/Test-ProxyLogon.ps1
 
 #>
-#Requires -RunAsAdministrator
 
 Function Write-Log {
     param(
