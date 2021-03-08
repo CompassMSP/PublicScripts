@@ -98,10 +98,10 @@ if (Test-Path -Path Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\ExchangeServ
 
     #region 26858
     Write-Log "`r`nChecking for CVE-2021-26858 in the OABGenerator logs"
-    $logs = Get-ChildItem -Recurse -Path "$exchangePath\Logging\OABGeneratorLog" | Select-String "Download failed and temporary file" -List | Select-Object Path
-    if ($logs.Path.Count -gt 0) {
+    $OABLogs = Get-ChildItem -Recurse -Path "$exchangePath\Logging\OABGeneratorLog" | Select-String "Download failed and temporary file" -List | Select-Object Path
+    if ($OABLogs.Path.Count -gt 0) {
         Write-Log "Suspicious OAB download entries found in the following logs, please review them for `"Download failed and temporary file`" entries:"
-        Write-Log $logs.Path
+        Write-Log ($OABLogs.Path | Out-String)
 
         $errorFound = 1
     }
@@ -123,10 +123,10 @@ if (Test-Path -Path Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\ExchangeServ
 
     #region 27065
     Write-log "`r`nChecking for CVE-2021-27065 in the ECP Logs"
-    $logs = Get-ChildItem -Recurse -Path "$exchangePath\Logging\ECP\Server\*.log" | Select-String "Set-.*VirtualDirectory" -List | Select-Object Path
-    if ($logs.Path.Count -gt 0) {
+    $ECPLogs = Get-ChildItem -Recurse -Path "$exchangePath\Logging\ECP\Server\*.log" | Select-String "Set-.*VirtualDirectory" -List | Select-Object Path
+    if ($ECPLogs.Path.Count -gt 0) {
         Write-Log "Suspicious virtual directory modifications found in the following logs, please review them for `"Set-*VirtualDirectory`" entries:"
-        Write-Log $logs.Path
+        Write-Log ($ECPLogs.Path | Out-String)
 
         $errorFound = 1
     }
