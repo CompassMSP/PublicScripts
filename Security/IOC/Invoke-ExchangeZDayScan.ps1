@@ -18,7 +18,7 @@ if ($env:exchangeinstallpath) {
 
     $errorFound = 0
 
-    $exchangePath = $env:exchangeinstallpath
+    $exchangePath = $env:exchangeInstallPath
 
     #region CheckHashes
     $badHashes = @(
