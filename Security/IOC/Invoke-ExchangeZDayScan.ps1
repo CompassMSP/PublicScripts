@@ -14,11 +14,11 @@ Function Write-Log {
 }
 
 #Check to see if Exchange 2013+ is installed
-if (Test-Path -Path Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\ExchangeServer\v15\Setup) {
+if ($env:exchangeinstallpath) {
 
     $errorFound = 0
 
-    $exchangePath = (Get-ItemProperty -Path Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\ExchangeServer\v15\Setup).MsiInstallPath
+    $exchangePath = $env:exchangeinstallpath
 
     #region CheckHashes
     $badHashes = @(
