@@ -26,6 +26,17 @@ Also, make sure to run this on all domain controllers.
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
 ````
 
+# Verify Install
+Once the install completes you can check for 3 things:
+
+- Add/Remove Programs
+  - ![](https://i.imgur.com/KcobD6H.png)
+- Group Policy Management (run on a PDC for it to show up)
+  - ![](https://i.imgur.com/IgMRMk6.png)
+- DB Files
+  - Go to "C:\Program Files\Lithnet\Active Directory Password Protection\Store\v3\p" and there should be a ton of DB files. If 0000.db and FFFF.db exist then chances are all the files are there.
+  - ![](https://i.imgur.com/3hJMbKy.png)
+
 # Reporting
 The script Invoke-ADPasswordAudit will go through all AD users and compare their password hashes with known compromised hashes. This will be set to run on a schedule, and it will notify us if any users currently have compromised passwords.
 
