@@ -14,7 +14,7 @@ Function Write-Log {
 }
 
 #Check to see if Exchange 2013+ is installed
-if ($env:exchangeinstallpath) {
+if ($env:exchangeInstallPath) {
 
     $errorFound = 0
 
@@ -146,7 +146,7 @@ if ($env:exchangeinstallpath) {
         Write-Log "No suspicious lsass dumps found."
     }
 
-    $zipFiles = @(Get-ChildItem -Recurse -Path "$env:ProgramData" -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match ".7z|.zip|.rar" } | Where-Object { $_.FullName -notMatch 'Kaseya|LTDatabase|VMware Tools|LabTech' })
+    $zipFiles = @(Get-ChildItem -Recurse -Path "$env:ProgramData" -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match ".7z|.zip|.rar" } | Where-Object { $_.FullName -notMatch 'Kaseya|LTDatabase|VMware Tools|LabTech|chocolatey|Norton|Symantec' })
 
     if ($zipFiles.Count -gt 0) {
         Write-Log "`r`nZipped files found in $env:ProgramData, please verify these are expected:"
