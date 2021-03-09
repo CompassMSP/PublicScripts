@@ -52,6 +52,64 @@ if ($env:exchangeInstallPath) {
 
     #endregion CheckHashes
 
+    #region SuspiciousFiles
+    Write-Log "`r`nChecking for suspicious files"
+    $lsassFiles = @(Get-ChildItem -Recurse -Path "$env:WINDIR\temp\lsass.*dmp")
+    $lsassFiles += @(Get-ChildItem -Recurse -Path "c:\root\lsass.*dmp")
+    if ($lsassFiles.Count -gt 0) {
+        Write-Warning "lsass.exe dumps found, please verify these are expected:"
+        $lsassFiles.FullName
+    }
+    else {
+        Write-Log "No suspicious lsass dumps found."
+    }
+
+    $zipFiles = @(Get-ChildItem -Recurse -Path "$env:ProgramData" -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match ".7z| .zip | .rar" } | Where-Object { $_.FullName -notMatch 'Kaseya|LTDatabase|VMware Tools|LabTech|chocolatey|Norton|Symantec' })
+
+    if ($zipFiles.Count -gt 0) {
+        Write-Log "`r`nZipped files found in $env:ProgramData, please verify these are expected:"
+        Write-Log ($zipFiles.FullName | Out-String)
+    }
+    else {
+        Write-Log "`r`nNo suspicious zip files found."
+    }
+    #endregion SuspiciousFiles
+
+    #region oddASPX
+    Write-Log " "
+    Write-Log "looking for odd aspx files"
+
+
+    $oddASPX = @()
+    $oddASPX += (Get-ChildItem -Path C:\inetpub\wwwroot\aspnet_client\ -Recurse -Filter "*.aspx")
+
+    if ($oddASPX.count -gt 0) {
+        Write-Log ($oddASPX | Out-String)
+
+        $errorFound = 1
+    }
+
+    Write-log "looking for odd aspx files (default names are 'errorFE.aspx', 'ExpiredPassword.aspx', 'frowny.aspx', 'logoff.aspx', 'logon.aspx', 'OutlookCN.aspx'.'RedirSuiteServiceProxy.aspx', 'signout.aspx'"
+
+    $owaAspx = @()
+    $owaAspx += (Get-ChildItem -Path "$($env:exchangeInstallPath)FrontEnd\HttpProxy\owa\auth\" -Recurse -Filter "*.aspx*" | Select-Object -ExpandProperty fullName | Where-Object { $_ -notMatch 'errorFE|SvmFeedback|ExpiredPassword|frowny|logoff|logon.aspx|OutlookCN|RedirSuiteServiceProxy|signout' })
+
+    if ($owaAspx.count -gt 0) {
+
+        $errorFound = 1
+
+        foreach ($owaFile in $owaAspx) {
+            Write-Log $owaFile
+        }
+    }
+    else {
+        Write-Log "No odd aspx files"
+    }
+
+    Write-Log " "
+
+    #endregion #region oddASPX
+
     #region 26855
     Write-Log "Checking for CVE-2021-26855 in the HttpProxy logs"
     $files = (Get-ChildItem -Recurse -Path "$($env:exchangeInstallPath)Logging\HttpProxy" -Filter '*.log').FullName
@@ -126,29 +184,6 @@ if ($env:exchangeInstallPath) {
         Write-Log "No suspicious entries found."
     }
     #endregion 27065
-
-    #region SuspiciousFiles
-    Write-Log "`r`nChecking for suspicious files"
-    $lsassFiles = @(Get-ChildItem -Recurse -Path "$env:WINDIR\temp\lsass.*dmp")
-    $lsassFiles += @(Get-ChildItem -Recurse -Path "c:\root\lsass.*dmp")
-    if ($lsassFiles.Count -gt 0) {
-        Write-Warning "lsass.exe dumps found, please verify these are expected:"
-        $lsassFiles.FullName
-    }
-    else {
-        Write-Log "No suspicious lsass dumps found."
-    }
-
-    $zipFiles = @(Get-ChildItem -Recurse -Path "$env:ProgramData" -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match ".7z| .zip | .rar" } | Where-Object { $_.FullName -notMatch 'Kaseya|LTDatabase|VMware Tools|LabTech|chocolatey|Norton|Symantec' })
-
-    if ($zipFiles.Count -gt 0) {
-        Write-Log "`r`nZipped files found in $env:ProgramData, please verify these are expected:"
-        Write-Log ($zipFiles.FullName | Out-String)
-    }
-    else {
-        Write-Log "`r`nNo suspicious zip files found."
-    }
-    #endregion SuspiciousFiles
 
     #region IIS-W3SVC-WP
 
@@ -242,40 +277,7 @@ if ($env:exchangeInstallPath) {
     Write-Log " "
     #endregion IIS
 
-    #region oddASPX
-    Write-Log " "
-    Write-Log "looking for odd aspx files"
 
-
-    $oddASPX = @()
-    $oddASPX += (Get-ChildItem -Path C:\inetpub\wwwroot\aspnet_client\ -Recurse -Filter "*.aspx")
-
-    if ($oddASPX.count -gt 0) {
-        Write-Log ($oddASPX | Out-String)
-
-        $errorFound = 1
-    }
-
-    Write-log "looking for odd aspx files (default names are 'errorFE.aspx', 'ExpiredPassword.aspx', 'frowny.aspx', 'logoff.aspx', 'logon.aspx', 'OutlookCN.aspx'.'RedirSuiteServiceProxy.aspx', 'signout.aspx'"
-
-    $owaAspx = @()
-    $owaAspx += (Get-ChildItem -Path "$($env:exchangeInstallPath)FrontEnd\HttpProxy\owa\auth\" -Recurse -Filter "*.aspx*" | Select-Object -ExpandProperty fullName | Where-Object { $_ -notMatch 'errorFE|ExpiredPassword|frowny|logoff|logon.aspx|OutlookCN|RedirSuiteServiceProxy|signout' })
-
-    if ($owaAspx.count -gt 0) {
-
-        $errorFound = 1
-
-        foreach ($owaFile in $owaAspx) {
-            Write-Log $owaFile
-        }
-    }
-    else {
-        Write-Log "No odd aspx files"
-    }
-
-    Write-Log " "
-
-    #endregion #region oddASPX
 
     Write-Log "all testing completed, please review the above Write-Log for any suspicious files or activity"
     $errorFound
