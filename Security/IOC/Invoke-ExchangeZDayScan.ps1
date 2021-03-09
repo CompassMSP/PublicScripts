@@ -18,8 +18,6 @@ if ($env:exchangeInstallPath) {
 
     $errorFound = 0
 
-    $exchangePath = $env:exchangeInstallPath
-
     #region CheckHashes
     $badHashes = @(
         "b75f163ca9b9240bf4b37ad92bc7556b40a17e27c2b8ed5c8991385fe07d17d0",
@@ -40,18 +38,13 @@ if ($env:exchangeInstallPath) {
 
         $fileHash = Get-FileHash -Path $file.FullName -Algorithm SHA256
 
-        Write-Log $file.DirectoryName
-        Write-Log $file.FullName
-        Write-Log $file.Name
-        Write-Log " "
-
         if ($badHashes.Contains($fileHash.Hash)) {
             $errorFound = 1
+            Write-Log $file.DirectoryName
+            Write-Log $file.FullName
+            Write-Log $file.Name
+            Write-Log " "
             Write-Log "BAD HASH DETECTED ASSUME BREACH"
-
-        }
-        Else {
-            Write-Log "No Bad Hashes Detected"
         }
     }
 
@@ -61,7 +54,7 @@ if ($env:exchangeInstallPath) {
 
     #region 26855
     Write-Log "Checking for CVE-2021-26855 in the HttpProxy logs"
-    $files = (Get-ChildItem -Recurse -Path "$exchangePath\Logging\HttpProxy" -Filter '*.log').FullName
+    $files = (Get-ChildItem -Recurse -Path "$($env:exchangeInstallPath)Logging\HttpProxy" -Filter '*.log').FullName
     $count = 0
     $allResults = @()
     $sw = New-Object System.Diagnostics.Stopwatch
@@ -83,7 +76,7 @@ if ($env:exchangeInstallPath) {
     Write-Progress -Activity "Checking for CVE-2021-26855 in the HttpProxy logs" -Completed
 
     if ($allResults.Length -gt 0) {
-        Write-Log "Suspicious entries found in $exchangePath\Logging\HttpProxy.  Check the .\CVE-2021-26855.csv log for specific entries."
+        Write-Log "Suspicious entries found in $($env:exchangeInstallPath)Logging\HttpProxy.  Check the .\CVE-2021-26855.csv log for specific entries."
 
         write-log ($allResults | Select-Object DateTime, RequestId, ClientIPAddress, UrlHost, UrlStem, RoutingHint, UserAgent, AnchorMailbox, HttpStatus | Out-String)
 
@@ -97,7 +90,7 @@ if ($env:exchangeInstallPath) {
 
     #region 26858
     Write-Log "`r`nChecking for CVE-2021-26858 in the OABGenerator logs"
-    $OABLogs = Get-ChildItem -Recurse -Path "$exchangePath\Logging\OABGeneratorLog" | Select-String "Download failed and temporary file" -List | Select-Object Path
+    $OABLogs = Get-ChildItem -Recurse -Path "$($env:exchangeInstallPath)Logging\OABGeneratorLog" | Select-String "Download failed and temporary file" -List | Select-Object Path
     if ($OABLogs.Path.Count -gt 0) {
         Write-Log "Suspicious OAB download entries found in the following logs, please review them for `"Download failed and temporary file`" entries:"
         Write-Log ($OABLogs.Path | Out-String)
@@ -122,7 +115,7 @@ if ($env:exchangeInstallPath) {
 
     #region 27065
     Write-log "`r`nChecking for CVE-2021-27065 in the ECP Logs"
-    $ECPLogs = Get-ChildItem -Recurse -Path "$exchangePath\Logging\ECP\Server\*.log" | Select-String "Set-.*VirtualDirectory" -List | Select-Object Path
+    $ECPLogs = Get-ChildItem -Recurse -Path "$($env:exchangeInstallPath)Logging\ECP\Server\*.log" | Select-String "Set-.*VirtualDirectory" -List | Select-Object Path
     if ($ECPLogs.Path.Count -gt 0) {
         Write-Log "Suspicious virtual directory modifications found in the following logs, please review them for `"Set-*VirtualDirectory`" entries:"
         Write-Log ($ECPLogs.Path | Out-String)
@@ -146,7 +139,7 @@ if ($env:exchangeInstallPath) {
         Write-Log "No suspicious lsass dumps found."
     }
 
-    $zipFiles = @(Get-ChildItem -Recurse -Path "$env:ProgramData" -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match ".7z|.zip|.rar" } | Where-Object { $_.FullName -notMatch 'Kaseya|LTDatabase|VMware Tools|LabTech|chocolatey|Norton|Symantec' })
+    $zipFiles = @(Get-ChildItem -Recurse -Path "$env:ProgramData" -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match ".7z| .zip | .rar" } | Where-Object { $_.FullName -notMatch 'Kaseya|LTDatabase|VMware Tools|LabTech|chocolatey|Norton|Symantec' })
 
     if ($zipFiles.Count -gt 0) {
         Write-Log "`r`nZipped files found in $env:ProgramData, please verify these are expected:"
@@ -192,7 +185,7 @@ if ($env:exchangeInstallPath) {
     Write-Log "Checking OABGenerator logs"
 
     Try {
-        Write-Log (findstr /snip /c:"Download failed and temporary file" "$($exchangePath)\Logging\OABGeneratorLog\*.log")
+        Write-Log (findstr /snip /c:"Download failed and temporary file" "$($env:exchangeInstallPath)Logging\OABGeneratorLog\*.log")
         $errorFound = 1
     }
     Catch {
@@ -222,7 +215,7 @@ if ($env:exchangeInstallPath) {
     #this should be blank
     Write-Log "Checking for Set-VirtualDirectory indicators"
     try {
-        Write-Log (Select-String -Path "$($exchangePath)\Logging\ECP\Server\*.log" -Pattern 'Set-.+VirtualDirectory' -ErrorAction silentlyContinue)
+        Write-Log (Select-String -Path "$($env:exchangeInstallPath)Logging\ECP\Server\*.log" -Pattern 'Set-.+VirtualDirectory' -ErrorAction silentlyContinue)
         $errorFound = 1
     }
     catch {
@@ -263,15 +256,23 @@ if ($env:exchangeInstallPath) {
         $errorFound = 1
     }
 
-    Write-log "looking for odd aspx files (default names are 'errorFE.aspx', 'ExpiredPassword.aspx','frowny.aspex','logoff.aspx','logon.aspx','OutlookCN.aspx'.'RedirSuiteServiceProxy.aspx', 'signout.aspx'"
+    Write-log "looking for odd aspx files (default names are 'errorFE.aspx', 'ExpiredPassword.aspx', 'frowny.aspx', 'logoff.aspx', 'logon.aspx', 'OutlookCN.aspx'.'RedirSuiteServiceProxy.aspx', 'signout.aspx'"
 
-    try {
-        Write-Log (Get-ChildItem -Path "$($exchangePath)\FrontEnd\HttpProxy\owa\auth\" -Recurse -Filter "*.aspx*" -ErrorAction stop)
+    $owaAspx = @()
+    $owaAspx += (Get-ChildItem -Path "$($env:exchangeInstallPath)FrontEnd\HttpProxy\owa\auth\" -Recurse -Filter "*.aspx*" | Select-Object -ExpandProperty fullName | Where-Object { $_ -notMatch 'errorFE|ExpiredPassword|frowny|logoff|logon.aspx|OutlookCN|RedirSuiteServiceProxy|signout' })
+
+    if ($owaAspx.count -gt 0) {
+
         $errorFound = 1
+
+        foreach ($owaFile in $owaAspx) {
+            Write-Log $owaFile
+        }
     }
-    catch {
+    else {
         Write-Log "No odd aspx files"
     }
+
     Write-Log " "
 
     #endregion #region oddASPX
