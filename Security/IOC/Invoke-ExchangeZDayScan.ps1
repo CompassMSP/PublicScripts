@@ -277,8 +277,6 @@ if ($env:exchangeInstallPath) {
     Write-Log " "
     #endregion IIS
 
-
-
     Write-Log "all testing completed, please review the above Write-Log for any suspicious files or activity"
     $errorFound
 }
