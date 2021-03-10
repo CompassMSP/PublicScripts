@@ -1,7 +1,7 @@
 #POC ONLY! still needs work
 #Andy Morales
 
-$VtThresholdPercent = .10
+$VtThresholdPercent = .01
 $AutoRunsFolder = 'C:\windows\temp\autoruns'
 
 function Expand-ZIP {
