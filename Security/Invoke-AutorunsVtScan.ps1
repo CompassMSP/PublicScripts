@@ -116,3 +116,6 @@ if ($FoundThreats.Count -gt 0) {
 
     RETURN $Result
 }
+else{
+    RETURN 'Nothing Found'
+}
