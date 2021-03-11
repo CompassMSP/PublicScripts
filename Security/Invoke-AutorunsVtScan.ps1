@@ -122,6 +122,8 @@ if ($FoundThreats.Count -gt 0) {
     $Result = 'DETECTED:'
     $Result += $FoundThreats | Select-Object 'Image Path', 'VT detection' | Out-String
 
+    $Result | Out-File -FilePath "$($AutoRunsBin)\result.txt"
+
     RETURN $Result
 }
 else {
