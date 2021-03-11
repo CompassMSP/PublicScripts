@@ -1,7 +1,15 @@
-#POC ONLY! still needs work
-#Andy Morales
+<#
+Downloads autoruns and checks for suspicious files. The threshold percentage can be adjusted with $VtThresholdPercent
 
-$VtThresholdPercent = .01
+Andy Morales
+#>
+
+[CmdletBinding()]
+param (
+    [parameter(Mandatory = $false)]
+    [String]$VtThresholdPercent = .01
+)
+
 $AutoRunsFolder = 'C:\windows\temp\autoruns'
 
 function Expand-ZIP {
@@ -116,6 +124,6 @@ if ($FoundThreats.Count -gt 0) {
 
     RETURN $Result
 }
-else{
+else {
     RETURN 'Nothing Found'
 }
