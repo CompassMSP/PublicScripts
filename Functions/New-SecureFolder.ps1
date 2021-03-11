@@ -24,7 +24,7 @@ function New-SecureFolder {
     }
 
     #Create the folder
-    New-Item -Path $Path -ItemType Directory -Force
+    New-Item -Path $Path -ItemType Directory -Force | Out-Null
 
     #Remove all explicit permissions
     ICACLS ("$Path") /reset | Out-Null
@@ -37,4 +37,4 @@ function New-SecureFolder {
 
     #Disable Inheritance on the Folder. This is done last to avoid permission errors.
     ICACLS ("$Path") /inheritance:r | Out-Null
-}  
+}
