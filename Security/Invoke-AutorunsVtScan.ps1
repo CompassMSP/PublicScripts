@@ -115,8 +115,6 @@ Foreach ($item in $result) {
 }
 #endregion ReviewResults
 
-#Remove-Item -Path "$($AutoRunsBin)\output.csv" -Force
-
 #Return detected items if any exist
 if ($FoundThreats.Count -gt 0) {
     $Result = 'DETECTED:'
