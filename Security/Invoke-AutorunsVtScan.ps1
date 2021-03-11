@@ -7,7 +7,7 @@ Andy Morales
 [CmdletBinding()]
 param (
     [parameter(Mandatory = $false)]
-    [String]$VtThresholdPercent = .01
+    [String]$VtThresholdPercent = .10
 )
 
 $AutoRunsFolder = 'C:\windows\temp\autoruns'
