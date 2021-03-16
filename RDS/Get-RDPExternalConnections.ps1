@@ -51,7 +51,7 @@ else{
 
     if($ExternalEvents.Count -gt 0){
         Write-Output "External RDP events found on $($env:COMPUTERNAME). Most Recent:"
-        Write-Output ($FilteredEvents.Message[0..5] | Out-String )
+        Write-Output (@($FilteredEvents.Message)[0..5] | Out-String )
     }
     else{
         Write-Output 'No events found'
