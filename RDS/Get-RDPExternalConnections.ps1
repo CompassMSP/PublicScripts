@@ -23,7 +23,7 @@ Function Get-InstalledApplications {
 }
 
 #Don't do anything if DUO is installed
-if (Get-InstalledApplications -Contains 'Duo Authentication for Windows Logon x64'){
+if ((Get-InstalledApplications) -Contains 'Duo Authentication for Windows Logon x64'){
     Write-Output 'DUO installed'
 }
 else{
