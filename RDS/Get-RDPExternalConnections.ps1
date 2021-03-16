@@ -1,3 +1,7 @@
+<#
+.LINK
+https://dfironthemountain.wordpress.com/2019/02/15/rdp-event-log-dfir/
+#>
 Function Get-InstalledApplications {
     $InstalledApplications = @()
     $UninstallKeys = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -51,7 +55,7 @@ else{
 
     if($ExternalEvents.Count -gt 0){
         Write-Output "External RDP events found on $($env:COMPUTERNAME). Most Recent:"
-        Write-Output (@($FilteredEvents.Message)[0..5] | Out-String )
+        Write-Output (@($FilteredEvents.Message)[0..3] | Out-String )
     }
     else{
         Write-Output 'No events found'
