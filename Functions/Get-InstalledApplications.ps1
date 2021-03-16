@@ -19,5 +19,5 @@ Function Get-InstalledApplications {
         }
 
     }
-    Return $InstalledApplications | Sort-Object displayname
+    Return $InstalledApplications | Sort-Object displayName
 }
