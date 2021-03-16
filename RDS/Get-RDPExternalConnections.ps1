@@ -27,13 +27,13 @@ if ((Get-InstalledApplications) -Contains 'Duo Authentication for Windows Logon 
     Write-Output 'DUO installed'
 }
 else{
-    $Events = Get-WinEvent -LogName 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
+    $Events = Get-WinEvent -LogName 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational','Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
 
     #Filter by event ID
     $FilteredEvents = @()
 
     foreach ($evt in $events) {
-        if ($evt.id -eq '1149') {
+        if ($evt.id -eq '1149' -or $evt.id -eq '1158') {
             $FilteredEvents += $evt
         }
     }
@@ -50,7 +50,8 @@ else{
     }
 
     if($ExternalEvents.Count -gt 0){
-        Write-Output "External RDP events found on $env:COMPUTERNAME"
+        Write-Output "External RDP events found on $($env:COMPUTERNAME). Most Recent:"
+        Write-Output $FilteredEvents.Message[0..5]
     }
     else{
         Write-Output 'No events found'
