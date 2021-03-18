@@ -1,6 +1,14 @@
 <#
+.DESCRIPTION
+This script looks through RDP logs in order to find logins from public IPs. If one is found
+then it is likely that the computer has RDP exposed to the internet.
+
+The script will not alert if DUO is installed.
+
 .LINK
 https://dfironthemountain.wordpress.com/2019/02/15/rdp-event-log-dfir/
+
+Andy Morales
 #>
 Function Get-InstalledApplications {
     $InstalledApplications = @()
@@ -92,6 +100,7 @@ if ((Get-InstalledApplications).displayName -Contains 'Duo Authentication for Wi
     Write-Output 'DUO installed'
 }
 else {
+    #Get all events
     $Events = Get-WinEvent -LogName 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational', 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
 
     #Filter by event ID
@@ -114,8 +123,7 @@ else {
         }
     }
 
-
-
+    #output results
     if ($ExternalEvents.Count -gt 0) {
         $OutputText = "External RDP events found on $($env:COMPUTERNAME).`n`n"
 
