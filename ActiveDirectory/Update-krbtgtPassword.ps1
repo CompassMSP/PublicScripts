@@ -1,7 +1,7 @@
 #Requires -Module ActiveDirectory -RunAsAdministrator
 
 $LogPath = 'C:\Windows\Temp\krbScript.txt'
-$MaxPassLifeTime = 120
+$MaxPassLifeTime = 60
 
 function Write-Log {
     <#
