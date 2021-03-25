@@ -16,6 +16,10 @@ Function Write-Log {
 #Check to see if Exchange 2013+ is installed
 if ($env:exchangeInstallPath) {
 
+    if(Test-Path 'c:\exchangeLog.txt'){
+        Rename-Item -Path 'c:\exchangeLog.txt' -NewName "exchangeLog$((Get-ItemProperty 'c:\exchangeLog.txt').LastWriteTime.ToString("yyyyMMdd-hh-mm-ss")).txt"
+    }
+
     $errorFound = 0
 
     #region CheckHashes
