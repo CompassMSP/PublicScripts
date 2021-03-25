@@ -191,7 +191,7 @@ if ($env:exchangeInstallPath) {
     Write-Log "Checking IIS-W3SVC-WP event logs"
 
     Try {
-        Write-Log (Get-EventWrite-Log -LogName Application -Source IIS-W3SVC-WP -InstanceId 2303 -ErrorAction stop)
+        Write-Log (Get-Event -LogName Application -Source IIS-W3SVC-WP -InstanceId 2303 -ErrorAction stop)
 
         $errorFound = 1
     }
@@ -205,7 +205,7 @@ if ($env:exchangeInstallPath) {
     Write-Log "Checking IIS-APPHOSTSVC event logs"
 
     Try {
-        Write-Log (Get-EventWrite-Log -LogName Application -Source IIS-APPHOSTSVC -InstanceId 9009 -ErrorAction Stop)
+        Write-Log (Get-Event -LogName Application -Source IIS-APPHOSTSVC -InstanceId 9009 -ErrorAction Stop)
         $errorFound = 1
     }
     Catch {
@@ -236,7 +236,7 @@ if ($env:exchangeInstallPath) {
     Write-Log "Checking Unified Message event logs"
 
     Try {
-        Write-Log (Get-EventWrite-Log -LogName Application -Source "MSExchange Unified Messaging" -EntryType Error -ErrorAction stop | Where-Object { $_.Message -like "*System.InvalidCastException*" } )
+        Write-Log (Get-Event -LogName Application -Source "MSExchange Unified Messaging" -EntryType Error -ErrorAction stop | Where-Object { $_.Message -like "*System.InvalidCastException*" } )
         $errorFound = 1
     }
     Catch {
