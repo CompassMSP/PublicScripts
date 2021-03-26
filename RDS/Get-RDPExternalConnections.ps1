@@ -100,26 +100,23 @@ if ((Get-InstalledApplications).displayName -Contains 'Duo Authentication for Wi
     Write-Output 'DUO installed'
 }
 else {
-    #Get all events
-    $Events = Get-WinEvent -LogName 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational', 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
 
-    #Filter by event ID
-    $FilteredEvents = @()
-
-    foreach ($evt in $events) {
-        if ($evt.id -eq '1149' -or $evt.id -eq '1158') {
-            $FilteredEvents += $evt
-        }
+    #Get Relevant RDP Events
+    $RemoteConnectionLogFilter = @{
+        LogName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational', 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
+        ID      = 1149, 1158
     }
+
+    $RemoteConnectionEvents += Get-WinEvent -FilterHashTable $RemoteConnectionLogFilter
 
     #Find events that contain public IPs
     $ExternalEvents = @()
 
     $rfc1918regex = '(192\.168\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5]))|(172\.([1][6-9]|[2][0-9]|[3][0-1])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5]))|(10\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5]))|(127\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5]))'
 
-    foreach ($fEvent in $FilteredEvents) {
-        if ($fEvent.Message -notmatch $rfc1918regex) {
-            $ExternalEvents += $fEvent
+    foreach ($rcEvent in $RemoteConnectionEvents) {
+        if ($rcEvent.Message -notmatch $rfc1918regex) {
+            $ExternalEvents += $rcEvent
         }
     }
 
@@ -144,7 +141,36 @@ else {
 
         $OutputText += "Most Recent:`n"
 
-        $OutputText += @($FilteredEvents.Message)[0..3] | Out-String
+        $OutputText += @($ExternalEvents.Message)[0..3] | Out-String
+
+        $OutputText += "`n"
+
+        #region sessionManagerLogs
+        $SessionManagerLogFilter = @{
+            LogName = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+            ID      = 21, 22, 25
+        }
+
+        $SessionManagerEvents = Get-WinEvent -FilterHashtable $SessionManagerLogFilter
+
+        $ExternalSmEvents = @()
+        foreach ($smEvent in $SessionManagerEvents) {
+
+            [xml]$entry = $smEvent.ToXml()
+
+            if ($entry.Event.UserData.EventXML.Address -notmatch $rfc1918regex) {
+                [array]$ExternalSmEvents += [PSCustomObject]@{
+                    TimeCreated = $smEvent.TimeCreated
+                    User        = $entry.Event.UserData.EventXML.User
+                    IPAddress   = $entry.Event.UserData.EventXML.Address
+                }
+            }
+        }
+        #endregion sessionManagerLogs
+
+        $OutputText += "Recent Logins"
+
+        $OutputText += @($ExternalSmEvents)[0..3] | Out-String
 
         Write-Output $OutputText
     }
