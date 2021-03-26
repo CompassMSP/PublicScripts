@@ -101,24 +101,47 @@ if ((Get-InstalledApplications).displayName -Contains 'Duo Authentication for Wi
 }
 else {
 
-    #Get Relevant RDP Events
-    $RemoteConnectionLogFilter = @{
-        LogName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational', 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
-        ID      = 1149, 1158
-    }
-
-    $RemoteConnectionEvents += Get-WinEvent -FilterHashTable $RemoteConnectionLogFilter
-
-    #Find events that contain public IPs
     $ExternalEvents = @()
 
-    $rfc1918regex = '(192\.168\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5]))|(172\.([1][6-9]|[2][0-9]|[3][0-1])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5]))|(10\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5]))|(127\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5])\.([0-9]|[0-9][0-9]|[0-2][0-5][0-5]))'
+    $rfc1918regex = '^(127(?:\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$)|(10(?:\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$)|(192\.168(?:\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){2}$)|(172\.(?:1[6-9]|2\d|3[0-1])(?:\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){2}$)'
 
-    foreach ($rcEvent in $RemoteConnectionEvents) {
-        if ($rcEvent.Message -notmatch $rfc1918regex) {
-            $ExternalEvents += $rcEvent
+    #region remoteConnectionAdminEvents
+    $RemoteConnectionAdminLogFilter = @{
+        LogName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
+        ID      = 1158
+    }
+
+    $RemoteConnectionAdminEvents += Get-WinEvent -FilterHashTable $RemoteConnectionAdminLogFilter -ErrorAction Ignore
+
+    #Find events that contain public IPs
+    foreach ($rcaEvent in $RemoteConnectionAdminEvents) {
+
+        [xml]$rcEntry = $rcaEvent.ToXml()
+
+        if ($rcEntry.Event.UserData.EventXML.Param1 -notmatch $rfc1918regex) {
+            $ExternalEvents += $rcaEvent
         }
     }
+    #endregion remoteConnectionAdminEvents
+
+    #region remoteConnectionOperationalEvents
+    $RemoteConnectionOperationalLogFilter = @{
+        LogName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
+        ID      = 1149
+    }
+
+    $RemoteConnectionOperationalEvents += Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction Ignore
+
+    #Find events that contain public IPs
+    foreach ($rcpEvent in $RemoteConnectionOperationalEvents) {
+
+        [xml]$rcEntry = $rcpEvent.ToXml()
+
+        if ($rcEntry.Event.UserData.EventXML.Param3 -notmatch $rfc1918regex) {
+            $ExternalEvents += $rcpEvent
+        }
+    }
+    #endregion remoteConnectionOperationalEvents
 
     #output results
     if ($ExternalEvents.Count -gt 0) {
