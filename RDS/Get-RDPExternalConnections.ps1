@@ -151,7 +151,7 @@ else {
             ID      = 21, 22, 25
         }
 
-        $SessionManagerEvents = Get-WinEvent -FilterHashtable $SessionManagerLogFilter
+        $SessionManagerEvents = Get-WinEvent -FilterHashTable $SessionManagerLogFilter
 
         $ExternalSmEvents = @()
         foreach ($smEvent in $SessionManagerEvents) {
@@ -166,11 +166,13 @@ else {
                 }
             }
         }
+
+        if ($ExternalSmEvents.count -gt 0){
+            $OutputText += "Recent Logins"
+
+            $OutputText += @($ExternalSmEvents)[0..3] | Out-String
+        }
         #endregion sessionManagerLogs
-
-        $OutputText += "Recent Logins"
-
-        $OutputText += @($ExternalSmEvents)[0..3] | Out-String
 
         Write-Output $OutputText
     }
