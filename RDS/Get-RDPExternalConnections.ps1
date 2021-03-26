@@ -104,6 +104,8 @@ else {
     $ExternalEvents = @()
 
     $rfc1918regex = '^(127(?:\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$)|(10(?:\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$)|(192\.168(?:\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){2}$)|(172\.(?:1[6-9]|2\d|3[0-1])(?:\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){2}$)'
+    #simple regex that just looks for ':' in IPs
+    $IPv6regex = ':'
 
     #region remoteConnectionAdminEvents
     $RemoteConnectionAdminLogFilter = @{
@@ -116,9 +118,11 @@ else {
     #Find events that contain public IPs
     foreach ($rcaEvent in $RemoteConnectionAdminEvents) {
 
-        [xml]$rcEntry = $rcaEvent.ToXml()
-
-        if ($rcEntry.Event.UserData.EventXML.Param1 -notmatch $rfc1918regex) {
+        [xml]$rcaEntry = $rcaEvent.ToXml()
+        if ($rcaEntry.Event.UserData.EventXML.Param1 -match $IPv6regex) {
+            #discard IPv6
+        }
+        elseif ($rcaEntry.Event.UserData.EventXML.Param1 -notmatch $rfc1918regex) {
             $ExternalEvents += $rcaEvent
         }
     }
@@ -133,12 +137,14 @@ else {
     $RemoteConnectionOperationalEvents += Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction Ignore
 
     #Find events that contain public IPs
-    foreach ($rcpEvent in $RemoteConnectionOperationalEvents) {
+    foreach ($rcoEvent in $RemoteConnectionOperationalEvents) {
 
-        [xml]$rcEntry = $rcpEvent.ToXml()
-
-        if ($rcEntry.Event.UserData.EventXML.Param3 -notmatch $rfc1918regex) {
-            $ExternalEvents += $rcpEvent
+        [xml]$rcoEntry = $rcoEvent.ToXml()
+        if ($rcoEntry.Event.UserData.EventXML.Param3 -match $IPv6regex) {
+            #discard IPv6
+        }
+        elseif ($rcoEntry.Event.UserData.EventXML.Param3 -notmatch $rfc1918regex) {
+            $ExternalEvents += $rcoEvent
         }
     }
     #endregion remoteConnectionOperationalEvents
@@ -174,18 +180,20 @@ else {
             ID      = 21, 22, 25
         }
 
-        $SessionManagerEvents = Get-WinEvent -FilterHashTable $SessionManagerLogFilter
+        $SessionManagerEvents = Get-WinEvent -FilterHashTable $SessionManagerLogFilter -ErrorAction Ignore
 
         $ExternalSmEvents = @()
         foreach ($smEvent in $SessionManagerEvents) {
 
-            [xml]$entry = $smEvent.ToXml()
-
-            if ($entry.Event.UserData.EventXML.Address -notmatch $rfc1918regex) {
+            [xml]$smEntry = $smEvent.ToXml()
+            if ($smEntry.Event.UserData.EventXML.Address -match $IPv6regex){
+                #Discard IPv6
+            }
+            elseif ($smEntry.Event.UserData.EventXML.Address -notmatch $rfc1918regex) {
                 [array]$ExternalSmEvents += [PSCustomObject]@{
                     TimeCreated = $smEvent.TimeCreated
-                    User        = $entry.Event.UserData.EventXML.User
-                    IPAddress   = $entry.Event.UserData.EventXML.Address
+                    User        = $smEntry.Event.UserData.EventXML.User
+                    IPAddress   = $smEntry.Event.UserData.EventXML.Address
                 }
             }
         }
