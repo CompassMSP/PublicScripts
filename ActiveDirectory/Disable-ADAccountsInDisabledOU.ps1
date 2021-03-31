@@ -27,6 +27,6 @@ Foreach ($OuName in $DisabledOUNames) {
 }
 
 Foreach ($OU in $DisabledAccountsOUs) {
-    Get-ADUser -Filter 'Enabled -eq "True"' -SearchBase $OU.DistinguishedName | Where-Object { $WhiteListedSamNames -NotContains $_.SamAccountName } | Set-ADUser -Enabled $false -Description "Disabled by Script on $(Get-Date -Format 'FileDate')"
+    Get-ADUser -Filter 'Enabled -eq "True"' -SearchBase $OU.DistinguishedName | Where-Object { ($WhiteListedSamNames -NotContains $_.SamAccountName) -and ($_.SID -notLike '*-500') } | Set-ADUser -Enabled $false -Description "Disabled by Script on $(Get-Date -Format 'FileDate')"
     Get-ADComputer -Filter 'Enabled -eq "True"' -SearchBase $OU.DistinguishedName | Where-Object { $WhiteListedSamNames -NotContains $_.SamAccountName } | Set-ADComputer -Enabled $false -Description "Disabled by Script on $(Get-Date -Format 'FileDate')"
 }
