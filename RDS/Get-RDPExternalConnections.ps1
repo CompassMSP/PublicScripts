@@ -5,11 +5,16 @@ then it is likely that the computer has RDP exposed to the internet.
 
 The script will not alert if DUO is installed.
 
+Events older than $LogThreshold will be ignored
+
 .LINK
 https://dfironthemountain.wordpress.com/2019/02/15/rdp-event-log-dfir/
 
 Andy Morales
 #>
+
+$LogThreshold = (Get-Date).AddDays(-90)
+
 Function Get-InstalledApplications {
     $InstalledApplications = @()
     $UninstallKeys = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -109,11 +114,12 @@ else {
 
     #region remoteConnectionAdminEvents
     $RemoteConnectionAdminLogFilter = @{
-        LogName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
-        ID      = 1158
+        LogName   = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
+        ID        = 1158
+        StartTime = $LogThreshold
     }
 
-    $RemoteConnectionAdminEvents += Get-WinEvent -FilterHashTable $RemoteConnectionAdminLogFilter -ErrorAction Ignore
+    $RemoteConnectionAdminEvents += Get-WinEvent -FilterHashtable $RemoteConnectionAdminLogFilter -ErrorAction Ignore
 
     #Find events that contain public IPs
     foreach ($rcaEvent in $RemoteConnectionAdminEvents) {
@@ -130,8 +136,9 @@ else {
 
     #region remoteConnectionOperationalEvents
     $RemoteConnectionOperationalLogFilter = @{
-        LogName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
-        ID      = 1149
+        LogName   = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
+        ID        = 1149
+        StartTime = $LogThreshold
     }
 
     $RemoteConnectionOperationalEvents += Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction Ignore
@@ -176,17 +183,18 @@ else {
 
         #region sessionManagerLogs
         $SessionManagerLogFilter = @{
-            LogName = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
-            ID      = 21, 22, 25
+            LogName   = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+            ID        = 21, 22, 25
+            StartTime = $LogThreshold
         }
 
-        $SessionManagerEvents = Get-WinEvent -FilterHashTable $SessionManagerLogFilter -ErrorAction Ignore
+        $SessionManagerEvents = Get-WinEvent -FilterHashtable $SessionManagerLogFilter -ErrorAction Ignore
 
         $ExternalSmEvents = @()
         foreach ($smEvent in $SessionManagerEvents) {
 
             [xml]$smEntry = $smEvent.ToXml()
-            if ($smEntry.Event.UserData.EventXML.Address -match $IPv6regex){
+            if ($smEntry.Event.UserData.EventXML.Address -match $IPv6regex) {
                 #Discard IPv6
             }
             elseif ($smEntry.Event.UserData.EventXML.Address -notmatch $rfc1918regex) {
@@ -198,7 +206,7 @@ else {
             }
         }
 
-        if ($ExternalSmEvents.count -gt 0){
+        if ($ExternalSmEvents.count -gt 0) {
             $OutputText += "Recent Logins"
 
             $OutputText += @($ExternalSmEvents)[0..3] | Out-String
