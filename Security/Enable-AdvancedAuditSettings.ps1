@@ -1,6 +1,9 @@
 <#
 This script enables additional detailed auditing on a computer.
 
+IMPORTANT: The secpol gui will not reflect these changes. Use the command below to confirm:
+    auditpol /get /category:*
+
 Andy Morales
 #>
 
