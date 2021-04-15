@@ -3,6 +3,7 @@ This script enables additional detailed auditing on a computer.
 
 Andy Morales
 #>
+
 $SuccessAndFail = @(
     'Credential Validation',
     'Other Account Management Events',
@@ -66,3 +67,26 @@ Foreach ($fo in $FailOnly) {
 
 #Force the use of advanced audit policies
 Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name SCENoApplyLegacyAuditPolicy -Value 1
+
+#region increaseLogSize
+$LogsToIncrease = @(
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-LocalSessionManager/Admin'
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
+)
+
+Foreach ($log in $LogsToIncrease){
+    reg add $log /v MaxSize /t REG_DWORD /d 512032768 /f
+}
+
+#max size value is different for Policies
+$PolicyLogsToIncrease = @(
+    'HKLM\SOFTWARE\Policies\Microsoft\Windows\EventLog\Application'
+    'HKLM\SOFTWARE\Policies\Microsoft\Windows\EventLog\Security'
+    'HKLM\SOFTWARE\Policies\Microsoft\Windows\EventLog\System'
+)
+Foreach ($pLog in $PolicyLogsToIncrease) {
+    reg add $pLog /v MaxSize /t REG_DWORD /d 500032 /f
+}
+#endregion increaseLogSize
