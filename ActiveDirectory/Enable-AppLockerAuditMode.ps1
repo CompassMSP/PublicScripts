@@ -179,7 +179,7 @@ $allGPOs = Get-GPO -All
 
 $AppLockerFound = $false
 
-foreach ($GPO in $AllGpos) {
+foreach ($GPO in $allGPOs) {
     [xml]$GPOReport = $GPO | Get-GPOReport -ReportType Xml
 
     $AppLockerStatus = $GPOReport.GPO.Computer.ExtensionData.extension.rulecollection.enforcementmode.mode
@@ -217,7 +217,7 @@ if (!$AppLockerFound) {
     $GPOPrefixedName = "_$($GPOName)"
 
     #Import and apply the GPO
-    New-GPO -Name $GPOName -ErrorAction SilentlyContinue
+    New-GPO -Name $GPOPrefixedName -ErrorAction SilentlyContinue
     Import-GPO -Path "$AppLockerGPOFolder\$GPOName" -TargetName $GPOPrefixedName -BackupGpoName $GPOName -ErrorAction Stop
-    New-GPLink -Name 'Password Protection' -Target $((Get-ADDomain).DistinguishedName) -LinkEnabled Yes -ErrorAction Stop
+    New-GPLink -Name $GPOPrefixedName -Target $((Get-ADDomain).DistinguishedName) -LinkEnabled Yes -ErrorAction Stop
 }
