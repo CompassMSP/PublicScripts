@@ -179,10 +179,10 @@ $allGPOs = Get-GPO -All
 
 $AppLockerFound = $false
 
-foreach ($GPO in $AllGpos) {
+foreach ($GPO in $allGPOs) {
     [xml]$GPOReport = $GPO | Get-GPOReport -ReportType Xml
 
-    $AppLockerStatus = $GPOReport.GPO.Computer.ExtensionData.extension.rulecollection.enforcementmode.mode
+    $AppLockerStatus = $GPOReport.GPO.Computer.ExtensionData.extension.ruleCollection.enforcementMode.mode
 
     #Check to see if AppLocker is enabled
     #'Disabled' means it's in audit mode
@@ -209,7 +209,7 @@ if (!$AppLockerFound) {
     Expand-ZIP -ZipFile $AppLockerZipPath -OutPath $AppLockerGPOFolder
 
     #Generate a GPO Report
-    $GPOReportPath = Get-ChildItem $AppLockerGPOFolder -Recurse | Where-Object name -EQ gpreport.xml
+    $GPOReportPath = Get-ChildItem $AppLockerGPOFolder -Recurse | Where-Object name -EQ gpReport.xml
     [XML]$GPOReportXML = Get-Content -Path $GPOReportPath.FullName
 
     #Prefix an underscore to make it easier to identify later
@@ -217,7 +217,7 @@ if (!$AppLockerFound) {
     $GPOPrefixedName = "_$($GPOName)"
 
     #Import and apply the GPO
-    New-GPO -Name $GPOName -ErrorAction SilentlyContinue
+    New-GPO -Name $GPOPrefixedName -ErrorAction SilentlyContinue
     Import-GPO -Path "$AppLockerGPOFolder\$GPOName" -TargetName $GPOPrefixedName -BackupGpoName $GPOName -ErrorAction Stop
-    New-GPLink -Name 'Password Protection' -Target $((Get-ADDomain).DistinguishedName) -LinkEnabled Yes -ErrorAction Stop
+    New-GPLink -Name $GPOPrefixedName -Target $((Get-ADDomain).DistinguishedName) -LinkEnabled Yes -ErrorAction Stop
 }
