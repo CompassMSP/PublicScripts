@@ -220,8 +220,4 @@ if (!$AppLockerFound) {
     New-GPO -Name $GPOPrefixedName -ErrorAction SilentlyContinue
     Import-GPO -Path "$AppLockerGPOFolder\$GPOName" -TargetName $GPOPrefixedName -BackupGpoName $GPOName -ErrorAction Stop
     New-GPLink -Name $GPOPrefixedName -Target $((Get-ADDomain).DistinguishedName) -LinkEnabled Yes -ErrorAction Stop
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 8c62a6f23f5db63f23c0df3802f2c385dc54996b
