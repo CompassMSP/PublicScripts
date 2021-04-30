@@ -9,17 +9,23 @@ function New-SecureFolder {
     param (
         [parameter(Mandatory = $true,
             HelpMessage = 'C:\temp')]
-        [String]$Path
+        [String]$Path,
+        
+        [switch]$NoDelete
     )
 
-    #Delete the folder if it already exists
-    if (Test-Path -Path $Path) {
-        try {
-            Remove-Item -Path $Path -Force -Recurse -ErrorAction Stop
-        }
-        catch{
-            Write-Output "Could not clear the contents of $($Path). Script will exit."
-            EXIT
+    if($NoDelete){
+        #Don't delete the existing folder
+    }{
+        #Delete the folder if it already exists
+        if (Test-Path -Path $Path) {
+            try {
+                Remove-Item -Path $Path -Force -Recurse -ErrorAction Stop
+            }
+            catch {
+                Write-Output "Could not clear the contents of $($Path). Script will exit."
+                EXIT
+            }
         }
     }
 
