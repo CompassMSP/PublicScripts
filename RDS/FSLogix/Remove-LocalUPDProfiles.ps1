@@ -197,7 +197,9 @@ $ExcludeMembers = @()
 $ExcludeMembers += Get-RecursiveLocalGroupMembers -Group 'FSLogix ODFC Exclude List'
 $ExcludeMembers += Get-RecursiveLocalGroupMembers -Group 'FSLogix Profile Exclude List'
 
-$UsersToExclude = @()
+$UsersToExclude = @(
+    'TWBAIT'
+)
 
 if ($ExcludeMembers.count -gt 0) {
     Foreach ($user in $ExcludeMembers.user) {
