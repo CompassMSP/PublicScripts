@@ -18,7 +18,7 @@ if ($PossibleFiles.count -gt 0) {
     )
 
     Foreach ($file in $PossibleFiles) {
-        #try to verify the file by using the file hash if PSVersion is 4+. If an earlier PS is installed (get-filehash is not avalible), just remove the file.
+        #try to verify the file by using the file hash if PSVersion is 4+. If an earlier PS is installed (Get-fileHash is not available), just remove the file.
         if ($PSVersionTable.PSVersion.Major -ge 4) {
             $FileHash = $File | Get-FileHash -Algorithm SHA256
 
