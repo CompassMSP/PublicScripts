@@ -8,7 +8,7 @@ https://www.dell.com/support/kbdoc/en-us/000186019/dsa-2021-088-dell-client-plat
 Andy Morales
 #>
 
-$PossibleFiles = Get-ChildItem -Path 'C:\Users\*\AppData\Local\Temp', 'C:\Windows\Temp' -Force -Recurse -Include 'dbutil_2_3.sys' -ErrorAction SilentlyContinue
+$PossibleFiles = @(Get-ChildItem -Path 'C:\Users\*\AppData\Local\Temp', 'C:\Windows\Temp' -Force -Recurse -Include 'dbutil_2_3.sys' -ErrorAction SilentlyContinue)
 
 if ($PossibleFiles.count -gt 0) {
 
