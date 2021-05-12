@@ -1,7 +1,7 @@
 <#
 This script handles most of the Office 365/AD tasks during user termination.
 
-All required modules must be installed in order for the script to execute successfully. 
+All required modules must be installed in order for the script to execute successfully.
 
 Andy Morales
 #>
@@ -105,11 +105,16 @@ Write-Output "Performing Office 365 Steps"
 $365Mailbox | Set-Mailbox -Type Shared
 
 #Find 365 only groups
-$All365Groups = Get-AzureADUserMembership -ObjectId $UserFromAD.UserPrincipalName | Where-Object { $_.OnPremisesSecurityIdentifier -eq $null }
+$All365Groups = Get-AzureADUserMembership -ObjectId $UserFromAD.UserPrincipalName | Where-Object { $_.OnPremisesSecurityIdentifier -eq $null -and $_.DisplayName -ne 'All Users'}
 
 #Remove user from all groups
 Foreach ($365Group in $All365Groups) {
-    Remove-AzureADGroupMember -ObjectId $365Group.ObjectId -MemberId $AZUser.ObjectId
+    try{
+        Remove-AzureADGroupMember -ObjectId $365Group.ObjectId -MemberId $AZUser.ObjectId -ErrorAction Stop
+    }
+    catch{
+        Remove-DistributionGroupMember -Identity $365Group.ObjectId -Member $UserFromAD.UserPrincipalName -BypassSecurityGroupManagerCheck -Confirm:$false
+    }
 }
 
 #reset MFA
