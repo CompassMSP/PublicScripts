@@ -119,7 +119,7 @@ else {
         StartTime = $LogThreshold
     }
 
-    $RemoteConnectionAdminEvents += Get-WinEvent -FilterHashtable $RemoteConnectionAdminLogFilter -ErrorAction Ignore
+    $RemoteConnectionAdminEvents += Get-WinEvent -FilterHashtable $RemoteConnectionAdminLogFilter -ErrorAction SilentlyContinue
 
     #Find events that contain public IPs
     foreach ($rcaEvent in $RemoteConnectionAdminEvents) {
@@ -141,7 +141,7 @@ else {
         StartTime = $LogThreshold
     }
 
-    $RemoteConnectionOperationalEvents += Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction Ignore
+    $RemoteConnectionOperationalEvents += Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction SilentlyContinue
 
     #Find events that contain public IPs
     foreach ($rcoEvent in $RemoteConnectionOperationalEvents) {
@@ -210,7 +210,7 @@ else {
             StartTime = $LogThreshold
         }
 
-        $SessionManagerEvents = Get-WinEvent -FilterHashtable $SessionManagerLogFilter -ErrorAction Ignore
+        $SessionManagerEvents = Get-WinEvent -FilterHashtable $SessionManagerLogFilter -ErrorAction SilentlyContinue
 
         $ExternalSmEvents = @()
         foreach ($smEvent in $SessionManagerEvents) {
