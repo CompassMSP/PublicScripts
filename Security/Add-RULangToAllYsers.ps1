@@ -15,7 +15,7 @@ $UserKeys = Get-ChildItem -Path registry::HKEY_USERS | Where-Object {$_.name.Len
 
 Foreach ($User in $UserKeys){
 
-    $CurrentLangs =  (Get-Item -path "registry::$($user.name)\Keyboard Layout\Preload" | Select-Object -ExpandProperty Property | Where-Object {$_.Length -eq 1} | measure -Maximum).Maximum
+    $CurrentLangs = Get-Item -Path "registry::$($user.name)\Keyboard Layout\Preload" | Select-Object -ExpandProperty Property | Where-Object { $_.Length -eq 1 }
 
     Foreach ($lang in $CurrentLangs){
         if((Get-ItemProperty -path "registry::$($user.name)\Keyboard Layout\Preload" -name $lang).$lang -eq '00000419'){
@@ -26,7 +26,7 @@ Foreach ($User in $UserKeys){
         }
     }
 
-    $HighestLangNumber = ($CurrentLangs| measure -Maximum).Maximum
+    $HighestLangNumber = ($CurrentLangs| Measure-Object -Maximum).Maximum
 
     $NewLangNumber = $HighestLangNumber + 1
 
