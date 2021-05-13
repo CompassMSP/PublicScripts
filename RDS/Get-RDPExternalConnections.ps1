@@ -160,6 +160,28 @@ else {
     if ($ExternalEvents.Count -gt 0) {
         $OutputText = "External RDP events found on $($env:COMPUTERNAME).`n`n"
 
+        #Get Computer Type
+        switch ((Get-CimInstance Win32_ComputerSystem ).domainRole){
+            0 {
+                $OutputText += "StandaloneWorkstation`n`n"
+            }
+            1 {
+                $OutputText += "DomainWorkstation`n`n"
+            }
+            2 {
+                $OutputText += "StandardServer`n`n"
+            }
+            3 {
+                $OutputText += "StandardServer`n`n"
+            }
+            4 {
+                $OutputText += "DomainController`n`n"
+            }
+            5 {
+                $OutputText += "DomainController`n`n"
+            }
+        }
+
         #Check for NLA setting
         $NLASetting = Test-RegistryValue -Path 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -ValueData 1
 
