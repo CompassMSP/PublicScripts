@@ -162,7 +162,7 @@ else {
 
     #output results
     if ($ExternalEvents.Count -gt 0) {
-        $OutputText = "External RDP events found on $($env:COMPUTERNAME).`n`n"
+        $OutputText = "External RDP events found on $($env:COMPUTERNAME). "
 
         #Get Computer Type
         switch ((Get-WmiObject Win32_ComputerSystem ).domainRole){
