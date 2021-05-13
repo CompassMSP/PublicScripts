@@ -122,14 +122,16 @@ else {
     $RemoteConnectionAdminEvents += Get-WinEvent -FilterHashtable $RemoteConnectionAdminLogFilter -ErrorAction SilentlyContinue
 
     #Find events that contain public IPs
-    foreach ($rcaEvent in $RemoteConnectionAdminEvents) {
+    if ($RemoteConnectionAdminEvents.count -gt 0){
+        foreach ($rcaEvent in $RemoteConnectionAdminEvents) {
 
-        [xml]$rcaEntry = $rcaEvent.ToXml()
-        if ($rcaEntry.Event.UserData.EventXML.Param1 -match $IPv6regex) {
-            #discard IPv6
-        }
-        elseif ($rcaEntry.Event.UserData.EventXML.Param1 -notmatch $rfc1918regex) {
-            $ExternalEvents += $rcaEvent
+            [xml]$rcaEntry = $rcaEvent.ToXml()
+            if ($rcaEntry.Event.UserData.EventXML.Param1 -match $IPv6regex) {
+                #discard IPv6
+            }
+            elseif ($rcaEntry.Event.UserData.EventXML.Param1 -notmatch $rfc1918regex) {
+                $ExternalEvents += $rcaEvent
+            }
         }
     }
     #endregion remoteConnectionAdminEvents
@@ -144,14 +146,16 @@ else {
     $RemoteConnectionOperationalEvents += Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction SilentlyContinue
 
     #Find events that contain public IPs
-    foreach ($rcoEvent in $RemoteConnectionOperationalEvents) {
+    if ($RemoteConnectionOperationalEvents.count -gt 0){
+        foreach ($rcoEvent in $RemoteConnectionOperationalEvents) {
 
-        [xml]$rcoEntry = $rcoEvent.ToXml()
-        if ($rcoEntry.Event.UserData.EventXML.Param3 -match $IPv6regex) {
-            #discard IPv6
-        }
-        elseif ($rcoEntry.Event.UserData.EventXML.Param3 -notmatch $rfc1918regex) {
-            $ExternalEvents += $rcoEvent
+            [xml]$rcoEntry = $rcoEvent.ToXml()
+            if ($rcoEntry.Event.UserData.EventXML.Param3 -match $IPv6regex) {
+                #discard IPv6
+            }
+            elseif ($rcoEntry.Event.UserData.EventXML.Param3 -notmatch $rfc1918regex) {
+                $ExternalEvents += $rcoEvent
+            }
         }
     }
     #endregion remoteConnectionOperationalEvents
