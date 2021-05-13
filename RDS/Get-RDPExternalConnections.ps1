@@ -161,7 +161,7 @@ else {
         $OutputText = "External RDP events found on $($env:COMPUTERNAME).`n`n"
 
         #Get Computer Type
-        switch ((Get-CimInstance Win32_ComputerSystem ).domainRole){
+        switch ((Get-WmiObject Win32_ComputerSystem ).domainRole){
             0 {
                 $OutputText += "StandaloneWorkstation`n`n"
             }
