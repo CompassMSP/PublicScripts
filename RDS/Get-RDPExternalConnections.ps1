@@ -119,7 +119,7 @@ else {
         StartTime = $LogThreshold
     }
 
-    $RemoteConnectionAdminEvents += Get-WinEvent -FilterHashtable $RemoteConnectionAdminLogFilter -ErrorAction SilentlyContinue
+    $RemoteConnectionAdminEvents += @(Get-WinEvent -FilterHashtable $RemoteConnectionAdminLogFilter -ErrorAction SilentlyContinue)
 
     #Find events that contain public IPs
     if ($RemoteConnectionAdminEvents.count -gt 0){
@@ -143,7 +143,7 @@ else {
         StartTime = $LogThreshold
     }
 
-    $RemoteConnectionOperationalEvents += Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction SilentlyContinue
+    $RemoteConnectionOperationalEvents += @(Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction SilentlyContinue)
 
     #Find events that contain public IPs
     if ($RemoteConnectionOperationalEvents.count -gt 0){
