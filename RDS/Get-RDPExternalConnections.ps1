@@ -173,10 +173,20 @@ else {
                 $OutputText += "DomainWorkstation`n`n"
             }
             2 {
-                $OutputText += "StandardServer`n`n"
+                if ((Get-WindowsFeature -Name 'RDS-RD-Server').InstallState -eq 'Installed'){
+                    $OutputText += "RDSH`n`n"
+                }
+                else{
+                    $OutputText += "StandardServer`n`n"
+                }
             }
             3 {
-                $OutputText += "StandardServer`n`n"
+                if ((Get-WindowsFeature -Name 'RDS-RD-Server').InstallState -eq 'Installed') {
+                    $OutputText += "RDSH`n`n"
+                }
+                else {
+                    $OutputText += "StandardServer`n`n"
+                }
             }
             4 {
                 $OutputText += "DomainController`n`n"
