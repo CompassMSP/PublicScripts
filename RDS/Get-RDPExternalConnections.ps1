@@ -173,7 +173,7 @@ else {
                 $OutputText += "DomainWorkstation`n`n"
             }
             2 {
-                if ((Get-WindowsFeature -Name 'RDS-RD-Server').InstallState -eq 'Installed'){
+                if ((Get-WmiObject -class Win32_TerminalServiceSetting -Namespace 'root\cimv2\TerminalServices').terminalServerMode -eq 1) {
                     $OutputText += "RDSH`n`n"
                 }
                 else{
@@ -181,7 +181,7 @@ else {
                 }
             }
             3 {
-                if ((Get-WindowsFeature -Name 'RDS-RD-Server').InstallState -eq 'Installed') {
+                if ((Get-WmiObject -Class Win32_TerminalServiceSetting -Namespace 'root\cimv2\TerminalServices').terminalServerMode -eq 1) {
                     $OutputText += "RDSH`n`n"
                 }
                 else {
