@@ -32,3 +32,6 @@ if ($SuspiciousSubFound) {
     Write-Output 'SuspiciousSubsFound'
     Write-Output $SuspiciousSubs | Select-Object Name, CommandLineTemplate
 }
+else{
+    Write-Output 'NothingFound'
+}
