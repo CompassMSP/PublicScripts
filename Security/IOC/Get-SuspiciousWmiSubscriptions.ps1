@@ -1,5 +1,5 @@
 <#
-This script searches for WMI subscriptions that might contain entires used for persistence.
+This script searches for WMI subscriptions that might contain entries used for malware persistence.
 
 .LINK
 https://pentestlab.blog/2020/01/21/persistence-wmi-event-subscription/
