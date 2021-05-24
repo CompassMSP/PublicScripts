@@ -30,7 +30,7 @@ foreach ($sub in $WmiSubs) {
 
 if ($SuspiciousSubFound) {
     Write-Output 'SuspiciousSubsFound'
-    Write-Output $SuspiciousSubs | Select-Object Name, CommandLineTemplate
+    $SuspiciousSubs | Format-List Name,CommandLineTemplate
 }
 else{
     Write-Output 'NothingFound'
