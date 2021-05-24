@@ -1,3 +1,5 @@
+New-ItemProperty -LiteralPath 'HKCU:\Console' -Name 'ForceV2' -Value 1 -PropertyType DWord -Force -ea SilentlyContinue;
+
 if ((Test-Path -LiteralPath "HKCU:\Console\%SystemRoot%_system32_cmd.exe") -ne $true) {
     New-Item "HKCU:\Console\%SystemRoot%_system32_cmd.exe" -Force -ea SilentlyContinue
 };
