@@ -122,11 +122,14 @@ else {
     $RemoteConnectionAdminEvents += @(Get-WinEvent -FilterHashtable $RemoteConnectionAdminLogFilter -ErrorAction SilentlyContinue)
 
     #Find events that contain public IPs
-    if ($RemoteConnectionAdminEvents.count -gt 0){
+    if ($RemoteConnectionAdminEvents.count -gt 0) {
         foreach ($rcaEvent in $RemoteConnectionAdminEvents) {
 
             [xml]$rcaEntry = $rcaEvent.ToXml()
-            if ($rcaEntry.Event.UserData.EventXML.Param1 -match $IPv6regex) {
+            if ([string]::IsNullOrEmpty($rcaEntry.Event.UserData.EventXML.Param1)) {
+                #discard empty param
+            }
+            elseif ($rcaEntry.Event.UserData.EventXML.Param1 -match $IPv6regex) {
                 #discard IPv6
             }
             elseif ($rcaEntry.Event.UserData.EventXML.Param1 -notmatch $rfc1918regex) {
@@ -146,11 +149,14 @@ else {
     $RemoteConnectionOperationalEvents += @(Get-WinEvent -FilterHashtable $RemoteConnectionOperationalLogFilter -ErrorAction SilentlyContinue)
 
     #Find events that contain public IPs
-    if ($RemoteConnectionOperationalEvents.count -gt 0){
+    if ($RemoteConnectionOperationalEvents.count -gt 0) {
         foreach ($rcoEvent in $RemoteConnectionOperationalEvents) {
 
             [xml]$rcoEntry = $rcoEvent.ToXml()
-            if ($rcoEntry.Event.UserData.EventXML.Param3 -match $IPv6regex) {
+            if ([string]::IsNullOrEmpty($rcoEntry.Event.UserData.EventXML.Param3)) {
+                #discard empty param
+            }
+            elseif ($rcoEntry.Event.UserData.EventXML.Param3 -match $IPv6regex) {
                 #discard IPv6
             }
             elseif ($rcoEntry.Event.UserData.EventXML.Param3 -notmatch $rfc1918regex) {
@@ -165,7 +171,7 @@ else {
         $OutputText = "External RDP events found on $($env:COMPUTERNAME). "
 
         #Get Computer Type
-        switch ((Get-WmiObject Win32_ComputerSystem ).domainRole){
+        switch ((Get-WmiObject Win32_ComputerSystem ).domainRole) {
             0 {
                 $OutputText += "StandaloneWorkstation`n`n"
             }
@@ -173,10 +179,10 @@ else {
                 $OutputText += "DomainWorkstation`n`n"
             }
             2 {
-                if ((Get-WmiObject -class Win32_TerminalServiceSetting -Namespace 'root\cimv2\TerminalServices').terminalServerMode -eq 1) {
+                if ((Get-WmiObject -Class Win32_TerminalServiceSetting -Namespace 'root\cimv2\TerminalServices').terminalServerMode -eq 1) {
                     $OutputText += "RDSH`n`n"
                 }
-                else{
+                else {
                     $OutputText += "StandardServer`n`n"
                 }
             }
@@ -230,6 +236,9 @@ else {
         foreach ($smEvent in $SessionManagerEvents) {
 
             [xml]$smEntry = $smEvent.ToXml()
+            if ([string]::IsNullOrEmpty($smEntry.Event.UserData.EventXML.Address)) {
+                #discard empty param
+            }
             if ($smEntry.Event.UserData.EventXML.Address -match $IPv6regex) {
                 #Discard IPv6
             }
