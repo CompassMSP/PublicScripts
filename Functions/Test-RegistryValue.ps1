@@ -5,6 +5,9 @@ function Test-RegistryValue {
     #Modified version of the function below
     #https://www.jonathanmedd.net/2014/02/testing-for-the-presence-of-a-registry-key-and-value.html
 
+    .EXAMPLE
+    Test-RegistryValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Duo Security\DuoTsg' -Name EnableDuo -ValueData 1
+
     Andy Morales
     #>
 
