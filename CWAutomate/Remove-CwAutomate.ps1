@@ -3,7 +3,6 @@ Function Remove-CWAutomate {
     This function removed CW automate from a computer.
 
     .DESCRIPTION
-
     The Agent_Uninstaller.zip will be downloaded an ran on the computer. Afterwards a manual cleanup of any leftover items will run.
 
     Andy Morales
