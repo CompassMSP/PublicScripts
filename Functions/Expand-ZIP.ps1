@@ -14,7 +14,7 @@ function Expand-ZIP {
     )
     Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-    if (Test-Path -Path $OutPath){
+    if (Test-Path -Path $OutPath) {
         Remove-Item $OutPath -Recurse -Force
     }
 
