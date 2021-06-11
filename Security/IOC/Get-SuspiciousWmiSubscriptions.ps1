@@ -22,7 +22,7 @@ $SuspiciousSubFound = $false
 $SuspiciousSubs = @()
 
 foreach ($sub in $WmiSubs) {
-    if ($sub.CommandLineTemplate -like '*powershell*') {
+    if ($sub.CommandLineTemplate -like '*powershell*' -or $sub.CommandLineTemplate -like '*.exe*') {
         $SuspiciousSubFound = $true
         $SuspiciousSubs += $sub
     }
