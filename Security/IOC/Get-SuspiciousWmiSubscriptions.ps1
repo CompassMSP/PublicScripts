@@ -12,6 +12,18 @@ $ClassNames = @(
     'CommandLineEventConsumer'
 )
 
+$ExeWhiteList = @(
+    '*WSCEAA.exe*'
+)
+
+# Turn wildcards into regex
+# First escape all characters that might cause trouble in regex (leaving out those we care about)
+$escaped = $ExeWhiteList -replace '[ #$()+.[\\^{]', '\$&' # list taken from Regex.Escape
+# replace wildcards with their regex equivalents
+$regexStrings = $escaped -replace '\*', '.*' -replace '\?', '.'
+# combine them into one regex
+$ExeWhiteListRegex = ($regexStrings | ForEach-Object { '^' + $_ + '$' }) -join '|'
+
 $WmiSubs = @()
 
 Foreach ($class in $ClassNames) {
@@ -22,7 +34,8 @@ $SuspiciousSubFound = $false
 $SuspiciousSubs = @()
 
 foreach ($sub in $WmiSubs) {
-    if ($sub.CommandLineTemplate -like '*powershell*' -or $sub.CommandLineTemplate -like '*.exe*') {
+
+    if ($sub.CommandLineTemplate -like '*powershell*' -or ($sub.CommandLineTemplate -like '*.exe*' -and $sub.CommandLineTemplate -notmatch $ExeWhiteListRegex)) {
         $SuspiciousSubFound = $true
         $SuspiciousSubs += $sub
     }
