@@ -10,16 +10,16 @@ Function Get-LocalAdministrators {
     [CmdletBinding()]
     param (
         [Parameter()]
-        [Bool]$IncludeDisabled,
+        [switch]$IncludeDisabled,
 
         [Parameter()]
-        [Bool]$ExcludeBuiltInAdministrator,
+        [switch]$ExcludeBuiltInAdministrator,
 
         [Parameter()]
-        [Bool]$LocalAccountsOnly,
+        [switch]$LocalAccountsOnly,
 
         [Parameter()]
-        [Bool]$DomainAccountsOnly
+        [switch]$DomainAccountsOnly
     )
 
     #Get members of the local administrators group using its SID
