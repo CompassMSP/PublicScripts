@@ -41,8 +41,7 @@ Function Get-LocalAdministrators {
     if ($LocalAccountsOnly) {
         $FilteredAccounts = $FilteredAccounts | Where-Object { $_.LocalAccount -eq $true }
     }
-
-    if ($DomainAccountsOnly) {
+    elseif ($DomainAccountsOnly) {
         $FilteredAccounts = $FilteredAccounts | Where-Object { $_.LocalAccount -eq $false }
     }
 
