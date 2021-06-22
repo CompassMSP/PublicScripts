@@ -18,8 +18,10 @@ $ShareNameExclusions = @(
 
 $AllShares = Get-WmiObject Win32_Share
 
+#Description exclusions
 $FilteredShares = $AllShares | Where-Object { $ShareDescriptionExclusions -notcontains $_.Description }
 
+#Name exclusions
 $FilteredShares = $FilteredShares | Where-Object { $ShareNameExclusions -notcontains $_.Name }
 
 #Remove Printers
