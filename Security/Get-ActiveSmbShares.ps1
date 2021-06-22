@@ -7,7 +7,8 @@ $ShareDescriptionExclusions = @(
     'Remote Admin',
     'Default share',
     'Remote IPC',
-    'Logon server share'
+    'Logon server share',
+    'Printer Drivers'
 )
 
 $ShareNameExclusions = @(
@@ -20,5 +21,8 @@ $AllShares = Get-WmiObject Win32_Share
 $FilteredShares = $AllShares | Where-Object { $ShareDescriptionExclusions -notcontains $_.Description }
 
 $FilteredShares = $FilteredShares | Where-Object { $ShareNameExclusions -notcontains $_.Name }
+
+#Remove Printers
+$FilteredShares = $FilteredShares | Where-Object { $_.Path -notLike '*LocalsplOnly*' }
 
 RETURN ($FilteredShares.Name | Sort-Object ) -join ','
