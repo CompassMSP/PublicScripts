@@ -237,11 +237,11 @@ Write-Log -Path $LogPath -Message "Downloading driver from $($DriverDownloadLink
 
 (New-Object System.Net.WebClient).DownloadFile($DriverDownloadLink , 'C:\Windows\Temp\PrintDriver.zip')
 
-Expand-ZIP -ZipFile 'C:\Windows\Temp\Driver.zip' -OutPath 'C:\Windows\Temp\PrintDriver'
+Expand-ZIP -ZipFile 'C:\Windows\Temp\PrintDriver.zip' -OutPath 'C:\Windows\Temp\PrintDriver'
 
 Write-Log -Path $LogPath -Message "Installing driver from $($DriverInfFolder)"
 
-pnputil.exe /a $DriverInfFolder
+C:\Windows\System32\pnputil.exe /a $DriverInfFolder
 
 Write-Log -Path $LogPath -Message "Adding driver"
 Add-PrinterDriver -Name $DriverName -InfPath $DriverInfPath
