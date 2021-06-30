@@ -73,10 +73,11 @@ Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Lsa' -Name SCENoA
 
 #region increaseLogSize
 $LogsToIncrease = @(
-    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-LocalSessionManager/Admin'
-    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
-    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin'
-    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational'
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-LocalSessionManager/Admin',
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-LocalSessionManager/Operational',
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-RemoteConnectionManager/Admin',
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational',
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-PrintService/Operational'
 )
 
 Foreach ($log in $LogsToIncrease){
@@ -85,11 +86,20 @@ Foreach ($log in $LogsToIncrease){
 
 #max size value is different for Policies
 $PolicyLogsToIncrease = @(
-    'HKLM\SOFTWARE\Policies\Microsoft\Windows\EventLog\Application'
-    'HKLM\SOFTWARE\Policies\Microsoft\Windows\EventLog\Security'
+    'HKLM\SOFTWARE\Policies\Microsoft\Windows\EventLog\Application',
+    'HKLM\SOFTWARE\Policies\Microsoft\Windows\EventLog\Security',
     'HKLM\SOFTWARE\Policies\Microsoft\Windows\EventLog\System'
 )
 Foreach ($pLog in $PolicyLogsToIncrease) {
     reg add $pLog /v MaxSize /t REG_DWORD /d 500032 /f
 }
 #endregion increaseLogSize
+
+#region LogsToEnable
+$LogsToEnable = @(
+    'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels\Microsoft-Windows-PrintService/Operational'
+)
+Foreach ($eLog in $LogsToEnable) {
+    reg add $eLog /v Enabled /t REG_DWORD /d 1 /f
+}
+#endregion LogsToEnable
