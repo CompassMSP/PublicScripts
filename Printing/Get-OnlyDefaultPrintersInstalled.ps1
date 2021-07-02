@@ -31,6 +31,7 @@ $OnlyDefaultPrintersExist = $true
 foreach ($DriverName in ($printers.DriverName)) {
     if (($DriverName -notmatch 'Microsoft XPS Document Writer') -and ($DriverName -notmatch 'Microsoft Print To PDF')) {
         $OnlyDefaultPrintersExist = $false
+        BREAK
     }
 }
 
