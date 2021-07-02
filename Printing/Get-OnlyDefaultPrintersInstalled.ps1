@@ -36,7 +36,7 @@ foreach ($DriverName in ($printers.DriverName)) {
 }
 
 if ($OnlyDefaultPrintersExist) {
-    Write-Output "OnlyDefaultPrinters"
+    Write-Output "OnlyDefaultPrintersFound"
 }
 else {
     Write-Output "NonDefaultPrintersFound"
