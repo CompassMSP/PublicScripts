@@ -1,21 +1,13 @@
 <#
 This script handles most of the Office 365/AD tasks during user termination.
 
-All required modules must be installed in order for the script to execute successfully.
-
 Andy Morales
+
+Added Module Check and Install
+
+Chris Williams
 #>
-if ((Get-PackageProvider NuGet) -eq $null) { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force }
-
-if ((Get-InstalledModule PowershellGet) -eq $null) { Install-Module PowershellGet -Force }
- 
-if ((Get-InstalledModule ExchangeOnlineManagement) -eq $null) { Install-Module ExchangeOnlineManagement -Force}
- 
-if ((Get-InstalledModule AzureAD) -eq $null) { Install-Module AzureAD -Force }
- 
-if ((Get-InstalledModule MSOnline) -eq $null) { Install-Module MSOnline -Force }
-
-#requires -Modules activeDirectory,ExchangeOnlineManagement,AzureAD,ADSync,MSOnline -RunAsAdministrator
+#requires -RunAsAdministrator
 
 [cmdletbinding()]
 param(
@@ -56,6 +48,16 @@ else {
 #endregion pre-check
 
 Write-Output "Logging into 365 services. You might get 3 prompts."
+
+if ((Get-PackageProvider NuGet) -eq $null) { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force }
+
+if ((Get-InstalledModule PowershellGet) -eq $null) { Install-Module PowershellGet -Force }
+ 
+if ((Get-InstalledModule ExchangeOnlineManagement) -eq $null) { Install-Module ExchangeOnlineManagement -Force}
+ 
+if ((Get-InstalledModule AzureAD) -eq $null) { Install-Module AzureAD -Force }
+ 
+if ((Get-InstalledModule MSOnline) -eq $null) { Install-Module MSOnline -Force }
 
 Import-Module ExchangeOnlineManagement, AzureAD, MSOnline
 
