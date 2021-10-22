@@ -5,6 +5,16 @@ All required modules must be installed in order for the script to execute succes
 
 Andy Morales
 #>
+if ((Get-PackageProvider NuGet) -eq $null) { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force }
+
+if ((Get-InstalledModule PowershellGet) -eq $null) { Install-Module PowershellGet -Force }
+ 
+if ((Get-InstalledModule ExchangeOnlineManagement) -eq $null) { Install-Module ExchangeOnlineManagement -Force}
+ 
+if ((Get-InstalledModule AzureAD) -eq $null) { Install-Module AzureAD -Force }
+ 
+if ((Get-InstalledModule MSOnline) -eq $null) { Install-Module MSOnline -Force }
+
 #requires -Modules activeDirectory,ExchangeOnlineManagement,AzureAD,ADSync,MSOnline -RunAsAdministrator
 
 [cmdletbinding()]
@@ -48,6 +58,7 @@ else {
 Write-Output "Logging into 365 services. You might get 3 prompts."
 
 Import-Module ExchangeOnlineManagement, AzureAD, MSOnline
+
 Connect-ExchangeOnline
 Connect-AzureAD
 Connect-MsolService
@@ -125,9 +136,9 @@ Reset-MsolStrongAuthenticationMethodByUpn -UserPrincipalName $UserFromAD.UserPri
 
 #Remove devices
 #Clearing devices should be tested before implementing it
+#Get-ActiveSyncDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-ActiveSyncDevice -Confirm:$false
 #Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Clear-MobileDevice -AccountOnly
 Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-MobileDevice -Confirm:$false
-Get-ActiveSyncDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-ActiveSyncDevice -Confirm:$false
 
 #Disable user
 Set-AzureADUser -ObjectId $UserFromAD.UserPrincipalName -AccountEnabled $false
@@ -138,7 +149,7 @@ Set-AzureADUser -ObjectId $UserFromAD.UserPrincipalName -AccountEnabled $false
 #Revoke all sessions
 Revoke-AzureADUserAllRefreshToken -ObjectId $AZUser.ObjectId
 
-#enregion Office365
+#endregion Office365
 
 #Start AD Sync cycle
 Start-ADSyncSyncCycle -PolicyType Delta
