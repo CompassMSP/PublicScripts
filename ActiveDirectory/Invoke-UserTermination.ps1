@@ -129,7 +129,9 @@ Reset-MsolStrongAuthenticationMethodByUpn -UserPrincipalName $UserFromAD.UserPri
 #Clearing devices should be tested before implementing it
 #Get-ActiveSyncDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-ActiveSyncDevice -Confirm:$false
 #Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Clear-MobileDevice -AccountOnly
-Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-MobileDevice -Confirm:$false
+#Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-MobileDevice -Confirm:$false
+Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false } 
+
 
 #Disable user
 Set-AzureADUser -ObjectId $UserFromAD.UserPrincipalName -AccountEnabled $false
