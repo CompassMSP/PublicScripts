@@ -126,11 +126,9 @@ Reset-MsolStrongAuthenticationMethodByUpn -UserPrincipalName $UserFromAD.UserPri
 #not possible at the moment
 
 #Remove devices
-#Clearing devices should be tested before implementing it
-#Get-ActiveSyncDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-ActiveSyncDevice -Confirm:$false
-#Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Clear-MobileDevice -AccountOnly
-#Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-MobileDevice -Confirm:$false
-Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false } 
+Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-MobileDevice -Confirm:$false
+#Need to test
+#Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -WhatIf} 
 
 
 #Disable user
