@@ -103,6 +103,17 @@ $UserFromAD | Move-ADObject -TargetPath $DestinationOU
 #region Office365
 Write-Output "Performing Office 365 Steps"
 
+#Revoke all sessions
+Revoke-AzureADUserAllRefreshToken -ObjectId $AZUser.ObjectId
+
+#Remove devices
+Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-MobileDevice -Confirm:$false
+#Need to test
+#Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -WhatIf} 
+
+#reset MFA
+Reset-MsolStrongAuthenticationMethodByUpn -UserPrincipalName $UserFromAD.UserPrincipalName
+
 #Change mailbox to shared
 $365Mailbox | Set-Mailbox -Type Shared
 
@@ -119,26 +130,11 @@ Foreach ($365Group in $All365Groups) {
     }
 }
 
-#reset MFA
-Reset-MsolStrongAuthenticationMethodByUpn -UserPrincipalName $UserFromAD.UserPrincipalName
-
-#Clear app passwords
-#not possible at the moment
-
-#Remove devices
-Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-MobileDevice -Confirm:$false
-#Need to test
-#Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -WhatIf} 
-
-
 #Disable user
 Set-AzureADUser -ObjectId $UserFromAD.UserPrincipalName -AccountEnabled $false
 
 #Remove Licenses
 (Get-MsolUser -UserPrincipalName $UserFromAD.UserPrincipalName).licenses.AccountSkuId | ForEach-Object { Set-MsolUserLicense -UserPrincipalName $UserFromAD.UserPrincipalName -RemoveLicenses $_ }
-
-#Revoke all sessions
-Revoke-AzureADUserAllRefreshToken -ObjectId $AZUser.ObjectId
 
 #endregion Office365
 
