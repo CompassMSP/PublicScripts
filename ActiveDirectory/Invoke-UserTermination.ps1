@@ -87,6 +87,7 @@ $SetADUserParams = @{
     Identity    = $UserFromAD.SamAccountName
     Description = "Disabled on $(Get-Date -Format 'FileDate')"
     Enabled     = $False
+    Replace = @{msExchHideFromAddressLists=$true}
 }
 
 Set-ADUser @SetADUserParams
