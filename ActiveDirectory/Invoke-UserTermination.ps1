@@ -108,15 +108,33 @@ Write-Output "Performing Office 365 Steps"
 Revoke-AzureADUserAllRefreshToken -ObjectId $AZUser.ObjectId
 
 #Remove devices
-Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | Remove-MobileDevice -Confirm:$false
-#Need to test
-#Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -WhatIf} 
+Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false } 
 
 #reset MFA
 Reset-MsolStrongAuthenticationMethodByUpn -UserPrincipalName $UserFromAD.UserPrincipalName
 
 #Change mailbox to shared
 $365Mailbox | Set-Mailbox -Type Shared
+
+# Set Mailbox forwarding address 
+$UserFwdConfirmation = Read-Host -Prompt "Would you like to forward users email? (Y/N)"
+
+if ($UserFwdConfirmation -eq 'y') {
+
+    $UserFWD = Read-Host -Prompt "Enter the email address of forward recipient"
+    try { 
+        $GetFWDUser = get-mailbox $UserFWD -ErrorAction Stop 
+    }
+    catch { 
+	Write-Output "User mailbox $UserFWD not found. Skipping mailbox forward"
+	$GetFWDUser = 'no'
+	}
+    
+} Else {
+    Write-Output "Skipping mailbox forwarding"
+}
+
+if ($GetFWDUser -ne 'no') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $UserFWD -DeliverToMailboxAndForward $False }
 
 #Find 365 only groups
 $All365Groups = Get-AzureADUserMembership -ObjectId $UserFromAD.UserPrincipalName | Where-Object { $_.OnPremisesSecurityIdentifier -eq $null -and $_.DisplayName -ne 'All Users'}
