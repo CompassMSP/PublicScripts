@@ -88,6 +88,7 @@ $SetADUserParams = @{
     Description = "Disabled on $(Get-Date -Format 'FileDate')"
     Enabled     = $False
     Replace = @{msExchHideFromAddressLists=$true}
+    Manager = $NULL
 }
 
 Set-ADUser @SetADUserParams
