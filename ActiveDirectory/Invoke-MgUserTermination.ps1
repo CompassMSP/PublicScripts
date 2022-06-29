@@ -60,27 +60,27 @@ else {
 }
 #endregion pre-check
 
-Write-Output "Logging into 365 services. You should get 2 prompts."
+Write-Output "Logging into Azure services. You should get 2 prompts."
 
 Connect-ExchangeOnline
 Select-MgProfile Beta
 Connect-Graph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
 
-Write-Output "Attempting to find $($UserFromAD.UserPrincipalName) in azure/365"
+Write-Output "Attempting to find $($UserFromAD.UserPrincipalName) in Azure"
 
 try {
     $365Mailbox = Get-Mailbox -Identity $UserFromAD.UserPrincipalName -ErrorAction Stop
     $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName -ErrorAction Stop
 }
 catch {
-    Write-Output "Could not find user $($UserFromAD.UserPrincipalName) in Office 365"
+    Write-Output "Could not find user $($UserFromAD.UserPrincipalName) in Azure"
     exit
 }
 
 $Confirmation = Read-Host -Prompt "The user below will be disabled:`n
 Display Name = $($UserFromAD.Name)
 UserPrincipalName = $($UserFromAD.UserPrincipalName)
-Office 365 Mailbox name =  $($365Mailbox.DisplayName)
+Mailbox name =  $($365Mailbox.DisplayName)
 Azure name = $($MgUser.DisplayName)
 Destination OU = $($DestinationOU)`n
 (Y/N)`n"
@@ -114,8 +114,8 @@ Foreach ($group in $UserFromAD.MemberOf) {
 $UserFromAD | Move-ADObject -TargetPath $DestinationOU
 #endregion ActiveDirectory
 
-#region Office365
-Write-Output "Performing Office 365 Steps"
+#region Azure
+Write-Output "Performing Azure Steps"
 
 #Revoke all sessions
 Revoke-MgUserSign -UserId $MgUser.UserPrincipalName
@@ -170,11 +170,9 @@ if ($UserFwdConfirmation -eq 'y') {
 
 if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $UserFWD -DeliverToMailboxAndForward $False }
 
-#Find 365 only groups
+#Find Azure only groups
 
-#$All365Groups = (Get-MgUserMemberOf -UserId $MgUser.UserPrincipalName).Id | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' }
-
-$All365Groups = (Get-MgUserMemberOf -UserId $MgUser.UserPrincipalName).Id  | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole'} | `
+$AllAzureGroups = (Get-MgUserMemberOf -UserId $MgUser.UserPrincipalName).Id  | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole'} | `
         ForEach-Object { @{ GroupId=$_.Id}} | Get-MgGroup | Where-Object {$_.OnPremisesSyncEnabled -eq $NULL} | Select-Object DisplayName, SecurityEnabled, Mail, Id
 
 $Localpath = 'C:\Temp'
@@ -197,14 +195,14 @@ if ($UserGroupsBackupConfirmation -eq 'y') {
         Write-Output "Previous export exists. Please backup and then confirm removal."
         Remove-Item -Path C:\temp\User_Groups_Id.csv -Confirm}
     
-    $All365Groups | Export-Csv c:\temp\User_Groups_Id.csv -NoTypeInformation
+    $AllAzureGroups | Export-Csv c:\temp\User_Groups_Id.csv -NoTypeInformation
     
     Write-Output "Export User Groups Completed. Path: C:\temp\User_Groups_Id.csv"
 
 }
 
 #Remove user from all groups
-Foreach ($365Group in $All365Groups) {
+Foreach ($365Group in $AllAzureGroups) {
     try {
         Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $mgUser.Id -ErrorAction Stop
         #Invoke-GraphRequest -Method 'Delete' -Uri "https://graph.microsoft.com/v1.0/groups/$($365Group)/members/$($mgUser.Id)/`$ref"
