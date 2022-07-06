@@ -211,9 +211,6 @@ Foreach ($365Group in $AllAzureGroups) {
     }
 }
 
-#Get user licenses 
-$AllLicenses = Get-MgUserLicenseDetail -UserId $MgUser.Id
-
 $UserLicensesBackupConfirmation = $(Write-Host "Would you like to backup user licenses? (Y/N)" -ForegroundColor Yellow -BackgroundColor black -NoNewline; Read-Host)
 
 if ($UserLicensesBackupConfirmation -eq 'y') {
@@ -232,7 +229,8 @@ if ($UserLicensesBackupConfirmation -eq 'y') {
         Write-Host "Previous export exists. Please backup and then confirm removal." -ForegroundColor Red -BackgroundColor Black
         Remove-Item -Path C:\temp\User_License_Id.csv -Confirm}
     
-    $AllLicenses | Export-Csv c:\temp\User_License_Id.csv -NoTypeInformation
+    #Export user licenses 
+    Get-MgUserLicenseDetail -UserId $MgUser.Id | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\User_License_Id.csv -NoTypeInformation
     
     Write-Host "Export User Licenses Completed. Path: C:\temp\User_License_Id.csv" -ForegroundColor Cyan -BackgroundColor Black
 
