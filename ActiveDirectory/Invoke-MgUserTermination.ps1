@@ -28,6 +28,13 @@ param(
     [string]$user
 )
 
+$Localpath = 'C:\Temp'
+
+if((Test-Path $Localpath) -eq $false) {
+    Write-Host "Creating temp directory for user group export" -ForegroundColor Cyan -BackgroundColor Black
+    New-Item -Path $Localpath -ItemType Directory
+}
+
 #region pre-check
 Write-Host "Attempting to find $($user) in Active Directory" -ForegroundColor Cyan -BackgroundColor Black
 
@@ -119,7 +126,6 @@ Write-Host "Performing Azure Steps" -ForegroundColor Cyan -BackgroundColor Black
 
 #Revoke all sessions
 Revoke-MgUserSign -UserId $MgUser.UserPrincipalName
-#Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.Id)/microsoft.graph.revokeSignInSessions" -Method POST -Body @{}
 
 Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue } 
 
@@ -175,29 +181,13 @@ if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -For
 $AllAzureGroups = Get-MgUserMemberOf -UserId $MgUser.UserPrincipalName  | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole'} | `
         ForEach-Object { @{ GroupId=$_.Id}} | Get-MgGroup | Where-Object {$_.OnPremisesSyncEnabled -eq $NULL} | Select-Object DisplayName, SecurityEnabled, Mail, Id
 
-$Localpath = 'C:\Temp'
-
 $UserGroupsBackupConfirmation = $(Write-Host "Would you like to backup user groups? (Y/N)" -ForegroundColor Yellow -BackgroundColor black -NoNewline; Read-Host)
 
 if ($UserGroupsBackupConfirmation -eq 'y') {
 
-    if((Test-Path $Localpath) -eq $false) {
-        Write-Host `
-            -ForegroundColor Cyan `
-            -BackgroundColor Black `
-            "Creating temp directory for user group export"
-        New-Item -Path $Localpath -ItemType Directory
-    }
+    $AllAzureGroups | Export-Csv c:\temp\$($user)_Groups_Id.csv -NoTypeInformation
     
-    Write-Host "Checking to see if User Group export exists" -ForegroundColor Cyan -BackgroundColor Black
-    
-    if ( Get-ChildItem -Path c:\temp | Where-Object {$_.Name -like 'User_Groups_Id.csv'} ) { 
-        Write-Host "Previous export exists. Please backup and then confirm removal." -ForegroundColor Red -BackgroundColor Black
-        Remove-Item -Path C:\temp\User_Groups_Id.csv -Confirm}
-    
-    $AllAzureGroups | Export-Csv c:\temp\User_Groups_Id.csv -NoTypeInformation
-    
-    Write-Host "Export User Groups Completed. Path: C:\temp\User_Groups_Id.csv" -ForegroundColor Cyan -BackgroundColor Black
+    Write-Host "Export User Groups Completed. Path: C:\temp\$($user)_Groups_Id.csv" -ForegroundColor Cyan -BackgroundColor Black
 
 }
 
@@ -205,7 +195,6 @@ if ($UserGroupsBackupConfirmation -eq 'y') {
 Foreach ($365Group in $AllAzureGroups) {
     try {
         Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $mgUser.Id -ErrorAction Stop
-        #Invoke-GraphRequest -Method 'Delete' -Uri "https://graph.microsoft.com/v1.0/groups/$($365Group)/members/$($mgUser.Id)/`$ref"
     } catch {
         Remove-DistributionGroupMember -Identity $365Group.Mail -Member $MgUser.UserPrincipalName -BypassSecurityGroupManagerCheck -Confirm:$false
     }
@@ -214,25 +203,11 @@ Foreach ($365Group in $AllAzureGroups) {
 $UserLicensesBackupConfirmation = $(Write-Host "Would you like to backup user licenses? (Y/N)" -ForegroundColor Yellow -BackgroundColor black -NoNewline; Read-Host)
 
 if ($UserLicensesBackupConfirmation -eq 'y') {
-
-    if((Test-Path $Localpath) -eq $false) {
-        Write-Host `
-            -ForegroundColor Cyan `
-            -BackgroundColor Black `
-            "Creating temp directory for user group export"
-        New-Item -Path $Localpath -ItemType Directory
-    }
-    
-    Write-Host "Checking to see if User license export exists" -ForegroundColor Cyan -BackgroundColor Black
-    
-    if ( Get-ChildItem -Path c:\temp | Where-Object {$_.Name -like 'User_License_Id.csv'} ) { 
-        Write-Host "Previous export exists. Please backup and then confirm removal." -ForegroundColor Red -BackgroundColor Black
-        Remove-Item -Path C:\temp\User_License_Id.csv -Confirm}
-    
+  
     #Export user licenses 
-    Get-MgUserLicenseDetail -UserId $MgUser.Id | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\User_License_Id.csv -NoTypeInformation
+    Get-MgUserLicenseDetail -UserId $MgUser.Id | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\$($user)_License_Id.csv -NoTypeInformation
     
-    Write-Host "Export User Licenses Completed. Path: C:\temp\User_License_Id.csv" -ForegroundColor Cyan -BackgroundColor Black
+    Write-Host "Export User Licenses Completed. Path: C:\temp\$($user)_License_Id.csv" -ForegroundColor Cyan -BackgroundColor Black
 
 }
 
