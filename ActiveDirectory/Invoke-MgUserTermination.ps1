@@ -29,7 +29,7 @@ param(
 )
 
 #region pre-check
-Write-Output "Attempting to find $($user) in Active Directory"
+Write-Host "Attempting to find $($user) in Active Directory" -ForegroundColor Cyan -BackgroundColor Black
 
 try {
     $UserFromAD = Get-ADUser -Identity $User -Properties MemberOf -ErrorAction Stop
@@ -39,7 +39,7 @@ catch {
     exit
 }
 
-Write-Output "Attempting to find Disabled users OU"
+Write-Host "Attempting to find Disabled users OU" -ForegroundColor Red -BackgroundColor Black
 
 $DisabledOUs = @(Get-ADOrganizationalUnit -Filter 'Name -like "*disabled*"')
 
@@ -131,7 +131,7 @@ $UserAccessConfirmation = $(Write-Host "Would you like to add FullAccess permiss
 
 if ($UserAccessConfirmation -eq 'y') {
 
-    $UserAccess = $(Write-Output "Enter the email address of FullAccess recipient" -ForegroundColor Yellow -BackgroundColor black -NoNewline; Read-Host)
+    $UserAccess = $(Write-Host "Enter the email address of FullAccess recipient" -ForegroundColor Yellow -BackgroundColor black -NoNewline; Read-Host)
     try { 
         $GetAccessUser = get-mailbox $UserAccess -ErrorAction Stop
         $GetAccessUserCheck = 'yes'
@@ -141,7 +141,7 @@ if ($UserAccessConfirmation -eq 'y') {
 	$GetAccessUserCheck = 'no'
 	}   
 } Else {
-    Write-Output "Skipping access rights setup"
+    Write-Host "Skipping access rights setup"
 }
 
 if ($GetAccessUserCheck -eq 'yes') { 
