@@ -181,15 +181,9 @@ if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -For
 $AllAzureGroups = Get-MgUserMemberOf -UserId $MgUser.UserPrincipalName  | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole'} | `
         ForEach-Object { @{ GroupId=$_.Id}} | Get-MgGroup | Where-Object {$_.OnPremisesSyncEnabled -eq $NULL} | Select-Object DisplayName, SecurityEnabled, Mail, Id
 
-$UserGroupsBackupConfirmation = Read-Host -Prompt "Would you like to backup user groups? (Y/N)"
-
-if ($UserGroupsBackupConfirmation -eq 'y') {
-
-    $AllAzureGroups | Export-Csv c:\temp\$($user)_Groups_Id.csv -NoTypeInformation
+$AllAzureGroups | Export-Csv c:\temp\$($user)_Groups_Id.csv -NoTypeInformation
     
-    Write-Host "Export User Groups Completed. Path: C:\temp\$($user)_Groups_Id.csv" 
-
-}
+Write-Host "Export User Groups Completed. Path: C:\temp\$($user)_Groups_Id.csv" 
 
 #Remove user from all groups
 Foreach ($365Group in $AllAzureGroups) {
@@ -200,16 +194,10 @@ Foreach ($365Group in $AllAzureGroups) {
     }
 }
 
-$UserLicensesBackupConfirmation = Read-Host -Prompt "Would you like to backup user licenses? (Y/N)"
-
-if ($UserLicensesBackupConfirmation -eq 'y') {
-  
-    #Export user licenses 
-    Get-MgUserLicenseDetail -UserId $MgUser.Id | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\$($user)_License_Id.csv -NoTypeInformation
+#Export user licenses 
+Get-MgUserLicenseDetail -UserId $MgUser.Id | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\$($user)_License_Id.csv -NoTypeInformation
     
-    Write-Host "Export User Licenses Completed. Path: C:\temp\$($user)_License_Id.csv" 
-
-}
+Write-Host "Export User Licenses Completed. Path: C:\temp\$($user)_License_Id.csv" 
 
 #Remove Licenses
 Write-Host "Starting removal of user licenses." 
