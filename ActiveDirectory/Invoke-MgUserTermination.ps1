@@ -190,7 +190,7 @@ Foreach ($365Group in $AllAzureGroups) {
     try {
         Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $mgUser.Id -ErrorAction Stop
     } catch {
-        Remove-DistributionGroupMember -Identity $365Group.Id -Member $MgUser.UserPrincipalName -BypassSecurityGroupManagerCheck -Confirm:$false
+        Remove-DistributionGroupMember -Identity $365Group.Id -Member $MgUser.UserPrincipalName -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction SilentlyContinue
     }
 }
 
