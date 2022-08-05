@@ -215,4 +215,7 @@ Write-Host "Removal of user licenses completed."
 #Start AD Sync cycle
 Start-ADSyncSyncCycle -PolicyType Delta
 
+Disconnect-ExchangeOnline -Confirm:$false
+Disconnect-Graph
+
 Write-Host "User $($user) should now be disabled unless any errors occurred during the process." 
