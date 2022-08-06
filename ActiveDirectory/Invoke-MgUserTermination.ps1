@@ -222,9 +222,11 @@ Write-Host "Removal of user licenses completed."
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
 
-Write-Host "User $($user) should now be disabled unless any errors occurred during the process. Starting AD Sync" 
-
-#Start AD Sync cycle
+#Start AD Sync
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+
+Write-Host "User $($user) should now be disabled unless any errors occurred during the process." 
+
+
 
 
