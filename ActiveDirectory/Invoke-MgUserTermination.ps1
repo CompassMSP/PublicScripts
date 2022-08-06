@@ -63,6 +63,8 @@ if ($DisabledOUs.count -gt 0) {
 }
 else {
     Write-Host "Could not find disabled OU in Active Directory" -ForegroundColor Red -BackgroundColor Black
+    Disconnect-ExchangeOnline -Confirm:$false
+    Disconnect-Graph
     exit
 }
 #endregion pre-check
@@ -81,6 +83,8 @@ try {
 }
 catch {
     Write-Host "Could not find user $($UserFromAD.UserPrincipalName) in Azure" -ForegroundColor Red -BackgroundColor Black
+    Disconnect-ExchangeOnline -Confirm:$false
+    Disconnect-Graph
     exit
 }
 
@@ -94,6 +98,8 @@ Destination OU = $($DestinationOU)`n
 
 if ($Confirmation -ne 'y') {
     Write-Host 'User did not enter "Y"' -ForegroundColor Red -BackgroundColor Black
+    Disconnect-ExchangeOnline -Confirm:$false
+    Disconnect-Graph
     exit
 }
 
@@ -125,7 +131,7 @@ $UserFromAD | Move-ADObject -TargetPath $DestinationOU
 Write-Host "Performing Azure Steps" 
 
 #Revoke all sessions
-Revoke-MgUserSign -UserId $MgUser.UserPrincipalName
+Revoke-MgUserSign -UserId $MgUser.UserPrincipalName -ErrorAction SilentlyContinue
 
 Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue } 
 
@@ -212,10 +218,13 @@ Write-Host "Removal of user licenses completed."
 
 #endregion Office365
 
-#Start AD Sync cycle
-Start-ADSyncSyncCycle -PolicyType Delta
-
+#Disconnect from Exchange and Graph
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
 
-Write-Host "User $($user) should now be disabled unless any errors occurred during the process." 
+Write-Host "User $($user) should now be disabled unless any errors occurred during the process. Starting AD Sync" 
+
+#Start AD Sync cycle
+powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+
+
