@@ -226,7 +226,3 @@ Disconnect-Graph
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
 
 Write-Host "User $($user) should now be disabled unless any errors occurred during the process." 
-
-
-
-
