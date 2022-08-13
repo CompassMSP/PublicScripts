@@ -63,8 +63,6 @@ if ($DisabledOUs.count -gt 0) {
 }
 else {
     Write-Host "Could not find disabled OU in Active Directory" -ForegroundColor Red -BackgroundColor Black
-    Disconnect-ExchangeOnline -Confirm:$false
-    Disconnect-Graph
     exit
 }
 #endregion pre-check
