@@ -147,8 +147,6 @@ $LatestVersionZip = $($LatestVersionUrl -replace '[a-zA-Z]+://[a-zA-Z]+\.[a-zA-Z
 $LatestVersionLog = $($LatestVersionZip -replace 'pwned-passwords-ntlm-ordered-by-hash-') 
 $LatestVersionLog = $($LatestVersionLog -replace '.7z')
 
-$PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection\'
-
 #Checks for older database version
 $OldVersionLog = Get-ChildItem -Path $PassProtectionPath | Where-Object {$_.Name -like 'v*'}
 
@@ -159,11 +157,11 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
     #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
-    Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination "C:\temp\$($StoreFilesInDBFormatFile)"
-    
+    Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination "$StoreFilesInDBFormatFile"
+
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
     try {
-        Expand-ZIP -ZipFile $StoreFilesInDBFormatFile -OutPath 'C:\Program Files\Lithnet\Active Directory Password Protection'
+        Expand-ZIP -ZipFile $StoreFilesInDBFormatFile -OutPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -ErrorAction Stop
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
 
