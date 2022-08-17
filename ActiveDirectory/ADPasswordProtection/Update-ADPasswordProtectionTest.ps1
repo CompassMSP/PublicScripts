@@ -174,7 +174,7 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
     
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
-    #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+    Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
     try {
