@@ -116,7 +116,7 @@ if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
 }
 
 #Check if DC has enough free space
-if ((Get-PSDrive C).free -lt 45GB) {
+if ((Get-PSDrive C).free -lt 20GB) {
     Write-Log -Level Error -Path $LogDirectory -Message 'DC has less than 20 GB free. Script will exit'
     Start-Process $LogDirectory
     exit 
