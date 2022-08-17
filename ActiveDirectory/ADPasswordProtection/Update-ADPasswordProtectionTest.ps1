@@ -166,10 +166,10 @@ $LatestVersionZip = $($LatestVersionUrl -replace '[a-zA-Z]+://[a-zA-Z]+\.[a-zA-Z
 $LatestVersionLog = $($LatestVersionZip -replace 'pwned-passwords-ntlm-ordered-by-hash-') 
 $LatestVersionLog = $($LatestVersionLog -replace '.7z')
 
-if ($compassLatestVersion -eq $LatestVersionLog ) {
+if ($compassLatestVersion -ne $LatestVersionLog ) {
     Write-Log -Level Warn -Path $LogDirectory -Message 'The Compass database is out of date. Please open a ticket with internal support. Script will now exit.'
     Start-Process $LogDirectory
-    #exit
+    exit
 }
 #Checks for older database version
 $OldVersionLog = Get-ChildItem -Path $PassProtectionPath | Where-Object {$_.Name -like 'v*'}
