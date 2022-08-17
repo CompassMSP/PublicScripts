@@ -3,8 +3,7 @@
 This script updates the Lithnet AD Password Protection database with latest HIBP password list. Must be run on each DC.
 
 .EXAMPLE
-Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1' | Invoke-Expression
-
+Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail 'cwilliams@compassmsp.com' -SMTPRelay 'compassmsp-com.mail.protection.outlook.com' -FromEmail 'cwilliams@compassmsp.com'
 .LINK
 https://haveibeenpwned.com/Passwords
 https://github.com/lithnet/ad-password-protection
@@ -33,23 +32,6 @@ $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
 $PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection\'
 
 $Errors = @()
-
-
-<#
-.DESCRIPTION
-This script updates the Lithnet AD Password Protection database with latest HIBP password list. Must be run on each DC.
-
-.EXAMPLE
-Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1' | Invoke-Expression
-
-.LINK
-https://haveibeenpwned.com/Passwords
-https://github.com/lithnet/ad-password-protection
-https://github.com/CompassMSP/PublicScripts/blob/master/ActiveDirectory/Install-ADPasswordProtection.ps1
-
-Chris Williams
-#>
-#Requires -RunAsAdministrator
 
 function Write-Log {
     [CmdletBinding()]
@@ -172,10 +154,13 @@ $OldVersionLog = Get-ChildItem -Path $PassProtectionPath | Where-Object {$_.Name
 
 #Checks if latest version is installed 
 if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLog) {
+    Write-Log -Level Info -Path $LogDirectory -Message 'DC is missing latest HIBP hashes.'
+    
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
-    (New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
-    #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination "C:\temp\$($StoreFilesInDBFormatFile)"
+    #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
+    Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination "C:\temp\$($StoreFilesInDBFormatFile)"
+    
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
     try {
         Expand-ZIP -ZipFile $StoreFilesInDBFormatFile -OutPath 'C:\Program Files\Lithnet\Active Directory Password Protection'
@@ -202,4 +187,7 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
         $Errors += "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
     }
     Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
+} else {
+    Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
+    exit
 }
