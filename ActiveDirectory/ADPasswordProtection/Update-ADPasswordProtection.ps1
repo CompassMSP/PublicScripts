@@ -90,6 +90,8 @@ function Write-Log {
     }
 }
 
+$LogDirectory = 'C:\Windows\Temp\UpdatePasswordProtection.log'
+
 #Check if computer is a DC
 if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
     Write-Log -Level Error -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
@@ -127,13 +129,12 @@ $LatestVersionLog = $($LatestVersionZip -replace 'pwned-passwords-ntlm-ordered-b
 $LatestVersionLog = $($LatestVersionLog -replace '.7z')
 
 $PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection\'
-$PassProtectionPath = 'C:\Temp'
 
 #Checks for older database version
 $OldVersionLog = Get-ChildItem -Path $PassProtectionPath | Where-Object {$_.Name -like 'v*'}
 
-#Check for successful download
-if (Get-ChildItem -Path $PassProtectionPath | Where-Object {$_.Name -eq "$LatestVersionLog"} -ne $NULL) {
+#Checks if latest version is installed 
+if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLog) {
     $HIBPDBUpdate = $true
     Write-Log -Level Info -Path $LogDirectory -Message "HIBP Database needs updating. Will now download the latest DB."
 } else { 
@@ -160,7 +161,7 @@ if ($HIBPDBUpdate -eq $true) {
     Remove-Item C:\Temp\$LatestVersionZip -Force -ErrorAction SilentlyContinue
 }
 
-if (Get-ChildItem -Path C:\Temp | Where-Object {$_.Name -eq "$LatestVersionTXT"} -ne $NULL) {
+if ((Get-ChildItem -Path C:\Temp).Name -contains $LatestVersionTXT) {
     Write-Log -Level Info -Path $LogDirectory -Message 'Loading LithnetPasswordProtection module and Store'
     try {
         Import-Module LithnetPasswordProtection
