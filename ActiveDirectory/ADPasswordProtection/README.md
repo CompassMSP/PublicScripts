@@ -18,22 +18,34 @@ Once the script runs the server will need to be rebooted (the script will not re
 
 # Running the script
 
-Run the command below as admin on a PowerShell terminal. This will perform the actual install. Make sure to replace the parameters with the correct URL and emails.
+Run the command below as admin on a PowerShell terminal. This will perform the actual install. 
 
 The script will run a password audit on the primary domain controller once it installs successfully.
 
 Please make sure to run this on all domain controllers.
+
+Make sure to replace the parameters with the correct URL and emails.
+
+-NotificationEmail 'cwilliams@compassmsp.com' 
+-SMTPRelay 'compassmsp-com.mail.protection.outlook.com' 
+-FromEmail 'cwilliams@compassmsp.com
 
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
 ````
 
 # Updates
-To update the HIBP hash database you will run the following command. This will grab the update NTLM hashes file from HBIP and update database on the DC. 
+To update the HIBP hash database you will run the following command. This will grab the update NTLM hashes file from HBIP and update database on the DC.
 
 The script will run a password audit on the primary domain controller once it installs successfully.
 
 Please make sure to run this on all domain controllers.
+
+Make sure to replace the parameters with the correct URL and emails.
+
+-NotificationEmail 'cwilliams@compassmsp.com' 
+-SMTPRelay 'compassmsp-com.mail.protection.outlook.com' 
+-FromEmail 'cwilliams@compassmsp.com
 
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
