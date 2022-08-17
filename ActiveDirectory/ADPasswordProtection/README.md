@@ -1,7 +1,7 @@
 # Requirements
 
 - The application must be installed on every DC at a site
-- DCs must have at least 20GB free during setup, and 8GB free once the setup is complete. This space is required for the HIBP database
+- DCs must have at least 45GB free during setup, and 15GB free once the setup is complete. This space is required for the HIBP database
 - DCs must be 2016+ (or have WMF 5.1 installed if 2012 R2) for the automated script to run
   - Older versions will require a manual install
 
