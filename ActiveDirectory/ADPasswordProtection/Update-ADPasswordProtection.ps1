@@ -152,11 +152,13 @@ if ($compassLatestVersion -ne $LatestVersionLog ) {
     Start-Process $LogDirectory
     exit
 }
+
 #Checks for older database version
-$OldVersionLog = Get-ChildItem -Path $PassProtectionPath | Where-Object {$_.Name -like 'v*'}
+Write-Log -Level Info -Path $LogDirectory -Message 'Checking HIBP hashes DB against servers version.'
+$CurrentVersionLog = Get-ChildItem -Path $($PassProtectionPath + '\Version\') 
 
 #Checks if latest version is installed 
-if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLog) {
+if (($CurrentVersionLog).Name -notcontains $LatestVersionLog) {
     Write-Log -Level Info -Path $LogDirectory -Message 'DC is missing latest HIBP hashes.'
     
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
@@ -169,27 +171,29 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
 
-        New-Item $($PassProtectionPath + '\' + $LatestVersionLog) -Type File
+        New-Item $($PassProtectionPath + '\Version\' + $LatestVersionLog) -Type File
 
         $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
 
         $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
 
         if ($PDC -eq $LocalDC) {
+            Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
             Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
         }
 
-        if ($OldVersionLog -ne $NULL) {
+        if ($CurrentVersionLog -ne $NULL) {
             Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
-            Remove-Item $OldVersionLog
+            Remove-Item  -Path $($PassProtectionPath + '\Version\' + $CurrentVersionLog.Name) -Force
         }
     }
     catch {
         Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
     }
-    #Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
+    Write-Log -Level Info -Path $LogDirectory -Message "Removing $StoreFilesInDBFormatFile"
+    Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
 } else {
     Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
     Start-Process $LogDirectory
-    exit
+    #exit
 }
