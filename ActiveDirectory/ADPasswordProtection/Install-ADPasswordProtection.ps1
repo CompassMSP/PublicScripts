@@ -293,7 +293,7 @@ Function Install-ADPasswordProtection {
     if ((Get-PSDrive C).free -gt 45GB) {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-        #Download HIBP Hashes
+        #region DownloadHIBPHashes
         if (-not $HIBPDBFilesExist) {
             Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes'
             New-Item -Path 'C:\Temp' -ItemType Directory -Force
@@ -313,9 +313,9 @@ Function Install-ADPasswordProtection {
 
             Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
         }
+        #endregion DownloadHIBHashes
 
-
-        #Download and install MSI
+        #region DownloadInstallMSI
         if (-not $ADPasswordProtectionAlreadyInstalled) {
             (New-Object System.Net.WebClient).DownloadFile('https://github.com/lithnet/ad-password-protection/releases/latest/download/Lithnet.ActiveDirectory.PasswordProtection.msi', "$PasswordProtectionMSIFile")
 
@@ -324,6 +324,7 @@ Function Install-ADPasswordProtection {
 
             Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
         }
+        #endregion DownloadInstallMSI
 
         #region ImportGPO
         if (-not $GPOExistsWithCorrectSettings) {
@@ -400,10 +401,20 @@ Function Install-ADPasswordProtection {
             }
         }
         #endregion ImportGPO
+
+        #region RunInvoke-ADPasswordAudit
+        $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
+
+        $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
+
+        if ($PDC -eq $LocalDC) {
+            Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
+        }
+        #endregion RunInvoke-ADPasswordAudit
     }
     else {
-        Write-Log -Level Error -Path $LogDirectory -Message 'Not enough free space on the C drive. At least 20GB required.'
-        $Errors += 'Not enough free space on the C drive. At least 20GB required.'
+        Write-Log -Level Error -Path $LogDirectory -Message 'Not enough free space on the C drive. At least 45GB required.'
+        $Errors += 'Not enough free space on the C drive. At least 45GB required.'
     }
 
     if ($Errors.count -gt 0) {
