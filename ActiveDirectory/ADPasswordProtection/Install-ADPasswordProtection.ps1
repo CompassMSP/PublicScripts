@@ -53,10 +53,12 @@ Function Install-ADPasswordProtection {
         [string]$FromEmail
     )
 
+    $compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt).Content 
     $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
     $PasswordProtectionMSIFile = 'C:\Windows\Temp\Lithnet.ActiveDirectory.PasswordProtection.msi'
     $GPOPath = 'C:\Windows\Temp\PasswordProtection.zip'
     $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
+    $PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection'
 
     $Errors = @()
 
@@ -296,12 +298,13 @@ if ($FreeSpace -eq 'yes') {
 
             try {
                 Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose
+                New-Item $($PassProtectionPath + '\Version') -Type Directory
+                New-Item $($PassProtectionPath + '\Version\' + $compassLatestVersion) -Type File
             }
             catch {
                 Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
                 $Errors += "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
             }
-
             Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
         }
         #endregion DownloadHIBHashes
