@@ -29,7 +29,11 @@ Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubu
 ````
 
 # Updates
-To update the HIBP hash database you will run the following command. This will grab the update NTLM hashes file from HBIP and update database on the DC. Once this completes it will run an audit. 
+To update the HIBP hash database you will run the following command. This will grab the update NTLM hashes file from HBIP and update database on the DC. 
+
+The script will run a password audit on the primary domain controller once it installs successfully.
+
+Please make sure to run this on all domain controllers.
 
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
