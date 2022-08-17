@@ -147,7 +147,8 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
 if ($HIBPDBUpdate -eq $true) {
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
-    (New-Object System.Net.WebClient).DownloadFile("$LatestVersionUrl","C:\temp\$LatestVersionZip")
+    #(New-Object System.Net.WebClient).DownloadFile("$LatestVersionUrl","C:\temp\$LatestVersionZip")
+    Start-BitsTransfer -Source $LatestVersionUrl -Destination "C:\temp\$($LatestVersionZip)"
 
     #Extract HIBP Hashes
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
