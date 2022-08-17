@@ -125,6 +125,24 @@ function Write-Log {
     }
 }
 
+function Expand-ZIP {
+    [CmdletBinding()]
+    param (
+        [parameter(Mandatory = $true)]
+        [String]$ZipFile,
+
+        [parameter(Mandatory = $true)]
+        [String]$OutPath
+    )
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    if (Test-Path -Path $OutPath) {
+        Remove-Item $OutPath -Recurse -Force
+    }
+
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $OutPath)
+}
+
 #Check if computer is a DC
 if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
     Write-Log -Level Error -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
@@ -156,7 +174,7 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
     
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
-    Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+    #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
     try {
