@@ -31,8 +31,6 @@ $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
 $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
 $PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection'
 
-$Errors = @()
-
 function Write-Log {
     [CmdletBinding()]
     Param
@@ -205,7 +203,6 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
     }
     catch {
         Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
-        $Errors += "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
     }
     Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
 } else {
