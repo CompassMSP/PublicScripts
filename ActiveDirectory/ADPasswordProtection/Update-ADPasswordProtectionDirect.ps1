@@ -3,7 +3,8 @@
 This script updates the Lithnet AD Password Protection database with latest HIBP password list. Must be run on each DC.
 
 .EXAMPLE
-Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail 'cwilliams@compassmsp.com' -SMTPRelay 'compassmsp-com.mail.protection.outlook.com' -FromEmail 'cwilliams@compassmsp.com'
+Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1' | Invoke-Expression
+
 .LINK
 https://haveibeenpwned.com/Passwords
 https://github.com/lithnet/ad-password-protection
@@ -11,25 +12,7 @@ https://github.com/CompassMSP/PublicScripts/blob/master/ActiveDirectory/Install-
 
 Chris Williams
 #>
-#Requires -Version 5 -RunAsAdministrator
-
-[CmdletBinding()]
-param (
-    [Parameter(Mandatory = $true,
-        HelpMessage = 'example.mail.protection.outlook.com')]
-    [string]$SMTPRelay,
-
-    [Parameter(Mandatory = $true)]
-    [string]$NotificationEmail,
-
-    [Parameter(Mandatory = $true)]
-    [string]$FromEmail
-)
-
-$StoreFilesInDBFormatLink = 'https://rmm.compassmsp.com/softwarepackages/ADPasswordProtectionStore.zip'
-$StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
-$LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
-$PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection'
+#Requires -RunAsAdministrator
 
 function Write-Log {
     [CmdletBinding()]
@@ -123,49 +106,90 @@ function Write-Log {
     }
 }
 
+$LogDirectory = 'C:\Windows\Temp\UpdatePasswordProtection.log'
+
 #Check if computer is a DC
 if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
-    Write-Log -Level Warn -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
+    Write-Log -Level Error -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
     Start-Process $LogDirectory
     exit
 }
 
 #Check if DC has enough free space
 if ((Get-PSDrive C).free -lt 20GB) {
-    Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 20 GB free. Script will exit'
+    Write-Log -Level Error -Path $LogDirectory -Message 'DC has less than 20 GB free. Script will exit'
     Start-Process $LogDirectory
     exit 
 }
 
+#Sets TLS 1.2 in POSH
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+#Checks if 7Zip POSH Module is installed
+$7Zip4PoshInstalled = Get-InstalledModule 7Zip4PowerShell
+
+#Install 7Zip POSH Module
+if ($7Zip4PoshInstalled -eq $NULL) {
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
+    Set-PSRepository -Name 'PSGallery' -SourceLocation "https://www.powershellgallery.com/api/v2" -InstallationPolicy Trusted
+    Install-Module -Name 7Zip4PowerShell -Force
+} else { 
+    Write-Log -Level Info -Path $LogDirectory -Message '7Zip4Powershell Modules is already install.'
+}
+
 #Downloads latest version of the HIBP Database
 $LatestVersionUrl = (Invoke-WebRequest https://haveibeenpwned.com/Passwords -MaximumRedirection 0).Links | Where-Object {$_.href -like "*pwned-passwords-ntlm-ordered-by-hash-v*.7z"} | Select-Object -expand href
-$compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt).Content 
 
 #Variables built out for script 
 $LatestVersionZip = $($LatestVersionUrl -replace '[a-zA-Z]+://[a-zA-Z]+\.[a-zA-Z]+\.[a-zA-Z]+/[a-zA-Z]+/')
+$LatestVersionTXT = $($LatestVersionZip -replace '.7z') + '.txt'
 $LatestVersionLog = $($LatestVersionZip -replace 'pwned-passwords-ntlm-ordered-by-hash-') 
 $LatestVersionLog = $($LatestVersionLog -replace '.7z')
 
-#Compares HIBP version with the Compass hosted version
-if ($compassLatestVersion -ne $LatestVersionLog ) {
-    Write-Log -Level Warn -Path $LogDirectory -Message 'The Compass database is out of date. Please open a ticket with internal support. Script will now exit.'
-    Start-Process $LogDirectory
-    exit
-}
+$PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection\'
+
 #Checks for older database version
 $OldVersionLog = Get-ChildItem -Path $PassProtectionPath | Where-Object {$_.Name -like 'v*'}
 
 #Checks if latest version is installed 
 if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLog) {
-    Write-Log -Level Info -Path $LogDirectory -Message 'DC is missing latest HIBP hashes.'
-    
+    $HIBPDBUpdate = $true
+    Write-Log -Level Info -Path $LogDirectory -Message "HIBP Database needs updating. Will now download the latest DB."
+} else { 
+    Write-Log -Level Error -Path $LogDirectory -Message "HIBP Database is on latest version. Script will now exit."
+    Start-Process $LogDirectory
+    exit
+}
+
+if ($HIBPDBUpdate -eq $true) {
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
-    Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+    Start-BitsTransfer -Source $LatestVersionUrl -Destination "C:\temp\$($LatestVersionZip)"
 
+    #Extract HIBP Hashes
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
+
     try {
-        Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
+        Expand-7Zip -ArchiveFileName C:\Temp\$LatestVersionZip -TargetPath 'C:\Temp\'
+    }
+    catch {
+        Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $LatestVersionZip"
+        Start-Process $LogDirectory
+        exit
+    }
+
+    Remove-Item C:\Temp\$LatestVersionZip -Force -ErrorAction SilentlyContinue
+}
+
+if ((Get-ChildItem -Path C:\Temp).Name -contains $LatestVersionTXT) {
+    Write-Log -Level Info -Path $LogDirectory -Message 'Loading LithnetPasswordProtection module and Store'
+    try {
+        Import-Module LithnetPasswordProtection
+        Open-Store 'C:\Program Files\Lithnet\Active Directory Password Protection\Store'
+
+        Write-Log -Level Info -Path $LogDirectory -Message 'Import compromised password hashes'
+
+        Import-CompromisedPasswordHashes -Filename C:\Temp\$($LatestVersionTXT)
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
 
@@ -185,11 +209,6 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
         }
     }
     catch {
-        Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
+        Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue importing $LatestVersionZip"
     }
-    #Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
-} else {
-    Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
-    Start-Process $LogDirectory
-    exit
 }
