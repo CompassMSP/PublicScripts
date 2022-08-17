@@ -8,4 +8,7 @@ $LatestVersionLog = $($LatestVersionLog -replace '.7z')
 
 $PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection\'
 
-Write-Output "URL is $LatestVersionUrl . Log version is $LatestVersionLog. TXT is $($LatestVersionTXT)."
+Write-Output "URL is $LatestVersionUrl"
+Write-Output "Log version is $LatestVersionLog."
+Start-Sleep 10
+Write-Output "TXT is $($LatestVersionTXT)."
