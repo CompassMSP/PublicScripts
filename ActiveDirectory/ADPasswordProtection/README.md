@@ -28,12 +28,19 @@ Make sure to replace the parameters with the correct URL and emails.
 
 Parameters
   StoreFilesInDBFormatLink is stored on the CompassMSP Automate web server. This is a prebuilt database for the Lithnet application. Which is manually updated.
+
     -StoreFilesInDBFormatLink 'https://rmm.compassmsp.com/softwarepackages/ADPasswordProtectionStore.zip'
+
   NotificationEmail is the email you want to receive the error logs as well as the password audit notification.
+
     -NotificationEmail 'cwilliams@compassmsp.com'
+
   SMTPRelay is the smtp relay address you wish to use to send emails.
+
     -SMTPRelay 'compassmsp-com.mail.protection.outlook.com'
+
   FromEmail is is the email you will want to send as for the error logs as well as the password audit notification. 
+  
     -FromEmail 'cwilliams@compassmsp.com'
 
 ````powershell
