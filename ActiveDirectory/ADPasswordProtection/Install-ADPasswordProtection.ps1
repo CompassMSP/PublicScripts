@@ -272,7 +272,16 @@ Function Install-ADPasswordProtection {
     #Clean up any old files
     Remove-OldFiles
 
-    if ((Get-PSDrive C).free -gt 45GB) {
+    #Check if DC has enough free space
+if ((Get-PSDrive C).free -lt 20GB) {
+    Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 20 GB free. Script will exit'
+    Start-Process $LogDirectory
+    exit 
+} else {
+    $FreeSpace = 'yes'
+}
+
+if ($FreeSpace -eq 'yes') {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
         #region DownloadHIBPHashes
@@ -393,13 +402,13 @@ Function Install-ADPasswordProtection {
             Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
         }
         #endregion RunInvoke-ADPasswordAudit
-    }
-    else {
-        Write-Log -Level Error -Path $LogDirectory -Message 'Not enough free space on the C drive. At least 45GB required.'
-        $Errors += 'Not enough free space on the C drive. At least 45GB required.'
+    } else {
+        Write-Log -Level Error -Path $LogDirectory -Message 'Errors have accord while processing. Please refer to log output.'
+        $Errors += 'Errors have accord while processing. Please refer to log output.'
+        Start-Process $LogDirectory
     }
 
-    if ($Errors.count -gt 0) {
+if ($Errors.count -gt 0) {
         $EmailBody = $Errors | ForEach-Object { [PSCustomObject]@{'Errors' = $_ } } | ConvertTo-Html -Fragment -Property 'Errors' | Out-String
 
         $SendMailMessageParams = @{
