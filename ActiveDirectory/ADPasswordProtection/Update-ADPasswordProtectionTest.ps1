@@ -29,7 +29,7 @@ param (
 $StoreFilesInDBFormatLink = 'https://rmm.compassmsp.com/softwarepackages/ADPasswordProtectionStore.zip'
 $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
 $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
-$PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection\'
+$PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection'
 
 $Errors = @()
 
@@ -156,7 +156,6 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
     
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
-    #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
     Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
@@ -165,7 +164,7 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
 
-        New-Item $PassProtectionPath\$LatestVersionLog -Type File
+        New-Item $($PassProtectionPath + '\' + $LatestVersionLog) -Type File
 
         $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
 
