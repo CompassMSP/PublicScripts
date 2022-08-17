@@ -286,12 +286,17 @@ if ((Get-PSDrive C).free -lt 20GB) {
 if ($FreeSpace -eq 'yes') {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+        if((Test-Path 'C:\Temp' ) -eq $false) {
+            New-Item -Path 'C:\Temp'  -ItemType Directory
+        }
+
         #region DownloadHIBPHashes
         if (-not $HIBPDBFilesExist) {
             Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes'
-            New-Item -Path 'C:\Temp' -ItemType Directory -Force
 
-            (New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
+            #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
+            
+            Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
             #Extract HIBP Hashes
             Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
