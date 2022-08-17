@@ -26,10 +26,6 @@ Please make sure to run this on all domain controllers.
 
 Make sure to replace the parameters with the correct URL and emails.
 
--NotificationEmail 'cwilliams@compassmsp.com' 
--SMTPRelay 'compassmsp-com.mail.protection.outlook.com' 
--FromEmail 'cwilliams@compassmsp.com
-
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
 ````
@@ -42,10 +38,6 @@ The script will run a password audit on the primary domain controller once it in
 Please make sure to run this on all domain controllers.
 
 Make sure to replace the parameters with the correct URL and emails.
-
--NotificationEmail 'cwilliams@compassmsp.com' 
--SMTPRelay 'compassmsp-com.mail.protection.outlook.com' 
--FromEmail 'cwilliams@compassmsp.com
 
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
