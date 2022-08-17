@@ -187,10 +187,23 @@ if ((Get-ChildItem -Path C:\Temp).Name -contains $LatestVersionTXT) {
     try {
         Import-Module LithnetPasswordProtection
         Open-Store 'C:\Program Files\Lithnet\Active Directory Password Protection\Store'
+
         Write-Log -Level Info -Path $LogDirectory -Message 'Import compromised password hashes'
+
         Import-CompromisedPasswordHashes -Filename C:\Temp\$($LatestVersionTXT)
+
         Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
+
         New-Item $PassProtectionPath\$LatestVersionLog -Type File
+
+        $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
+
+        $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
+
+        if ($PDC -eq $LocalDC) {
+            Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
+        }
+
         if ($OldVersionLog -ne $NULL) {
             Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
             Remove-Item $OldVersionLog
