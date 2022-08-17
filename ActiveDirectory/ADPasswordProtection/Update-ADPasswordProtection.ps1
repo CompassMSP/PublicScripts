@@ -1,4 +1,18 @@
-# https://haveibeenpwned.com/Passwords
+<#
+.DESCRIPTION
+This script updates the Lithnet AD Password Protection database with latest HIBP password list. Must be run on each DC.
+
+.EXAMPLE
+Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1' | Invoke-Expression
+
+.LINK
+https://haveibeenpwned.com/Passwords
+https://github.com/lithnet/ad-password-protection
+https://github.com/CompassMSP/PublicScripts/blob/master/ActiveDirectory/Install-ADPasswordProtection.ps1
+
+Chris Williams
+#>
+#Requires -RunAsAdministrator
 
 function Write-Log {
     [CmdletBinding()]
@@ -97,12 +111,14 @@ $LogDirectory = 'C:\Windows\Temp\UpdatePasswordProtection.log'
 #Check if computer is a DC
 if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
     Write-Log -Level Error -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
+    Start-Process $LogDirectory
     exit
 }
 
 #Check if DC has enough free space
 if ((Get-PSDrive C).free -lt 20GB) {
     Write-Log -Level Error -Path $LogDirectory -Message 'DC has less than 20 GB free. Script will exit'
+    Start-Process $LogDirectory
     exit 
 }
 
@@ -141,6 +157,7 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
     Write-Log -Level Info -Path $LogDirectory -Message "HIBP Database needs updating. Will now download the latest DB."
 } else { 
     Write-Log -Level Error -Path $LogDirectory -Message "HIBP Database is on latest version. Script will now exit."
+    Start-Process $LogDirectory
     exit
 }
 
@@ -158,6 +175,7 @@ if ($HIBPDBUpdate -eq $true) {
     }
     catch {
         Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $LatestVersionZip"
+        Start-Process $LogDirectory
         exit
     }
 
@@ -182,7 +200,3 @@ if ((Get-ChildItem -Path C:\Temp).Name -contains $LatestVersionTXT) {
         Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue importing $LatestVersionZip"
     }
 }
-
-
-
-
