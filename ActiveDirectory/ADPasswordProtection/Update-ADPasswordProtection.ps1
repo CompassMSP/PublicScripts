@@ -155,7 +155,13 @@ if ($compassLatestVersion -ne $LatestVersionLog ) {
 
 #Checks for older database version
 Write-Log -Level Info -Path $LogDirectory -Message 'Checking HIBP hashes DB against servers version.'
+
+if((Test-Path $($PassProtectionPath + '\Version') ) -eq $false) {
+    New-Item -Path $($PassProtectionPath + '\Version')  -ItemType Directory
+}
+
 $CurrentVersionLog = Get-ChildItem -Path $($PassProtectionPath + '\Version\') 
+
 
 #Checks if latest version is installed 
 if (($CurrentVersionLog).Name -notcontains $LatestVersionLog) {
