@@ -194,24 +194,6 @@ Function Install-ADPasswordProtection {
         }
     }
 
-    function Expand-ZIP {
-        [CmdletBinding()]
-        param (
-            [parameter(Mandatory = $true)]
-            [String]$ZipFile,
-
-            [parameter(Mandatory = $true)]
-            [String]$OutPath
-        )
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-        if (Test-Path -Path $OutPath) {
-            Remove-Item $OutPath -Recurse -Force
-        }
-
-        [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $OutPath)
-    }
-
     Function Remove-OldFiles {
         $ItemsToDelete = @(
             $GPOPath,
@@ -304,7 +286,7 @@ Function Install-ADPasswordProtection {
             Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
 
             try {
-                Expand-ZIP -ZipFile $StoreFilesInDBFormatFile -OutPath 'C:\Program Files\Lithnet\Active Directory Password Protection'
+                Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose
             }
             catch {
                 Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"

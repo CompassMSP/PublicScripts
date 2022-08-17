@@ -123,24 +123,6 @@ function Write-Log {
     }
 }
 
-function Expand-ZIP {
-    [CmdletBinding()]
-    param (
-        [parameter(Mandatory = $true)]
-        [String]$ZipFile,
-
-        [parameter(Mandatory = $true)]
-        [String]$OutPath
-    )
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-    if (Test-Path -Path $OutPath) {
-        Remove-Item $OutPath -Recurse -Force
-    }
-
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipFile, $OutPath)
-}
-
 #Check if computer is a DC
 if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
     Write-Log -Level Warn -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
@@ -178,11 +160,11 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
     
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
-    Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+    #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
     try {
-        Expand-ZIP -ZipFile $StoreFilesInDBFormatFile -OutPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -ErrorAction Stop
+        Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
 
@@ -204,8 +186,9 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
     catch {
         Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
     }
-    Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
+    #Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
 } else {
     Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
+    Start-Process $LogDirectory
     exit
 }
