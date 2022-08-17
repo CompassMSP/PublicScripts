@@ -194,7 +194,7 @@ if ((Get-ChildItem -Path C:\Temp).Name -contains $LatestVersionTXT) {
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
 
-        New-Item $PassProtectionPath\$LatestVersionLog -Type File
+        New-Item $($PassProtectionPath + '\' + $LatestVersionLog) -Type File
 
         $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
 
