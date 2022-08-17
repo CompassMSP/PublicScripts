@@ -145,26 +145,32 @@ function Expand-ZIP {
 
 #Check if computer is a DC
 if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
-    Write-Log -Level Error -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
+    Write-Log -Level Warn -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
     Start-Process $LogDirectory
     exit
 }
 
 #Check if DC has enough free space
 if ((Get-PSDrive C).free -lt 20GB) {
-    Write-Log -Level Error -Path $LogDirectory -Message 'DC has less than 20 GB free. Script will exit'
+    Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 20 GB free. Script will exit'
     Start-Process $LogDirectory
     exit 
 }
 
 #Downloads latest version of the HIBP Database
 $LatestVersionUrl = (Invoke-WebRequest https://haveibeenpwned.com/Passwords -MaximumRedirection 0).Links | Where-Object {$_.href -like "*pwned-passwords-ntlm-ordered-by-hash-v*.7z"} | Select-Object -expand href
+$compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt).Content 
 
 #Variables built out for script 
 $LatestVersionZip = $($LatestVersionUrl -replace '[a-zA-Z]+://[a-zA-Z]+\.[a-zA-Z]+\.[a-zA-Z]+/[a-zA-Z]+/')
 $LatestVersionLog = $($LatestVersionZip -replace 'pwned-passwords-ntlm-ordered-by-hash-') 
 $LatestVersionLog = $($LatestVersionLog -replace '.7z')
 
+if ($compassLatestVersion -eq $LatestVersionLog ) {
+    Write-Log -Level Warn -Path $LogDirectory -Message 'The Compass database is out of date. Please open a ticket with internal support. Script will now exit.'
+    Start-Process $LogDirectory
+    #exit
+}
 #Checks for older database version
 $OldVersionLog = Get-ChildItem -Path $PassProtectionPath | Where-Object {$_.Name -like 'v*'}
 
@@ -198,7 +204,7 @@ if ((Get-ChildItem -Path $PassProtectionPath).Name -notcontains $LatestVersionLo
         }
     }
     catch {
-        Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
+        Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
         $Errors += "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
     }
     Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
