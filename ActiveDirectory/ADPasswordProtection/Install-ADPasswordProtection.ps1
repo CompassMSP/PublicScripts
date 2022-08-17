@@ -290,7 +290,7 @@ Function Install-ADPasswordProtection {
     #Clean up any old files
     Remove-OldFiles
 
-    if ((Get-PSDrive C).free -gt 20GB) {
+    if ((Get-PSDrive C).free -gt 45GB) {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
         #Download HIBP Hashes
