@@ -20,10 +20,19 @@ Once the script runs the server will need to be rebooted (the script will not re
 
 Run the command below as admin on a PowerShell terminal. This will perform the actual install. Make sure to replace the parameters with the correct URL and emails.
 
-Also, make sure to run this on all domain controllers.
+The script will run a password audit on the primary domain controller once it installs successfully.
+
+Please make sure to run this on all domain controllers.
 
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
+````
+
+# Updates
+To update the HIBP hash database you will run the following command. This will grab the update NTLM hashes file from HBIP and update database on the DC. Once this completes it will run an audit. 
+
+````powershell
+Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
 ````
 
 # Verify Install
