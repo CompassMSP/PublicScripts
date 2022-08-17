@@ -26,6 +26,10 @@ Please make sure to run this on all domain controllers.
 
 Make sure to replace the parameters with the correct URL and emails.
 
+````powershell
+Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
+````
+
 # Parameters
 
   StoreFilesInDBFormatLink is stored on the CompassMSP Automate web server. This is a prebuilt database for the Lithnet application. Which is manually updated.
@@ -43,10 +47,6 @@ Make sure to replace the parameters with the correct URL and emails.
   FromEmail is is the email you will want to send as for the error logs as well as the password audit notification. 
 
     -FromEmail 'cwilliams@compassmsp.com'
-
-````powershell
-Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
-````
 
 # Updates
 To update the HIBP hash database you will run the following command. This will grab the update NTLM hashes file from HBIP and update database on the DC.
