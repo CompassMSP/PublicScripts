@@ -169,11 +169,11 @@ Function Update-ADPasswordProtection {
         
         Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
     
-        #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+        Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
     
         Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
         try {
-            #Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
+            Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
         
             Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
         
@@ -201,6 +201,5 @@ Function Update-ADPasswordProtection {
     } else {
         Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
         Start-Process $LogDirectory
-        #exit
     }    
 }
