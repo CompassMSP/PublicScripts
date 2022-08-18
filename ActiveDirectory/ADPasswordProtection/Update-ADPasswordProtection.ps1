@@ -1,20 +1,21 @@
-<#
-.DESCRIPTION
-This script updates the Lithnet AD Password Protection database with latest HIBP password list. Must be run on each DC.
-
-.EXAMPLE
-Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail 'cwilliams@compassmsp.com' -SMTPRelay 'compassmsp-com.mail.protection.outlook.com' -FromEmail 'cwilliams@compassmsp.com'
-.LINK
-https://haveibeenpwned.com/Passwords
-https://github.com/lithnet/ad-password-protection
-https://github.com/CompassMSP/PublicScripts/blob/master/ActiveDirectory/Install-ADPasswordProtection.ps1
-
-Chris Williams
-#>
-#Requires -Version 5 -RunAsAdministrator
-
-[CmdletBinding()]
-param (
+Function Update-ADPasswordProtection {
+    <#
+    .DESCRIPTION
+    This script updates the Lithnet AD Password Protection database with latest HIBP password list. Must be run on each DC.
+    
+    .EXAMPLE
+    Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail 'cwilliams@compassmsp.com' -SMTPRelay 'compassmsp-com.mail.protection.outlook.com' -FromEmail 'cwilliams@compassmsp.com'
+    .LINK
+    https://haveibeenpwned.com/Passwords
+    https://github.com/lithnet/ad-password-protection
+    https://github.com/CompassMSP/PublicScripts/blob/master/ActiveDirectory/Install-ADPasswordProtection.ps1
+    
+    Chris Williams
+    #>
+    #Requires -Version 5 -RunAsAdministrator
+    
+    [CmdletBinding()]
+    param (
     [Parameter(Mandatory = $true,
         HelpMessage = 'example.mail.protection.outlook.com')]
     [string]$SMTPRelay,
@@ -24,14 +25,14 @@ param (
 
     [Parameter(Mandatory = $true)]
     [string]$FromEmail
-)
-
-$StoreFilesInDBFormatLink = 'https://rmm.compassmsp.com/softwarepackages/ADPasswordProtectionStore.zip'
-$StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
-$LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
-$PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection'
-
-function Write-Log {
+    )
+    
+    $StoreFilesInDBFormatLink = 'https://rmm.compassmsp.com/softwarepackages/ADPasswordProtectionStore.zip'
+    $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
+    $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
+    $PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection'
+    
+    function Write-Log {
     [CmdletBinding()]
     Param
     (
@@ -121,89 +122,85 @@ function Write-Log {
     }
     End {
     }
-}
-
-#Check if computer is a DC
-if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
-    Write-Log -Level Warn -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
-    Start-Process $LogDirectory
-    exit
-}
-
-#Check if DC has enough free space
-if ((Get-PSDrive C).free -lt 30GB) {
-    Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 30 GB free. Script will exit'
-    Start-Process $LogDirectory
-    exit 
-}
-
-#Downloads latest version of the HIBP Database
-$LatestVersionUrl = (Invoke-WebRequest https://haveibeenpwned.com/Passwords -MaximumRedirection 0).Links | Where-Object {$_.href -like "*pwned-passwords-ntlm-ordered-by-hash-v*.7z"} | Select-Object -expand href
-$compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt).Content 
-
-#Variables built out for script 
-$LatestVersionZip = $($LatestVersionUrl -replace '[a-zA-Z]+://[a-zA-Z]+\.[a-zA-Z]+\.[a-zA-Z]+/[a-zA-Z]+/')
-$LatestVersionLog = $($LatestVersionZip -replace 'pwned-passwords-ntlm-ordered-by-hash-') 
-$LatestVersionLog = $($LatestVersionLog -replace '.7z')
-
-#Compares HIBP version with the Compass hosted version
-if ($compassLatestVersion -ne $LatestVersionLog ) {
-    Write-Log -Level Warn -Path $LogDirectory -Message 'The Compass database is out of date. Please open a ticket with internal support. Script will now exit.'
-    Start-Process $LogDirectory
-    exit
-}
-
-#Checks for older database version
-Write-Log -Level Info -Path $LogDirectory -Message 'Checking HIBP hashes DB against servers version.'
-
-if((Test-Path $($PassProtectionPath + '\Version') ) -eq $false) {
-    New-Item -Path $($PassProtectionPath + '\Version')  -ItemType Directory
-}
-
-$CurrentVersionLog = Get-ChildItem -Path $($PassProtectionPath + '\Version\') 
-
-
-#Checks if latest version is installed 
-if (($CurrentVersionLog).Name -notcontains $LatestVersionLog) {
-    Write-Log -Level Info -Path $LogDirectory -Message 'DC is missing latest HIBP hashes.'
+    }
     
-    Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
-
-    #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
-
-    Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
-    try {
-        #Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
-
-        Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
-
-        New-Item $($PassProtectionPath + '\Version\' + $LatestVersionLog) -Type File
-        $CompleteUpdate = 'yes'
+    #Check if computer is a DC
+    if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
+        Write-Log -Level Warn -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
+        Start-Process $LogDirectory
+        exit
     }
-    catch {
-        Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
+    
+    #Check if DC has enough free space
+    if ((Get-PSDrive C).free -lt 30GB) {
+        Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 30 GB free. Script will exit'
+        Start-Process $LogDirectory
+        exit 
     }
-    Write-Log -Level Info -Path $LogDirectory -Message "Removing $StoreFilesInDBFormatFile"
-    Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
-} else {
-    Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
-    Start-Process $LogDirectory
-    #exit
-}
-
-if ($CompleteUpdate -eq 'yes') {
-
-    if ($CurrentVersionLog) {
-        Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
-        Remove-Item  -Path $($PassProtectionPath + '\Version\' + $CurrentVersionLog.Name) -Force
+    
+    #Downloads latest version of the HIBP Database
+    $LatestVersionUrl = (Invoke-WebRequest https://haveibeenpwned.com/Passwords -MaximumRedirection 0).Links | Where-Object {$_.href -like "*pwned-passwords-ntlm-ordered-by-hash-v*.7z"} | Select-Object -expand href
+    $compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt).Content 
+    
+    #Variables built out for script 
+    $LatestVersionZip = $($LatestVersionUrl -replace '[a-zA-Z]+://[a-zA-Z]+\.[a-zA-Z]+\.[a-zA-Z]+/[a-zA-Z]+/')
+    $LatestVersionLog = $($LatestVersionZip -replace 'pwned-passwords-ntlm-ordered-by-hash-') 
+    $LatestVersionLog = $($LatestVersionLog -replace '.7z')
+    
+    #Compares HIBP version with the Compass hosted version
+    if ($compassLatestVersion -ne $LatestVersionLog ) {
+        Write-Log -Level Warn -Path $LogDirectory -Message 'The Compass database is out of date. Please open a ticket with internal support. Script will now exit.'
+        Start-Process $LogDirectory
+        exit
     }
-
-    $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
-
-    $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
-
-    if ($PDC -eq $LocalDC) {
-        Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
-        Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
+    
+    #Checks for older database version
+    Write-Log -Level Info -Path $LogDirectory -Message 'Checking HIBP hashes DB against servers version.'
+    
+    if((Test-Path $($PassProtectionPath + '\Version') ) -eq $false) {
+        New-Item -Path $($PassProtectionPath + '\Version')  -ItemType Directory
     }
+    
+    $CurrentVersionLog = Get-ChildItem -Path $($PassProtectionPath + '\Version\') 
+    
+    #Checks if latest version is installed 
+    if (($CurrentVersionLog).Name -notcontains $LatestVersionLog) {
+        Write-Log -Level Info -Path $LogDirectory -Message 'DC is missing latest HIBP hashes.'
+        
+        Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
+    
+        #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+    
+        Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
+        try {
+            #Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
+        
+            Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
+        
+            New-Item $($PassProtectionPath + '\Version\' + $LatestVersionLog) -Type File
+            
+            if ($CurrentVersionLog) {
+                Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
+                Remove-Item  -Path $($PassProtectionPath + '\Version\' + $CurrentVersionLog.Name) -Force
+            }
+        
+            $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
+        
+            $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
+        
+            if ($PDC -eq $LocalDC) {
+                Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
+                Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
+            }
+        }
+        catch {
+            Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
+        }
+        Write-Log -Level Info -Path $LogDirectory -Message "Removing $StoreFilesInDBFormatFile"
+        Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
+    } else {
+        Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
+        Start-Process $LogDirectory
+        #exit
+    }    
 }
