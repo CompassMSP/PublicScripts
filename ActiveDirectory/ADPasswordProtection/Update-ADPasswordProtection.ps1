@@ -169,29 +169,16 @@ if (($CurrentVersionLog).Name -notcontains $LatestVersionLog) {
     
     Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
 
-    Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+    #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
     Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
     try {
-        Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
+        #Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
 
         New-Item $($PassProtectionPath + '\Version\' + $LatestVersionLog) -Type File
-
-        $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
-
-        $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
-
-        if ($PDC -eq $LocalDC) {
-            Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
-            Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
-        }
-
-        if ($CurrentVersionLog -ne $NULL) {
-            Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
-            Remove-Item  -Path $($PassProtectionPath + '\Version\' + $CurrentVersionLog.Name) -Force
-        }
+        $CompleteUpdate = 'yes'
     }
     catch {
         Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
@@ -202,4 +189,21 @@ if (($CurrentVersionLog).Name -notcontains $LatestVersionLog) {
     Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
     Start-Process $LogDirectory
     #exit
+}
+
+if ($CompleteUpdate -eq 'yes') {
+
+    if ($CurrentVersionLog) {
+        Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
+        Remove-Item  -Path $($PassProtectionPath + '\Version\' + $CurrentVersionLog.Name) -Force
+    }
+
+    $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
+
+    $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
+
+    if ($PDC -eq $LocalDC) {
+        Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
+        Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
+    }
 }
