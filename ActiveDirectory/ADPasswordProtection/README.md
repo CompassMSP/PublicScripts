@@ -22,7 +22,14 @@ Run the command below as admin on a PowerShell terminal. This will perform the a
 
 The script will run a password audit on the primary domain controller once it installs successfully.
 
-Please make sure to run this on all domain controllers.
+First you will need to enable TLS1.2 inside of Powershell.
+
+````powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+````
+Then you can run the following command to start the setup process. 
+
+Note: You will need to run this on all domain controllers.
 
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
