@@ -296,6 +296,8 @@ if ($FreeSpace -eq 'yes') {
 
             #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
             
+            Import-Module BitsTransfer
+            
             Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
             #Extract HIBP Hashes
@@ -310,7 +312,7 @@ if ($FreeSpace -eq 'yes') {
                 Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
                 $Errors += "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
             }
-            Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
+            #Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
         }
         #endregion DownloadHIBHashes
 

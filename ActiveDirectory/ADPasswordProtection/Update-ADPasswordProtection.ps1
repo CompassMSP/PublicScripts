@@ -168,7 +168,11 @@ Function Update-ADPasswordProtection {
         Write-Log -Level Info -Path $LogDirectory -Message 'DC is missing latest HIBP hashes.'
         
         Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
-    
+        
+        #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
+        
+        Import-Module BitsTransfer
+        
         Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
     
         Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'

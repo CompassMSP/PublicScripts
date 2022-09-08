@@ -2,8 +2,10 @@
 
 - The application must be installed on every DC at a site
 - DCs must have at least 45GB free during setup, and 15GB free once the setup is complete. This space is required for the HIBP database
-- DCs must be 2016+ (or have WMF 5.1 installed if 2012 R2) for the automated script to run
-  - Older versions will require a manual install
+- DCs must be 2016+ (or have WMF 5.1 (Powershell 5.1) installed if 2012 R2) for the automated script to run
+  - To check for WMF version open Powershell and run "$PSVersionTable.PSVersion"
+    - WMF 5.1 for 2012 R2 link: https://docs.microsoft.com/en-us/powershell/scripting/windows-powershell/wmf/setup/install-configure
+  - Older versions will require a manual install if you cannot upgrade to WMF 5.1
 
 # Deployment
 The full deployment instructions can be found [here](https://blog.lithnet.io/2019/01/lppad-1.html) and [here](https://github.com/lithnet/ad-password-protection), but the script Install-ADPasswordProtection will do all of the work for you. The script can be run manually or through an RMM.
