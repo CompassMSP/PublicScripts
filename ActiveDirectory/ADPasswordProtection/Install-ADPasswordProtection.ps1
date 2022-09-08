@@ -272,7 +272,7 @@ Function Install-ADPasswordProtection {
     #endregion Check For Existing components
 
     #Clean up any old files
-    #Remove-OldFiles
+    Remove-OldFiles
 
     #Check if DC has enough free space
 if ((Get-PSDrive C).free -lt 30GB) {
@@ -296,7 +296,9 @@ if ($FreeSpace -eq 'yes') {
 
             #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
             
-            #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+            Import-Module BitsTransfer
+            
+            Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
             #Extract HIBP Hashes
             Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
@@ -432,5 +434,5 @@ if ($Errors.count -gt 0) {
     }
 
     #Cleanup
-    #Remove-OldFiles
+    Remove-OldFiles
 }
