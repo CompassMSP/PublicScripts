@@ -340,7 +340,7 @@ if ($FreeSpace -eq 'yes') {
                 if (!(Test-Path "$($SYSVOLPath)\domain\Policies\PolicyDefinitions")){
                     (New-Object System.Net.WebClient).DownloadFile('https://github.com/CompassMSP/PublicScripts/raw/master/ActiveDirectory/PolicyDefinitions.zip','C:\Windows\Temp\PolicyDefinitions.zip')
 
-                    Expand-ZIP -ZipFile 'C:\Windows\Temp\PolicyDefinitions.zip' -OutPath "C:\Windows\Temp\ADMX"
+                    Expand-Archive -LiteralPath 'C:\Windows\Temp\PolicyDefinitions.zip' -DestinationPath "C:\Windows\Temp\ADMX"
 
                     ROBOCOPY "C:\Windows\Temp\ADMX\PolicyDefinitions" "$($SYSVOLPath)\domain\Policies\PolicyDefinitions" /R:0 /W:0 /E /xo /MT:32 /np
                 }
@@ -375,7 +375,7 @@ if ($FreeSpace -eq 'yes') {
 
                 $GPOFolder = $GPOPath.Replace('.zip', '')
 
-                Expand-ZIP -ZipFile  $GPOPath -OutPath $GPOFolder
+                Expand-Archive -LiteralPath  $GPOPath -DestinationPath $GPOFolder
 
                 $GPOBackupFolder = (Get-ChildItem $GPOFolder).FullName
 
