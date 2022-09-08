@@ -169,9 +169,11 @@ Function Update-ADPasswordProtection {
         
         Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
         
-        (New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
+        #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
         
-        #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+        Import-Module BitsTransfer
+        
+        Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
     
         Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
         try {
