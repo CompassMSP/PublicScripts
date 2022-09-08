@@ -294,9 +294,9 @@ if ($FreeSpace -eq 'yes') {
         if (-not $HIBPDBFilesExist) {
             Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes'
 
-            #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
+            (New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
             
-            Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
+            #Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
 
             #Extract HIBP Hashes
             Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
