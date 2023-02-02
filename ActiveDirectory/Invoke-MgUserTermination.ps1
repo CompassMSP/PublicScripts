@@ -204,15 +204,15 @@ Get-MgUserLicenseDetail -UserId $MgUser.Id | Select-Object SkuPartNumber, SkuId,
 Write-Host "Export User Licenses Completed. Path: C:\temp\$($user)_License_Id.csv" 
 
 #Remove Licenses
-Write-Host "Starting removal of user licenses." 
-
-Get-MgUserLicenseDetail -UserId $MgUser.Id | Where-Object `
-   {($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
-   | ForEach-Object { Set-MgUserLicense -UserId $MgUser.Id -AddLicenses @() -RemoveLicenses $_.SkuId -ErrorAction Stop }
-
-Get-MgUserLicenseDetail -UserId $MgUser.Id | ForEach-Object { Set-MgUserLicense -UserId $MgUser.Id -AddLicenses @() -RemoveLicenses $_.SkuId }
-
-Write-Host "Removal of user licenses completed." 
+#Write-Host "Starting removal of user licenses." 
+#
+#Get-MgUserLicenseDetail -UserId $MgUser.Id | Where-Object `
+#   {($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
+#   | ForEach-Object { Set-MgUserLicense -UserId $MgUser.Id -AddLicenses @() -RemoveLicenses $_.SkuId -ErrorAction Stop }
+#
+#Get-MgUserLicenseDetail -UserId $MgUser.Id | ForEach-Object { Set-MgUserLicense -UserId $MgUser.Id -AddLicenses @() -RemoveLicenses $_.SkuId }
+#
+#Write-Host "Removal of user licenses completed." 
 
 #endregion Office365
 
