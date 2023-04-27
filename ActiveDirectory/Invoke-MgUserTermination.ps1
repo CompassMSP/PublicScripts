@@ -132,7 +132,19 @@ Write-Host "Performing Azure Steps"
 #Revoke all sessions
 Revoke-MgUserSign -UserId $MgUser.UserPrincipalName -ErrorAction SilentlyContinue
 
+#Remove Mobile Device
 Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue } 
+
+#Disable AzureAD registered devices
+$termUserDevices = Get-MgUserRegisteredDevice -UserId $MgUser.UserPrincipalName | ForEach-Object { 
+    @{ DeviceId = $_.Id } } | Get-MgDevice | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled
+
+$termUserDevices | ForEach-Object {
+    $params = @{
+        AccountEnabled = $false
+    }
+    Update-MgDevice -DeviceId $_.Id -BodyParameter $params
+}
 
 #Change mailbox to shared
 $365Mailbox | Set-Mailbox -Type Shared
