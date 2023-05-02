@@ -22,7 +22,6 @@
 #>
 
 
-
 [cmdletbinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -130,13 +129,13 @@ $UserFromAD | Move-ADObject -TargetPath $DestinationOU
 Write-Host "Performing Azure Steps" 
 
 #Revoke all sessions
-Revoke-MgUserSign -UserId $MgUser.UserPrincipalName -ErrorAction SilentlyContinue
+Revoke-MgUserSign -UserId $UserFromAD.UserPrincipalName -ErrorAction SilentlyContinue
 
 #Remove Mobile Device
 Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue } 
 
 #Disable AzureAD registered devices
-$termUserDevices = Get-MgUserRegisteredDevice -UserId $MgUser.UserPrincipalName | ForEach-Object { 
+$termUserDevices = Get-MgUserRegisteredDevice -UserId $UserFromAD.UserPrincipalName | ForEach-Object { 
     @{ DeviceId = $_.Id } } | Get-MgDevice | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled
 
 $termUserDevices | ForEach-Object {
@@ -195,7 +194,7 @@ if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -For
 
 
 #Find Azure only groups
-$AllAzureGroups = Get-MgUserMemberOf -UserId $MgUser.UserPrincipalName  | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.Id -ne '3e08099a-4cc4-42fb-aa37-e4c988ea8eff'} | `
+$AllAzureGroups = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName  | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.Id -ne '3e08099a-4cc4-42fb-aa37-e4c988ea8eff'} | `
         ForEach-Object { @{ GroupId=$_.Id}} | Get-MgGroup | Where-Object {$_.OnPremisesSyncEnabled -eq $NULL} | Select-Object DisplayName, SecurityEnabled, Mail, Id
 
 $AllAzureGroups | Export-Csv c:\temp\$($user)_Groups_Id.csv -NoTypeInformation
@@ -207,25 +206,25 @@ Foreach ($365Group in $AllAzureGroups) {
     try {
         Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $mgUser.Id -ErrorAction Stop
     } catch {
-        Remove-DistributionGroupMember -Identity $365Group.Id -Member $MgUser.UserPrincipalName -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction SilentlyContinue
+        Remove-DistributionGroupMember -Identity $365Group.Id -Member $UserFromAD.UserPrincipalName -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction SilentlyContinue
     }
 }
 
 #Export user licenses 
-Get-MgUserLicenseDetail -UserId $MgUser.Id | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\$($user)_License_Id.csv -NoTypeInformation
+Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\$($user)_License_Id.csv -NoTypeInformation
     
 Write-Host "Export User Licenses Completed. Path: C:\temp\$($user)_License_Id.csv" 
 
 #Remove Licenses
-#Write-Host "Starting removal of user licenses." 
-#
-#Get-MgUserLicenseDetail -UserId $MgUser.Id | Where-Object `
-#   {($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
-#   | ForEach-Object { Set-MgUserLicense -UserId $MgUser.Id -AddLicenses @() -RemoveLicenses $_.SkuId -ErrorAction Stop }
-#
-#Get-MgUserLicenseDetail -UserId $MgUser.Id | ForEach-Object { Set-MgUserLicense -UserId $MgUser.Id -AddLicenses @() -RemoveLicenses $_.SkuId }
-#
-#Write-Host "Removal of user licenses completed." 
+Write-Host "Starting removal of user licenses." 
+
+Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Where-Object `
+   {($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
+   | ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId -ErrorAction Stop }
+
+Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId }
+
+Write-Host "Removal of user licenses completed." 
 
 #endregion Office365
 
