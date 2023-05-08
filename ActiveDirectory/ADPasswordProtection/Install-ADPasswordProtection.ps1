@@ -53,7 +53,7 @@ Function Install-ADPasswordProtection {
         [string]$FromEmail
     )
 
-    $compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt).Content 
+    $compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt -UseBasicParsing).Content 
     $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
     $PasswordProtectionMSIFile = 'C:\Windows\Temp\Lithnet.ActiveDirectory.PasswordProtection.msi'
     $GPOPath = 'C:\Windows\Temp\PasswordProtection.zip'
