@@ -168,7 +168,7 @@ if ($UserAccessConfirmation -eq 'y') {
 
 if ($GetAccessUserCheck -eq 'yes') { 
     Write-Host "Adding Full Access permissions for $($GetAccessUser.PrimarySmtpAddress) to $($UserFromAD.UserPrincipalName)" 
-    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $UserAccess -AccessRights FullAccess -InheritanceType All -AutoMapping $false }
+    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $UserAccess -AccessRights FullAccess -InheritanceType All -AutoMapping $true }
 
 # Set Mailbox forwarding address 
 $UserFwdConfirmation = Read-Host -Prompt "Would you like to forward users email? (Y/N)"
