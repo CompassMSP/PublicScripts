@@ -111,11 +111,11 @@ $Password = Get-NewPassword
 
 $Confirmation = Read-Host -Prompt "The user below will be created:`n
 Display Name = $($NewUser)
+Email Address = $($NewUserEmail)
+Password = $($Password)
 First Name = $($NewUserFirstName)
 Last Name = $($NewUserLastName)
 SamAccountName = $($NewUserSamAccountName)
-Office 365 Email Address = $($NewUserEmail)
-Password = $($Password)
 Destination OU = $($UserToCopyUPN.DistinguishedName.split(",",2)[1])`n
 Template User to Copy = $($UserToCopy)`n
 Continue? (Y/N)`n"
