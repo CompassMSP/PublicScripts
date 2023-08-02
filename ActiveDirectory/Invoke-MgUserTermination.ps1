@@ -73,6 +73,7 @@ Write-Host "Logging into Azure services. You should get 2 prompts."
 
 Connect-ExchangeOnline
 Connect-Graph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
+Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
 
@@ -200,7 +201,6 @@ if ($SPOAccessConfirmation -eq 'y') {
 
     $GrantUserOneDriveAccess = Read-Host -Prompt "Enter the email address of user to needs access to terminated navigators OneDrive"
     try {
-        Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
         $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop 
         $GetUserOneDriveAccessCheck = 'yes'
         Write-Host "Applying forward from $($UserFromAD.SamAccountName) to $($GetUserOneDriveAccess.PrimarySmtpAddress)" 
