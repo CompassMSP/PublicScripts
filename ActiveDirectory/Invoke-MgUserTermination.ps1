@@ -32,7 +32,7 @@ param(
 
 $Localpath = 'C:\Temp'
 
-if((Test-Path $Localpath) -eq $false) {
+if ((Test-Path $Localpath) -eq $false) {
     Write-Host "Creating temp directory for user group export" 
     New-Item -Path $Localpath -ItemType Directory
 }
@@ -42,8 +42,7 @@ Write-Host "Attempting to find $($user) in Active Directory"
 
 try {
     $UserFromAD = Get-ADUser -Identity $User -Properties MemberOf -ErrorAction Stop
-}
-catch {
+} catch {
     Write-Host "Could not find user $($User) in Active Directory" -ForegroundColor Red -BackgroundColor Black
     exit
 }
@@ -62,8 +61,7 @@ if ($DisabledOUs.count -gt 0) {
             $DestinationOU = $OU.DistinguishedName
         }
     }
-}
-else {
+} else {
     Write-Host "Could not find disabled OU in Active Directory" -ForegroundColor Red -BackgroundColor Black
     exit
 }
@@ -80,8 +78,7 @@ Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure"
 try {
     $365Mailbox = Get-Mailbox -Identity $UserFromAD.UserPrincipalName -ErrorAction Stop
     $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName -ErrorAction Stop
-}
-catch {
+} catch {
     Write-Host "Could not find user $($UserFromAD.UserPrincipalName) in Azure" -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-Graph
@@ -109,11 +106,11 @@ if ($Confirmation -ne 'y') {
 Write-Host "Performing Active Directory Steps" 
 
 $SetADUserParams = @{
-    Identity    = $UserFromAD.SamAccountName
-    Description = "Disabled on $(Get-Date -Format 'FileDate')"
-    Enabled     = $False
-    Replace = @{msExchHideFromAddressLists=$true}
-    Manager = $NULL
+    Identity     = $UserFromAD.SamAccountName
+    Description  = "Disabled on $(Get-Date -Format 'FileDate')"
+    Enabled      = $False
+    Replace      = @{msExchHideFromAddressLists=$true}
+    Manager      = $NULL
 }
 
 Set-ADUser @SetADUserParams
@@ -163,7 +160,8 @@ if ($UserAccessConfirmation -eq 'y') {
     catch { 
 	Write-Host "User mailbox $UserAccess not found. Skipping access rights setup" -ForegroundColor Red -BackgroundColor Black
 	$GetAccessUserCheck = 'no'
-	}   
+	}
+
 } Else {
     Write-Host "Skipping access rights setup"
 }
@@ -217,6 +215,8 @@ if ($SPOAccessConfirmation -eq 'y') {
 if ($GetUserOneDriveAccessCheck -eq 'yes') { 
     $UserOneDriveURL = Get-SPOSite -IncludePersonalSite $true -Limit all -Filter "Url -like '-my.sharepoint.com/personal/$($UserFromAD.SamAccountName)'" | Select-Object -ExpandProperty Url 
     Set-SPOUser -Site $UserOneDriveURL -LoginName $GrantUserOneDriveAccess -IsSiteCollectionAdmin:$true
+    $UserOneDriveURL
+    Read-Host 'Please copy the OneDrive URL. Press any key to continue'
  }
 
 #Find Azure only groups
