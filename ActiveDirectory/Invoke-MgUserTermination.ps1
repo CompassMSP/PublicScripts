@@ -70,7 +70,6 @@ else {
 Write-Host "Logging into Azure services. You should get 2 prompts." 
 
 Connect-ExchangeOnline
-Select-MgProfile Beta
 Connect-Graph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
