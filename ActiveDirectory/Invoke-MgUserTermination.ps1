@@ -69,7 +69,7 @@ else {
 }
 #endregion pre-check
 
-Write-Host "Logging into Azure services. You should get 2 prompts." 
+Write-Host "Logging into Azure services. You should get 3 prompts." 
 
 Connect-ExchangeOnline
 Connect-Graph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
