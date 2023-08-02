@@ -257,6 +257,7 @@ Write-Host "Removal of user licenses completed."
 #Disconnect from Exchange and Graph
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
+Disconnect-SPOService
 
 #Start AD Sync
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
