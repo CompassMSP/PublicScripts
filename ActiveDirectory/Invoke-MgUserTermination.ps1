@@ -12,6 +12,7 @@
 # 06-27-2022                    1.2         Fixes for Remove-MgGroupMemberByRef and Revoke-MgUserSign
 # 06-28-2022                    1.3         Add removal of manager from disabled user and optimization changes
 # 07-06-2022                    1.4         Improved readability and export for user groups
+# 08-02-2023                    1.5         Added OneDrive access grant
 #
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
@@ -19,6 +20,7 @@
 # The following modules must be installed
 # Install-Module ExchangeOnlineManagement
 # Install-Module Microsoft.Graph
+# Install-Module Microsoft.Online.Sharepoint.PowerShell
 #>
 
 
@@ -191,6 +193,31 @@ if ($UserFwdConfirmation -eq 'y') {
 
 if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $UserFWD -DeliverToMailboxAndForward $False }
 
+# Set OneDrive grant access
+$SPOAccessConfirmation = Read-Host -Prompt "Would you like to grant access to the users OneDrive? (Y/N)"
+
+if ($SPOAccessConfirmation -eq 'y') {
+
+    $GrantUserOneDriveAccess = Read-Host -Prompt "Enter the email address of user to needs access to terminated navigators OneDrive"
+    try {
+        Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
+        $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop 
+        $GetUserOneDriveAccessCheck = 'yes'
+        Write-Host "Applying forward from $($UserFromAD.SamAccountName) to $($GetUserOneDriveAccess.PrimarySmtpAddress)" 
+    }
+    catch { 
+	Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
+	$GetUserOneDriveAccessCheck = 'no'
+	}
+    
+} Else {
+    Write-Host "Skipping OneDrive access grant" 
+}
+
+if ($GetUserOneDriveAccessCheck -eq 'yes') { 
+    $UserOneDriveURL = Get-SPOSite -IncludePersonalSite $true -Limit all -Filter "Url -like '-my.sharepoint.com/personal/$($UserFromAD.SamAccountName)'" | Select-Object -ExpandProperty Url 
+    Set-SPOUser -Site $UserOneDriveURL -LoginName $GrantUserOneDriveAccess -IsSiteCollectionAdmin:$true
+ }
 
 #Find Azure only groups
 $AllAzureGroups = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName  | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.Id -ne '3e08099a-4cc4-42fb-aa37-e4c988ea8eff'} | `
