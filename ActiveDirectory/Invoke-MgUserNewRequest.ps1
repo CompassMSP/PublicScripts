@@ -17,7 +17,7 @@
 Run from the Primary Domain Controller with AD Connect installed
 
 The following modules must be installed
-Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups
+Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Online.Sharepoint.PowerShell
 
 Azure licenses Sku - Selected Sku must have free licenses available. This MUST be set in the portal before running the script
 
@@ -55,7 +55,8 @@ IF ([string]::IsNullOrEmpty($Phone)) {
 if ($SkipAz -ne 'y') {
     Write-Output 'Logging into 365 services.'
     Connect-ExchangeOnline
-    Connect-Graph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
+    Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
+    Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
 }
 
 if ($Sku) { 
@@ -235,6 +236,13 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false
         }
     }
+
+    ## Assigns US as UsageLocation
+    Update-MgUser -UserId $UserToCopyUPN.UserPrincipalName -UsageLocation US
+
+    ## Creates OneDrive
+    Request-SPOPersonalSite -UserEmails $UserToCopyUPN.UserPrincipalName -NoWait
+}
 
     $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id).Count
     $NewUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $NewUserEmail).Id).Count
