@@ -81,7 +81,8 @@ try {
 } catch {
     Write-Host "Could not find user $($UserFromAD.UserPrincipalName) in Azure" -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
-    Disconnect-Graph
+    Disconnect-MgGraph
+    Disconnect-SPOService
     exit
 }
 
@@ -96,7 +97,8 @@ Destination OU = $($DestinationOU)`n
 if ($Confirmation -ne 'y') {
     Write-Host 'User did not enter "Y"' -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
-    Disconnect-Graph
+    Disconnect-MgGraph
+    Disconnect-SPOService
     exit
 }
 
