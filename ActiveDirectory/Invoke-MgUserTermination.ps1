@@ -203,7 +203,7 @@ if ($SPOAccessConfirmation -eq 'y') {
     try {
         $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop 
         $GetUserOneDriveAccessCheck = 'yes'
-        Write-Host "Applying forward from $($UserFromAD.SamAccountName) to $($GetUserOneDriveAccess.PrimarySmtpAddress)" 
+        Write-Host "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)" 
     }
     catch { 
 	Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
