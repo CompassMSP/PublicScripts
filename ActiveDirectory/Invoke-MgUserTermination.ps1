@@ -18,7 +18,7 @@
 # Run from the Primary Domain Controller with AD Connect installed
 #
 # The following modules must be installed
-# Install-Module ExchangeOnlineManagement, Microsoft.Graph, Microsoft.Online.Sharepoint.PowerShell
+# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, Microsoft.Online.Sharepoint.PowerShell
 #>
 
 
