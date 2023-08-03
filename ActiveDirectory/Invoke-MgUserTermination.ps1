@@ -70,7 +70,7 @@ if ($DisabledOUs.count -gt 0) {
 Write-Host "Logging into Azure services. You should get 3 prompts." 
 
 Connect-ExchangeOnline
-Connect-Graph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
+Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
 Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
@@ -128,7 +128,7 @@ $UserFromAD | Move-ADObject -TargetPath $DestinationOU
 Write-Host "Performing Azure Steps" 
 
 #Revoke all sessions
-Revoke-MgUserSign -UserId $UserFromAD.UserPrincipalName -ErrorAction SilentlyContinue
+Revoke-MgUserSignInSession -UserId $UserFromAD.UserPrincipalName -ErrorAction SilentlyContinue
 
 #Remove Mobile Device
 Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue } 
