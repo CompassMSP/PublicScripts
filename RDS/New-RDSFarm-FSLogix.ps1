@@ -67,6 +67,10 @@ catch{
     Write-Output "Terminal Server License Servers Group could not be found." 
 } 
 
+### Enable AD Recycle Bin Feature
+Import-module ActiveDirectory
+Enable-ADOptionalFeature 'Recycle Bin Feature' -Scope ForestOrConfigurationSet -Target $internalFQDN
+
 ### Formats and Configures FSLogix Disk on File Server ### NOTE DISK MUST BE PRESENT ###
 Invoke-Command -ComputerName "$rdsFILE" -ScriptBlock {
 
@@ -215,22 +219,25 @@ Invoke-Command -ComputerName "$rdsSH1", "$rdsSH2" -ScriptBlock {
     (New-Object System.Net.WebClient).DownloadFile("$FSLogixAppsSetupURI","C:\windows\temp\$FSLogixAppsSetup")
     Expand-Archive -LiteralPath 'C:\Windows\temp\FSLogixAppsSetup.zip' -DestinationPath 'C:\Windows\temp\FSLogix' -Force -Verbose
     Start-Process -FilePath 'C:\Windows\temp\FSLogix\x64\Release\FSLogixAppsSetup.exe' -ArgumentList "/install /quiet /norestart" -Wait -Passthru
-    
+
     ## Install Chrome
     $ChromeURI = "https://dl.google.com/tag/s/appguid%253D%257B8A69D345-D564-463C-AFF1-A69D9E530F96%257D%2526iid%253D%257BBEF3DB5A-5C0B-4098-B932-87EC614379B7%257D%2526lang%253Den%2526browser%253D4%2526usagestats%253D1%2526appname%253DGoogle%252520Chrome%2526needsadmin%253Dtrue%2526ap%253Dx64-stable-statsdef_1%2526brand%253DGCEB/dl/chrome/install/GoogleChromeEnterpriseBundle64.zip?_ga%3D2.8891187.708273100.1528207374-1188218225.1527264447"
     (New-Object System.Net.WebClient).DownloadFile("$ChromeURI","C:\windows\temp\GoogleChromeEnterpriseBundle64.zip")
     Expand-Archive -LiteralPath 'C:\Windows\temp\GoogleChromeEnterpriseBundle64.zip' -DestinationPath 'C:\Windows\temp\GoogleChromeEnterpriseBundle64' -Force -Verbose
     Start-Process -FilePath 'C:\Windows\temp\GoogleChromeEnterpriseBundle64\Installers\GoogleChromeStandaloneEnterprise64.msi' -ArgumentList "/quiet /m" -Wait -Passthru
+
     ## Install 7Zip
     $7ZipURI = "https://www.7-zip.org/a/7z1900-x64.msi"
     $7Zip = "7z1900-x64.msi"
     (New-Object System.Net.WebClient).DownloadFile("$7ZipURI","C:\windows\temp\$7Zip")
     Start-Process -FilePath C:\windows\temp\$7Zip -Wait -ArgumentList "/q";
+
     ## Install Notepad++
     $nppURI = "https://sourceforge.net/projects/notepadmsi/files/latest/download"
     $npp = "Notepad++7_9_1.msi"
     (New-Object System.Net.WebClient).DownloadFile("$nppURI","C:\windows\temp\$npp")
     Start-Process -FilePath C:\windows\temp\$npp -Wait -ArgumentList "/q";
+    
     ## Install Firefox
     $FirefoxURI = "https://download.mozilla.org/?product=firefox-msi-latest-ssl&os=win64&lang=en-US"
     $Firefox = "Firefox.msi"
@@ -242,13 +249,18 @@ Invoke-Command -ComputerName "$rdsSH1", "$rdsSH2" -ScriptBlock {
 Start-BitsTransfer -Source "https://download.microsoft.com/download/2/E/E/2EEEC938-C014-419D-BB4B-D184871450F1/admintemplates_x64_5098-1000_en-us.exe" -Destination "C:\Windows\temp\admintemplates_x64_5098-1000_en-us.exe"
 Start-Process -FilePath "C:\Windows\temp\admintemplates_x64_5098-1000_en-us.exe" -ArgumentList "/extract:C:\Windows\temp\office_admx /passive /quiet" -Wait -Passthru
 
+Start-BitsTransfer -Source "https://github.com/mozilla/policy-templates/releases/download/v4.1/policy_templates_v4.1.zip" -Destination "C:\Windows\temp\firefox_policy_templates_v4.1.zip"
+Expand-Archive -LiteralPath 'C:\Windows\temp\firefox_policy_templates_v4.1.zip' -DestinationPath 'C:\Windows\temp\firefox_policy_templates' -Force -Verbose
+
 ### Copies GPO Templates to Policies SYSVOLShare
 Copy-Item "\\$rdsSH1\c$\Windows\temp\FSLogix\fslogix.admx" -Destination C:\Windows\PolicyDefinitions
 Copy-Item "\\$rdsSH1\c$\Windows\temp\FSLogix\fslogix.adml" -Destination C:\Windows\PolicyDefinitions\en-US
 Copy-Item "\\$rdsSH1\c$\Program Files (x86)\Microsoft OneDrive\*\adm\OneDrive.admx" -Destination C:\Windows\PolicyDefinitions
 Copy-Item "\\$rdsSH1\c$\Program Files (x86)\Microsoft OneDrive\*\adm\OneDrive.adml" -Destination C:\Windows\PolicyDefinitions\en-US
-Copy-Item "\\$rdsSH1\c$\Windows\temp\GoogleChromeEnterpriseBundle64\Configuration\*.admx" C:\Windows\PolicyDefinitions
-Copy-Item "\\$rdsSH1\c$\Windows\temp\GoogleChromeEnterpriseBundle64\Configuration\en-US\*.adml" C:\Windows\PolicyDefinitions\en-US
+Copy-Item "\\$rdsSH1\c$\Windows\temp\GoogleChromeEnterpriseBundle64\Configuration\admx\*.admx" C:\Windows\PolicyDefinitions
+Copy-Item "\\$rdsSH1\c$\Windows\temp\GoogleChromeEnterpriseBundle64\Configuration\admx\en-US\*.adml" C:\Windows\PolicyDefinitions\en-US
+Copy-Item "C:\Windows\Temp\firefox_policy_templates\windows\*.admx" C:\Windows\PolicyDefinitions
+Copy-Item "C:\Windows\Temp\firefox_policy_templates\windows\en-US\*.adml" C:\Windows\PolicyDefinitions\en-US
 Copy-Item "C:\Windows\temp\office_admx\admx\*.admx" C:\Windows\PolicyDefinitions
 Copy-Item "C:\Windows\temp\office_admx\admx\en-us\*.adml" C:\Windows\PolicyDefinitions\en-US
 
