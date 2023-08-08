@@ -14,21 +14,21 @@
 # 09-29-2022                 1.4         Add fax attributes copy
 # 10-07-2022                 1.5         Add check for duplicate SamAccountName attributes
 #********************************************************************************
-Run from the Primary Domain Controller with AD Connect installed
-
-The following modules must be installed
-Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, Microsoft.Online.Sharepoint.PowerShell
-
-Azure licenses Sku - Selected Sku must have free licenses available. This MUST be set in the portal before running the script
-
-Exchange Online = EXCHANGESTANDARD
-Microsoft 365 Business Basic = O365_BUSINESS_ESSENTIALS
-Microsoft 365 E3 = SPE_E3
-Microsoft 365 Business Premium = SPB
-Office 365 E3 = ENTERPRISEPACK
-
-.\Invoke-MgNewUserRequest.ps1 -UserToCopy "Copy User" -NewUser "Chris Williams" -Phone "555-555-5555"
-
+#
+# Run from the Primary Domain Controller with AD Connect installed
+#
+# The following modules must be installed
+# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, Microsoft.Online.Sharepoint.PowerShell
+#
+# Azure licenses Sku - Selected Sku must have free licenses available. This MUST be set in the portal before running the script
+#
+# Exchange Online = EXCHANGESTANDARD
+# Microsoft 365 Business Basic = O365_BUSINESS_ESSENTIALS
+# Microsoft 365 E3 = SPE_E3
+# Microsoft 365 Business Premium = SPB
+# Office 365 E3 = ENTERPRISEPACK
+#
+# .\Invoke-MgNewUserRequest.ps1 -UserToCopy "Copy User" -NewUser "Chris Williams" -Phone "555-555-5555"
 #>
 
 Param (
