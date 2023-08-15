@@ -196,6 +196,7 @@ if ($ADSyncCompleteYesorExit -eq 'exit') {
 }
 
 if ($ADSyncCompleteYesorExit -eq 'yes') {
+
     $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
     if (!$NewMgUser) { 
         Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal.'
@@ -221,9 +222,6 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
-    #Adds user to All Company group.
-    New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'All Company'").Id -DirectoryObjectId (Get-MgUser -UserId $MgUser.UserPrincipalName).Id
-
     $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id  | Where-Object {
         $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' } | ForEach-Object { 
         @{ GroupId = $_.Id } } | Get-MgGroup | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL -and $_.DisplayName -ne 'All Users' } | Select-Object DisplayName, SecurityEnabled, Mail, Id
@@ -237,14 +235,17 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
-    ## Assigns US as UsageLocation
-    Update-MgUser -UserId $UserToCopyUPN.UserPrincipalName -UsageLocation US
-
-    ## Creates OneDrive
-    Request-SPOPersonalSite -UserEmails $UserToCopyUPN.UserPrincipalName -NoWait
-
     $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id).Count
     $NewUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $NewUserEmail).Id).Count
+
+    ## Assigns US as UsageLocation
+    Update-MgUser -UserId $NewUserEmail -UsageLocation US
+
+    ## Creates OneDrive
+    Request-SPOPersonalSite -UserEmails $NewUserEmail -NoWait
+    
+    #Adds user to All Company group.
+    New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'All Company'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
 
     Write-Output "User $($NewUser) should now be created unless any errors occurred during the process."
     Write-Output "Copy User group count: $($CopyUserGroupCount)"
