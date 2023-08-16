@@ -135,10 +135,7 @@ try {
         -Surname $NewUserLastName  `
         -MobilePhone $Phone `
         -EmailAddress $NewUserEmail `
-        -OtherAttributes @{
-            'proxyAddresses' = "SMTP:$($NewUserEmail)" 
-            'mail' = "$($NewUserEmail)"
-        } `
+        -OtherAttributes @{ 'proxyAddresses' = "SMTP:$($NewUserEmail)" } `
         -AccountPassword (ConvertTo-SecureString $Password -AsPlainText -Force) `
         -Path $($UserToCopyUPN.DistinguishedName.split(",", 2)[1]) `
         -Instance $UserToCopyUPN `
