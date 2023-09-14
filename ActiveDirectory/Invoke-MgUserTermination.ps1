@@ -112,6 +112,10 @@ $SetADUserParams = @{
     Enabled      = $False
     Replace      = @{msExchHideFromAddressLists=$true}
     Manager      = $NULL
+    Office       = $NULL
+    Title        = $NULL
+    Department   = $NULL
+    City         = $NULL
 }
 
 Set-ADUser @SetADUserParams
