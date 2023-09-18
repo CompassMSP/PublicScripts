@@ -69,7 +69,7 @@ if ($DisabledOUs.count -gt 0) {
 Write-Host "Logging into Azure services. You should get 3 prompts." 
 
 Connect-ExchangeOnline
-Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All"
+Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All", "Device.ReadWrite.All"
 Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
