@@ -1,13 +1,12 @@
 #CSV Headers - EmailAddress,Title,Department,MobilePhone,OfficePhone,ManagerEmailAddress
 
+
 # Connect to Microsoft Graph
 Connect-MgGraph -Scopes "User.Read.All", "Directory.ReadWrite.All"
 
 Import-CSV -Path "C:\scripts\user_data.csv" | Foreach-Object {
 
     $UserId = (Get-MgUser -Filter "EmailAddress eq '$($_.EmailAddress)'").Id
-
-     'Technical Alignment Manager'
     
     if ($_.Title) {     
         Update-MgUser -UserId $UserId -JobTitle $_.Title 

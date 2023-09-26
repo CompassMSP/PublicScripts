@@ -1,5 +1,6 @@
 #CSV Headers - EmailAddress,Title,Department,MobilePhone,OfficePhone,ManagerEmailAddress
 
+
 Import-CSV -Path "C:\scripts\user_data.csv" | Foreach-Object {
 
     $ADUser = Get-ADUser -Filter "EmailAddress -eq '$($_.EmailAddress)'" -Properties * 
