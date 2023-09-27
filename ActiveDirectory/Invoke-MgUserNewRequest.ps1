@@ -222,9 +222,8 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
-    $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id  | Where-Object {
-        $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' } | ForEach-Object { 
-        @{ GroupId = $_.Id } } | Get-MgGroup | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL -and $_.DisplayName -ne 'All Users' } | Select-Object DisplayName, SecurityEnabled, Mail, Id
+    $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id  | Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL } | `
+        ForEach-Object { @{ GroupId = $_.Id } } | Get-MgGroup | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id
 
     Foreach ($365Group in $All365Groups) {
         try {

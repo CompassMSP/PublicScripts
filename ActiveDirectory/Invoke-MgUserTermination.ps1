@@ -225,8 +225,8 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
  }
 
 #Find Azure only groups
-$AllAzureGroups = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName  | Where-Object {$_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.Id -ne '3e08099a-4cc4-42fb-aa37-e4c988ea8eff'} | `
-        ForEach-Object { @{ GroupId=$_.Id}} | Get-MgGroup | Where-Object {$_.OnPremisesSyncEnabled -eq $NULL} | Select-Object DisplayName, SecurityEnabled, Mail, Id
+$AllAzureGroups = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName | Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL} | `
+    ForEach-Object { @{ GroupId = $_.Id } } | Get-MgGroup | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id
 
 $AllAzureGroups | Export-Csv c:\temp\terminated_users_exports\$($user)_Groups_Id.csv -NoTypeInformation
     
