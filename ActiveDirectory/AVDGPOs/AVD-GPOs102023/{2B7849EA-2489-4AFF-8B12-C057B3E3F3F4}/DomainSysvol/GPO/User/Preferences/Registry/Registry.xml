@@ -1,3 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<RegistrySettings clsid="{A3CCFC41-DFDB-43a5-8D26-0FE8B954DA51}"><Registry clsid="{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}" name="UseHardwareEncoding" status="UseHardwareEncoding" image="12" changed="2023-02-13 21:21:27" uid="{FA1316BE-E848-4AE3-9F94-1694075A450B}"><Properties action="U" displayDecimal="0" default="0" hive="HKEY_CURRENT_USER" key="SOFTWARE\Microsoft\Terminal Server Client\Default\AddIns\WebRTC Redirector" name="UseHardwareEncoding" type="REG_DWORD" value="00000001"/></Registry>
-</RegistrySettings>

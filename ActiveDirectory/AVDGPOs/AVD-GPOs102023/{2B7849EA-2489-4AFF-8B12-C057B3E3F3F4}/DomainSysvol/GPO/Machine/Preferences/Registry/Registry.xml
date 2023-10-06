@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<RegistrySettings clsid="{A3CCFC41-DFDB-43a5-8D26-0FE8B954DA51}"><Registry clsid="{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}" name="IsWVDEnvironment" status="IsWVDEnvironment" image="10" changed="2023-02-13 21:12:37" uid="{E3AC6077-5B02-41F5-8F63-3E10C9E6EFF6}"><Properties action="C" displayDecimal="0" default="0" hive="HKEY_LOCAL_MACHINE" key="SOFTWARE\Microsoft\Teams" name="IsWVDEnvironment" type="REG_DWORD" value="00000001"/></Registry>
-	<Registry clsid="{9CD4B2F4-923D-47f5-A062-E897DD1DAD50}" name="ShareClientDesktop" status="ShareClientDesktop" image="10" changed="2023-02-13 21:18:03" uid="{A576659E-29A9-4E5C-AC24-24C8A3A349BA}"><Properties action="C" displayDecimal="0" default="0" hive="HKEY_LOCAL_MACHINE" key="SYSTEM\CurrentControlSet\Control\Terminal Server\AddIns\WebRTC Redirector\Policy" name="ShareClientDesktop" type="REG_DWORD" value="00000001"/></Registry>
-</RegistrySettings>
