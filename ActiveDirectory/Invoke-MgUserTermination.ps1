@@ -224,6 +224,13 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
     Read-Host 'Please copy the OneDrive URL. Press any key to continue'
  }
 
+## Remove user from KnowBe4 Sync App
+$MgUser = Get-MgUser -UserId $NewUserEmail
+
+$KnowBe4App = Get-mgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object {$_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f'} 
+
+Remove-MgUserAppRoleAssignment -AppRoleAssignmentID $KnowBe4App.Id -UserId $MgUser.Id
+
 #Find Azure only groups
 $AllAzureGroups = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName | Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL} | `
     ForEach-Object { @{ GroupId = $_.Id } } | Get-MgGroup | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id
@@ -235,7 +242,7 @@ Write-Host "Export User Groups Completed. Path: C:\temp\terminated_users_exports
 #Remove user from all groups
 Foreach ($365Group in $AllAzureGroups) {
     try {
-        Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $mgUser.Id -ErrorAction Stop
+        Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $MgUser.Id -ErrorAction Stop
     } catch {
         Remove-DistributionGroupMember -Identity $365Group.Id -Member $UserFromAD.UserPrincipalName -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction SilentlyContinue
     }

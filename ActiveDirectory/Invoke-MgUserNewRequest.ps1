@@ -242,6 +242,22 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     ## Creates OneDrive
     Request-SPOPersonalSite -UserEmails $NewUserEmail -NoWait
+
+    ## Add user to KnowBe4 Sync App
+    $MgUser = Get-MgUser -UserId $NewUserEmail
+
+    $userId = $MgUser.Id
+    $app_name = "KnowBe4 Security Awareness Training"
+    $app_role_name = "User"
+    $sp = Get-MgServicePrincipal -Filter "displayName eq '$app_name'"
+
+    $params = @{
+       "PrincipalId" =$userId
+      "ResourceId" =$sp.Id
+      "AppRoleId" =($sp.AppRoles | Where-Object { $_.DisplayName -eq $app_role_name }).Id
+    }
+
+    New-MgUserAppRoleAssignment -UserId $userId -BodyParameter $params | Format-List Id, AppRoleId, CreationTime, PrincipalDisplayName, PrincipalId, PrincipalType, ResourceDisplayName, ResourceId
     
     #Adds user to All Company group.
     New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'All Company'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
