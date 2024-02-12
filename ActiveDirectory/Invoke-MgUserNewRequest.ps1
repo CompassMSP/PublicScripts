@@ -13,6 +13,7 @@
 # 06-27-2022                 1.3         Change Group Lookup and Member Add
 # 09-29-2022                 1.4         Add fax attributes copy
 # 10-07-2022                 1.5         Add check for duplicate SamAccountName attributes
+# 02-12-2024                 1.6         Add AppRoleAssignment for KnowBe4 SCIM App
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -55,7 +56,7 @@ IF ([string]::IsNullOrEmpty($Phone)) {
 if ($SkipAz -ne 'y') {
     Write-Output 'Logging into 365 services.'
     Connect-ExchangeOnline
-    Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All", "Organization.Read.All"
+    Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All", "Organization.Read.All", "AppRoleAssignment.ReadWrite.All"
     Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
 }
 
@@ -243,7 +244,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     ## Creates OneDrive
     Request-SPOPersonalSite -UserEmails $NewUserEmail -NoWait
 
-    ## Add user to KnowBe4 Sync App
+    ## Add user to KnowBe4 SCIM App
     $MgUser = Get-MgUser -UserId $NewUserEmail
 
     $userId = $MgUser.Id

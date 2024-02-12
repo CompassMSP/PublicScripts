@@ -13,7 +13,7 @@
 # 06-28-2022                    1.3         Add removal of manager from disabled user and optimization changes
 # 07-06-2022                    1.4         Improved readability and export for user groups
 # 08-02-2023                    1.5         Added OneDrive access grant
-#
+# 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -69,7 +69,7 @@ if ($DisabledOUs.count -gt 0) {
 Write-Host "Logging into Azure services. You should get 3 prompts." 
 
 Connect-ExchangeOnline
-Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All", "Device.ReadWrite.All"
+Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All", "Device.ReadWrite.All", "AppRoleAssignment.ReadWrite.All"
 Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
@@ -224,7 +224,7 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
     Read-Host 'Please copy the OneDrive URL. Press any key to continue'
  }
 
-## Remove user from KnowBe4 Sync App
+## Remove user from KnowBe4 SCIM App
 $MgUser = Get-MgUser -UserId $NewUserEmail
 
 $KnowBe4App = Get-mgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object {$_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f'} 
