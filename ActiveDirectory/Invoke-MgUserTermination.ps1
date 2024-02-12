@@ -227,7 +227,7 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
 ## Remove user from KnowBe4 SCIM App
 $MgUser = Get-MgUser -UserId $NewUserEmail
 
-$KnowBe4App = Get-mgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object {$_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f'} 
+$KnowBe4App = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object {$_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f'} 
 
 Remove-MgUserAppRoleAssignment -AppRoleAssignmentID $KnowBe4App.Id -UserId $MgUser.Id
 
