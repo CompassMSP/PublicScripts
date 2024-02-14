@@ -14,6 +14,7 @@
 # 09-29-2022                 1.4         Add fax attributes copy
 # 10-07-2022                 1.5         Add check for duplicate SamAccountName attributes
 # 02-12-2024                 1.6         Add AppRoleAssignment for KnowBe4 SCIM App
+# 02-14-2024                 1.7         Fix issues with copy groups function
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -63,8 +64,7 @@ if ($SkipAz -ne 'y') {
 if ($Sku) { 
     try { 
         $GetLic = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) } -ErrorAction stop
-    }
-    catch { 
+    } catch { 
         Write-Output "License Sku could not be found. Or no Sku was selected."
         $Sku = $NULL
     }
@@ -89,8 +89,7 @@ try {
         Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes."
         exit
     } 
-}
-catch {
+} catch {
     Write-Output "Could not find user $($UserToCopy) in AD to copy from."
     exit
 }
@@ -141,8 +140,7 @@ try {
         -Path $($UserToCopyUPN.DistinguishedName.split(",", 2)[1]) `
         -Instance $UserToCopyUPN `
         -Enabled $True
-}
-catch { 
+} catch { 
     Write-Host "New User creation was not successful."
     exit
 }
@@ -171,13 +169,11 @@ do {
         $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
         Write-Output "User $NewUser has synced to Azure. Script will now continue."
         $Stoploop = $true
-    }
-    catch {
+    } catch {
         if ($Retrycount -gt 3) {
             Write-Host "Could not sync AD User to 365 after 3 retries."
             $Stoploop = $true
-        }
-        else {
+        } else {
             Write-Host "Could not sync AD User to 365 retrying in 60 seconds..."
             Start-Sleep -Seconds 60
             $Retrycount = $Retrycount + 1
@@ -216,21 +212,29 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         try {
             Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $GetLic.SkuId } -RemoveLicenses @() -ErrorAction stop
             Write-Output 'License added.'
-        }
-        catch {
+        } catch {
             Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal.'
             exit
         }
     }
 
-    $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id  | Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL } | `
-        ForEach-Object { @{ GroupId = $_.Id } } | Get-MgGroup | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id
+    $GroupId = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
+        Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL } 
+
+    $All365Groups = $GroupId | ForEach-Object { Get-MgGroup -GroupId $_.Id | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id }
 
     Foreach ($365Group in $All365Groups) {
         try {
             New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id -ErrorAction Stop  
+        } catch {
+            Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false
         }
-        catch {
+    }
+
+    Foreach ($365Group in $All365Groups) {
+        try {
+            New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id -ErrorAction Stop  
+        } catch {
             Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false
         }
     }
@@ -253,9 +257,9 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     $sp = Get-MgServicePrincipal -Filter "displayName eq '$app_name'"
 
     $params = @{
-       "PrincipalId" =$userId
-      "ResourceId" =$sp.Id
-      "AppRoleId" =($sp.AppRoles | Where-Object { $_.DisplayName -eq $app_role_name }).Id
+        "PrincipalId" = $userId
+        "ResourceId"  = $sp.Id
+        "AppRoleId"   = ($sp.AppRoles | Where-Object { $_.DisplayName -eq $app_role_name }).Id
     }
 
     New-MgUserAppRoleAssignment -UserId $userId -BodyParameter $params | Format-List Id, AppRoleId, CreationTime, PrincipalDisplayName, PrincipalId, PrincipalType, ResourceDisplayName, ResourceId
@@ -291,8 +295,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             try {
                 Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $_.SkuId } -RemoveLicenses @() -ErrorAction stop
                 Write-Output "$($_.SkuPartNumber) License added."
-            }
-            catch {
+            } catch {
                 Write-Output "$($_.SkuPartNumber) License could not be added."
             }   
         }
