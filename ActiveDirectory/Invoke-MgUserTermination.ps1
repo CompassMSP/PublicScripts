@@ -14,6 +14,7 @@
 # 07-06-2022                    1.4         Improved readability and export for user groups
 # 08-02-2023                    1.5         Added OneDrive access grant
 # 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
+# 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -67,9 +68,16 @@ if ($DisabledOUs.count -gt 0) {
 #endregion pre-check
 
 Write-Host "Logging into Azure services. You should get 3 prompts." 
-
-Connect-ExchangeOnline
-Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All", "Device.ReadWrite.All", "AppRoleAssignment.ReadWrite.All"
+$Scopes = @(
+    "Directory.ReadWrite.All",
+    "User.ReadWrite.All",
+    "Directory.AccessAsUser.All",
+    "Group.ReadWrite.All",
+    "GroupMember.Read.All",
+    "Device.ReadWrite.All",
+    "AppRoleAssignment.ReadWrite.All")
+Connect-MgGraph -Scopes $Scopes -NoWelcome
+Connect-ExchangeOnline -ShowBanner:$false
 Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
@@ -107,15 +115,15 @@ if ($Confirmation -ne 'y') {
 Write-Host "Performing Active Directory Steps" 
 
 $SetADUserParams = @{
-    Identity     = $UserFromAD.SamAccountName
-    Description  = "Disabled on $(Get-Date -Format 'FileDate')"
-    Enabled      = $False
-    Replace      = @{msExchHideFromAddressLists=$true}
-    Manager      = $NULL
-    Office       = $NULL
-    Title        = $NULL
-    Department   = $NULL
-    City         = $NULL
+    Identity    = $UserFromAD.SamAccountName
+    Description = "Disabled on $(Get-Date -Format 'FileDate')"
+    Enabled     = $False
+    Replace     = @{msExchHideFromAddressLists = $true }
+    Manager     = $NULL
+    Office      = $NULL
+    Title       = $NULL
+    Department  = $NULL
+    City        = $NULL
 }
 
 Set-ADUser @SetADUserParams
@@ -161,11 +169,10 @@ if ($UserAccessConfirmation -eq 'y') {
     try { 
         $GetAccessUser = get-mailbox $UserAccess -ErrorAction Stop
         $GetAccessUserCheck = 'yes'
+    } catch { 
+        Write-Host "User mailbox $UserAccess not found. Skipping access rights setup" -ForegroundColor Red -BackgroundColor Black
+        $GetAccessUserCheck = 'no'
     }
-    catch { 
-	Write-Host "User mailbox $UserAccess not found. Skipping access rights setup" -ForegroundColor Red -BackgroundColor Black
-	$GetAccessUserCheck = 'no'
-	}
 
 } Else {
     Write-Host "Skipping access rights setup"
@@ -173,7 +180,8 @@ if ($UserAccessConfirmation -eq 'y') {
 
 if ($GetAccessUserCheck -eq 'yes') { 
     Write-Host "Adding Full Access permissions for $($GetAccessUser.PrimarySmtpAddress) to $($UserFromAD.UserPrincipalName)" 
-    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $UserAccess -AccessRights FullAccess -InheritanceType All -AutoMapping $true }
+    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $UserAccess -AccessRights FullAccess -InheritanceType All -AutoMapping $true 
+}
 
 # Set Mailbox forwarding address 
 $UserFwdConfirmation = Read-Host -Prompt "Would you like to forward users email? (Y/N)"
@@ -185,11 +193,10 @@ if ($UserFwdConfirmation -eq 'y') {
         $GetFWDUser = get-mailbox $UserFWD -ErrorAction Stop 
         $GetFWDUserCheck = 'yes'
         Write-Host "Applying forward from $($UserFromAD.UserPrincipalName) to $($GetFWDUser.PrimarySmtpAddress)" 
+    } catch { 
+        Write-Host "User mailbox $UserFWD not found. Skipping mailbox forward" -ForegroundColor Red -BackgroundColor Black
+        $GetFWDUserCheck = 'no'
     }
-    catch { 
-	Write-Host "User mailbox $UserFWD not found. Skipping mailbox forward" -ForegroundColor Red -BackgroundColor Black
-	$GetFWDUserCheck = 'no'
-	}
     
 } Else {
     Write-Host "Skipping mailbox forwarding" 
@@ -207,11 +214,10 @@ if ($SPOAccessConfirmation -eq 'y') {
         $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop 
         $GetUserOneDriveAccessCheck = 'yes'
         Write-Host "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)" 
+    } catch { 
+        Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
+        $GetUserOneDriveAccessCheck = 'no'
     }
-    catch { 
-	Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
-	$GetUserOneDriveAccessCheck = 'no'
-	}
     
 } Else {
     Write-Host "Skipping OneDrive access grant" 
@@ -222,18 +228,21 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
     Set-SPOUser -Site $UserOneDriveURL -LoginName $GrantUserOneDriveAccess -IsSiteCollectionAdmin:$true
     $UserOneDriveURL
     Read-Host 'Please copy the OneDrive URL. Press any key to continue'
- }
+}
 
 ## Remove user from KnowBe4 SCIM App
 $MgUser = Get-MgUser -UserId $NewUserEmail
 
-$KnowBe4App = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object {$_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f'} 
+$KnowBe4App = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object { $_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f' } 
 
-Remove-MgUserAppRoleAssignment -AppRoleAssignmentID $KnowBe4App.Id -UserId $MgUser.Id
+Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $KnowBe4App.Id -UserId $MgUser.Id
 
 #Find Azure only groups
-$AllAzureGroups = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName | Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL} | `
-    ForEach-Object { @{ GroupId = $_.Id } } | Get-MgGroup | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id
+
+$GroupId = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName | `
+Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL }
+    
+$AllAzureGroups = $GroupId | ForEach-Object { Get-MgGroup -GroupId $_.Id | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id }
 
 $AllAzureGroups | Export-Csv c:\temp\terminated_users_exports\$($user)_Groups_Id.csv -NoTypeInformation
     
@@ -257,8 +266,8 @@ Write-Host "Export User Licenses Completed. Path: C:\temp\terminated_users_expor
 Write-Host "Starting removal of user licenses." 
 
 Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Where-Object `
-   {($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
-   | ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId -ErrorAction Stop }
+{ ($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
+| ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId -ErrorAction Stop }
 
 Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId }
 

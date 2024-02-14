@@ -14,7 +14,7 @@
 # 09-29-2022                 1.4         Add fax attributes copy
 # 10-07-2022                 1.5         Add check for duplicate SamAccountName attributes
 # 02-12-2024                 1.6         Add AppRoleAssignment for KnowBe4 SCIM App
-# 02-14-2024                 1.7         Fix issues with copy groups function
+# 02-14-2024                 1.7         Fix issues with copy groups function and code cleanup
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -56,8 +56,16 @@ IF ([string]::IsNullOrEmpty($Phone)) {
 
 if ($SkipAz -ne 'y') {
     Write-Output 'Logging into 365 services.'
-    Connect-ExchangeOnline
-    Connect-MgGraph -Scopes "Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All", "Group.ReadWrite.All", "GroupMember.Read.All", "Organization.Read.All", "AppRoleAssignment.ReadWrite.All"
+    $Scopes = @(
+        "Directory.ReadWrite.All",
+        "User.ReadWrite.All",
+        "Directory.AccessAsUser.All",
+        "Group.ReadWrite.All",
+        "GroupMember.Read.All", 
+        "Organization.Read.All",
+        "AppRoleAssignment.ReadWrite.All")
+    Connect-MgGraph -Scopes $Scopes -NoWelcome
+    Connect-ExchangeOnline -ShowBanner:$false 
     Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
 }
 
@@ -227,15 +235,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         try {
             New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id -ErrorAction Stop  
         } catch {
-            Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false
-        }
-    }
-
-    Foreach ($365Group in $All365Groups) {
-        try {
-            New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id -ErrorAction Stop  
-        } catch {
-            Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false
+            Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction 'SilentlyContinue'
         }
     }
 
