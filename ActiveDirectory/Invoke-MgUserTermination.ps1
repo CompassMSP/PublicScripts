@@ -147,15 +147,16 @@ Revoke-MgUserSignInSession -UserId $UserFromAD.UserPrincipalName -ErrorAction Si
 Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue } 
 
 #Disable AzureAD registered devices
-$termUserDevices = Get-MgUserRegisteredDevice -UserId $UserFromAD.UserPrincipalName | ForEach-Object { 
-    @{ DeviceId = $_.Id } } | Get-MgDevice | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled
+$termUserDeviceId = Get-MgUserRegisteredDevice -UserId $UserFromAD.UserPrincipalName
 
-$termUserDevices | ForEach-Object {
+$termUserDeviceId | ForEach-Object {
     $params = @{
         AccountEnabled = $false
     }
     Update-MgDevice -DeviceId $_.Id -BodyParameter $params
 }
+
+$termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled } 
 
 #Change mailbox to shared
 $365Mailbox | Set-Mailbox -Type Shared
@@ -231,7 +232,7 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
 }
 
 ## Remove user from KnowBe4 SCIM App
-$MgUser = Get-MgUser -UserId $NewUserEmail
+$MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName
 
 $KnowBe4App = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object { $_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f' } 
 
