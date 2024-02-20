@@ -15,6 +15,7 @@
 # 08-02-2023                    1.5         Added OneDrive access grant
 # 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
 # 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
+# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function 
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -240,10 +241,14 @@ Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $KnowBe4App.Id -UserId $MgUs
 
 #Find Azure only groups
 
-$GroupId = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName | `
-Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL }
+#$GroupId = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName | `
+#Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL }
     
-$AllAzureGroups = $GroupId | ForEach-Object { Get-MgGroup -GroupId $_.Id | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id }
+#$AllAzureGroups = $GroupId | ForEach-Object { Get-MgGroup -GroupId $_.Id | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id }
+
+$AllAzureGroups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.UserPrincipalName).Id | `
+    Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
+    Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
 
 $AllAzureGroups | Export-Csv c:\temp\terminated_users_exports\$($user)_Groups_Id.csv -NoTypeInformation
     

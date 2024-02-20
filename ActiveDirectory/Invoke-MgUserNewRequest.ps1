@@ -1,20 +1,21 @@
 #requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync -RunAsAdministrator
 
 <#Author       : Chris Williams
-# Creation Date: 3-02-2022
+# Creation Date: 03-02-2022
 # Usage        : Copies user template and creates new user with groups and licenses 
 
 #********************************************************************************
 # Date                     Version      Changes
 #--------------------------------------------------------------------------------
-# 03-02-2022                 1.0         Initial Version
-# 03-04-2022                 1.1         Add Checks For Duplicate Attributes 
-# 03-06-2022                 1.2         Add Check Loop for AD Sync
-# 06-27-2022                 1.3         Change Group Lookup and Member Add
-# 09-29-2022                 1.4         Add fax attributes copy
-# 10-07-2022                 1.5         Add check for duplicate SamAccountName attributes
-# 02-12-2024                 1.6         Add AppRoleAssignment for KnowBe4 SCIM App
-# 02-14-2024                 1.7         Fix issues with copy groups function and code cleanup
+# 03-02-2022                    1.0         Initial Version
+# 03-04-2022                    1.1         Add Checks For Duplicate Attributes 
+# 03-06-2022                    1.2         Add Check Loop for AD Sync
+# 06-27-2022                    1.3         Change Group Lookup and Member Add
+# 09-29-2022                    1.4         Add fax attributes copy
+# 10-07-2022                    1.5         Add check for duplicate SamAccountName attributes
+# 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
+# 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
+# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function 
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -226,10 +227,14 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
-    $GroupId = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
-        Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL } 
+    #$GroupId = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
+    #    Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL } 
 
-    $All365Groups = $GroupId | ForEach-Object { Get-MgGroup -GroupId $_.Id | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id }
+    # $All365Groups = $GroupId | ForEach-Object { Get-MgGroup -GroupId $_.Id | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id }
+
+    $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
+        Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
+        Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
 
     Foreach ($365Group in $All365Groups) {
         try {
