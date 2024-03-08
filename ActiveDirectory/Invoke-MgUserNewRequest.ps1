@@ -100,7 +100,7 @@ if (!$Sku) {
         ($_.SkuPartNumber -eq 'ENTERPRISEPACK')
     }
 
-    $SelectLicense = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
+    $selectLicense = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
         ForEach-Object {
         [PSCustomObject]@{
             DisplayName   = switch -Regex ($_.SkuPartNumber) {
@@ -354,7 +354,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             ($_.SkuPartNumber -notlike 'PHONESYSTEM_VIRTUALUSER')
         }
     
-        $SelectLicense2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
+        $selectLicense2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
             ForEach-Object {
             [PSCustomObject]@{
                 DisplayName   = switch -Regex ($_.SkuPartNumber) {
