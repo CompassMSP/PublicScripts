@@ -73,7 +73,7 @@ if ($SkipAz -ne 'y') {
 
 if ($Sku) { 
     try { 
-        $GetLic = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) } -ErrorAction stop
+        $getLic = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) } -ErrorAction stop
     } catch { 
         Write-Output "License Sku could not be found. Or no Sku was selected."
         $Sku = $NULL
@@ -112,8 +112,9 @@ if (!$Sku) {
             }
             SkuPartNumber = $_.SkuPartNumber
             LicenseID     = $_.SkuId
-            NumberTotal   = $_.ActiveUnits
-            NumberUsed    = $_.ConsumedUnits
+            #NumberTotal   = $_.ActiveUnits
+            #NumberUsed    = $_.ConsumedUnits
+            Available     = ($_.ActiveUnits - $_.ConsumedUnits)
         }
     } | Sort-Object DisplayName
     
@@ -121,10 +122,10 @@ if (!$Sku) {
         OutputMode = 'Single'
         Title      = 'Please select a license and click OK'
     }
-            
-    $GetLic = $SelectLicense | Out-GridView @GridArguments | ForEach-Object {
-        $_
-    } 
+    
+    $selectLicenseTEMP = $selectLicense | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments 
+    $getLic = $selectLicense | Where-Object { $_.DisplayName -in $selectLicenseTEMP.DisplayName }
+
 }
 
 try {
@@ -252,9 +253,9 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     Write-Output 'Adding Office 365 Groups to new user.'
 
-    if ($GetLic) { 
+    if ($getLic) { 
         try {
-            Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $GetLic.SkuId } -RemoveLicenses @() -ErrorAction stop
+            Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.SkuId } -RemoveLicenses @() -ErrorAction stop
             Write-Output 'License added.'
         } catch {
             Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal.'
@@ -371,8 +372,9 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
                 }
                 SkuPartNumber = $_.SkuPartNumber
                 LicenseID     = $_.SkuId
-                NumberTotal   = $_.ActiveUnits
-                NumberUsed    = $_.ConsumedUnits
+                #NumberTotal   = $_.ActiveUnits
+                #NumberUsed    = $_.ConsumedUnits
+                Available     = ($_.ActiveUnits - $_.ConsumedUnits)
             }
         } | Sort-Object DisplayName
     
@@ -381,9 +383,8 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             Title      = 'Please select licenses and click OK (Hold CTRL to select multiple licenses)'
         }
     
-        $GetLic2 = $SelectLicense2 | Out-GridView @GridArguments | ForEach-Object {
-            $_
-        }
+        $selectLicenseTEMP2 = $selectLicense2 | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments 
+        $getLic2 = $selectLicense2 | Where-Object { $_.DisplayName -in $selectLicenseTEMP2.DisplayName }
     }
 
     if ($GetLic2) { 
