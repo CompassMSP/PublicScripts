@@ -16,6 +16,7 @@
 # 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
 # 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
 # 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function 
+# 03-08-2024                    1.9         Cleaned up licenses select display output
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -79,15 +80,49 @@ if ($Sku) {
     }
 }
 
-if (!$Sku) { 
-    $License = Get-MgSubscribedSku | Select-Object SkuPartNumber, ConsumedUnits, SkuId | Where-Object { $_.SkuPartNumber -eq 'EXCHANGESTANDARD' -or $_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS' -or $_.SkuPartNumber -eq 'SPE_E3' -or $_.SkuPartNumber -eq 'SPB' -or $_.SkuPartNumber -eq 'ENTERPRISEPACK' }
+if (!$Sku) {
 
+    $SelectObjectPropertyList = @(
+        "SkuPartNumber"
+        "SkuId"
+        @{
+            n = "ActiveUnits"
+            e = { ($_.PrepaidUnits).Enabled }
+        }
+        "ConsumedUnits"
+    )
+
+    $WhereObjectFilter = {
+        ($_.SkuPartNumber -eq 'EXCHANGESTANDARD') -or 
+        ($_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS') -or 
+        ($_.SkuPartNumber -eq 'SPE_E3') -or 
+        ($_.SkuPartNumber -eq 'SPB') -or 
+        ($_.SkuPartNumber -eq 'ENTERPRISEPACK')
+    }
+
+    $SelectLicense = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
+        ForEach-Object {
+        [PSCustomObject]@{
+            DisplayName   = switch -Regex ($_.SkuPartNumber) {
+                "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
+                "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
+                "SPE_E3" { "Microsoft 365 E3" }
+                "SPB" { "Microsoft 365 Business Premium" }
+                "ENTERPRISEPACK" { "Office 365 E3" }
+            }
+            SkuPartNumber = $_.SkuPartNumber
+            LicenseID     = $_.SkuId
+            NumberTotal   = $_.ActiveUnits
+            NumberUsed    = $_.ConsumedUnits
+        }
+    } | Sort-Object DisplayName
+    
     $GridArguments = @{
         OutputMode = 'Single'
         Title      = 'Please select a license and click OK'
     }
-        
-    $GetLic = $License | Out-GridView @GridArguments | ForEach-Object {
+            
+    $GetLic = $SelectLicense | Out-GridView @GridArguments | ForEach-Object {
         $_
     } 
 }
@@ -283,16 +318,72 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     if ($AddLic -ne 'y') { Write-Output 'Goodbye!' }
 
     if ($AddLic -eq 'y') { 
-        $License2 = Get-MgSubscribedSku | Select-Object SkuPartNumber, ConsumedUnits, SkuId
 
-        $GridArguments = @{
-            OutputMode = 'Multiple'
-            Title      = 'Please select licenses and click OK'
+        $SelectObjectPropertyList = @(
+            "SkuPartNumber"
+            "SkuId"
+            @{
+                n = "ActiveUnits"
+                e = { ($_.PrepaidUnits).Enabled }
+            }
+            "ConsumedUnits"
+        )
+    
+        $WhereObjectFilter = {
+            ($_.SkuPartNumber -notlike 'EXCHANGESTANDARD') -and 
+            ($_.SkuPartNumber -notlike 'O365_BUSINESS_ESSENTIALS') -and 
+            ($_.SkuPartNumber -notlike 'SPE_E3') -and 
+            ($_.SkuPartNumber -notlike 'SPB') -and
+            ($_.SkuPartNumber -notlike 'ENTERPRISEPACK') -and
+            ($_.SkuPartNumber -notlike 'PROJECT_MADEIRA_PREVIEW_IW_SKU') -and
+            ($_.SkuPartNumber -notlike 'POWERAUTOMATE_ATTENDED_RPA') -and
+            ($_.SkuPartNumber -notlike 'RMSBASIC') -and
+            ($_.SkuPartNumber -notlike 'MCOPSTNC') -and
+            ($_.SkuPartNumber -notlike 'CCIBOTS_PRIVPREV_VIRAL') -and
+            ($_.SkuPartNumber -notlike 'MCOPSTN1') -and
+            ($_.SkuPartNumber -notlike 'WINDOWS_STORE') -and
+            ($_.SkuPartNumber -notlike 'STREAM') -and
+            ($_.SkuPartNumber -notlike 'POWERAPPS_DEV') -and
+            ($_.SkuPartNumber -notlike 'RIGHTSMANAGEMENT_ADHOC') -and
+            ($_.SkuPartNumber -notlike 'MCOMEETADV') -and
+            ($_.SkuPartNumber -notlike 'MEETING_ROOM') -and
+            ($_.SkuPartNumber -notlike 'VISIO_PLAN1_DEPT') -and
+            ($_.SkuPartNumber -notlike 'FLOW_FREE') -and
+            ($_.SkuPartNumber -notlike 'MICROSOFT_BUSINESS_CENTER') -and
+            ($_.SkuPartNumber -notlike 'PHONESYSTEM_VIRTUALUSER')
         }
     
-        $GetLic2 = $License2 | Out-GridView @GridArguments | ForEach-Object {
+        $SelectLicense2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
+            ForEach-Object {
+            [PSCustomObject]@{
+                DisplayName   = switch -Regex ($_.SkuPartNumber) {
+                    "PROJECT_P1" { "Project Plan 1" }
+                    "PROJECTPROFESSIONAL" { "Project Plan 3" }
+                    "VISIOCLIENT" { "Visio Plan 2" }
+                    "Microsoft_Teams_Audio_Conferencing_select_dial_out" { "Microsoft Teams Audio Conferencing with dial-out to USA/CAN" }
+                    "POWER_BI_PRO" { "Power BI Pro" }
+                    "Microsoft_365_Copilot" { "Microsoft 365 Copilot" }
+                    "Microsoft_Teams_Premium" { "Microsoft Teams Premium" }
+                    "MCOEV" { "Microsoft Teams Phone Standard" }
+                    "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
+                    "POWER_BI_STANDARD" { "Power BI Standard" }
+                    "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
+                }
+                SkuPartNumber = $_.SkuPartNumber
+                LicenseID     = $_.SkuId
+                NumberTotal   = $_.ActiveUnits
+                NumberUsed    = $_.ConsumedUnits
+            }
+        } | Sort-Object DisplayName
+    
+        $GridArguments = @{
+            OutputMode = 'Multiple'
+            Title      = 'Please select licenses and click OK (Hold CTRL to select multiple licenses)'
+        }
+    
+        $GetLic2 = $SelectLicense2 | Out-GridView @GridArguments | ForEach-Object {
             $_
-        } 
+        }
     }
 
     if ($GetLic2) { 
