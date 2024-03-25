@@ -134,22 +134,22 @@ Function Update-ADPasswordProtection {
         exit 
     }
     #>
+
+    $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
+
+    $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" }
+    $json = $latestRelease.Content | ConvertFrom-Json
+    $latestVersion = $json.tag_name
+    $BuildVersion = $latestVersion.Replace('v','')
+    $BuildExe = $latestVersion.Replace('v', 'LithnetPasswordProtection-') + '.exe'
+    $BuildURI = "https://github.com/lithnet/ad-password-protection/releases/download/$latestVersion/" + $BuildExe
     
-    if ((Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq "Lithnet Password Protection for Active Directory" }).Version -lt '1.1.53.0') {
-        $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
-
-        $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" }
-        $json = $latestRelease.Content | ConvertFrom-Json
-        $latestVersion = $json.tag_name
-
-        $BuildExe = $latestVersion.Replace('v', 'LithnetPasswordProtection-') + '.exe'
-        $BuildURI = "https://github.com/lithnet/ad-password-protection/releases/download/$latestVersion/" + $BuildExe
+    if ((Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq "Lithnet Password Protection for Active Directory" }).Version -lt "$BuildVersion") {
 
         (New-Object System.Net.WebClient).DownloadFile("$BuildURI", "c:\temp\$BuildExe")
 
-
-        Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection MSI'
-        Start-Process -FilePath C:\temp\$BuildExe -ArgumentList "/exenoui" -Wait;
+        Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection'
+        Start-Process -FilePath C:\temp\$BuildExe -Wait;
 
         Sync-HashesFromHibp
 

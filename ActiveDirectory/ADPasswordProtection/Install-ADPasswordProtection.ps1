@@ -26,7 +26,7 @@ Function Install-ADPasswordProtection {
     "From" email for notifications
 
     .EXAMPLE
-    Install-ADPasswordProtection -StoreFilesInDBFormatLink 'https://example.com/ADPasswordStore.zip' -NotificationEmail 'alerts@example.com' -SMTPRelay 'example.mail.protection.outlook.com' -FromEmail 'ADPasswordNotifications@example.com'
+    Install-ADPasswordProtection -NotificationEmail 'alerts@example.com' -SMTPRelay 'example.mail.protection.outlook.com' -FromEmail 'ADPasswordNotifications@example.com'
 
     .LINK
     https://github.com/lithnet/ad-password-protection
@@ -39,10 +39,6 @@ Function Install-ADPasswordProtection {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true,
-            HelpMessage = 'https://example.com/ADPasswordStore.zip')]
-        [string]$StoreFilesInDBFormatLink,
-
-        [Parameter(Mandatory = $true,
             HelpMessage = 'example.mail.protection.outlook.com')]
         [string]$SMTPRelay,
 
@@ -53,8 +49,6 @@ Function Install-ADPasswordProtection {
         [string]$FromEmail
     )
 
-    $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
-    $PasswordProtectionMSIFile = 'C:\Windows\Temp\Lithnet.ActiveDirectory.PasswordProtection.msi'
     $GPOPath = 'C:\Windows\Temp\PasswordProtection.zip'
     $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
 
@@ -195,9 +189,7 @@ Function Install-ADPasswordProtection {
     Function Remove-OldFiles {
         $ItemsToDelete = @(
             $GPOPath,
-            $GPOFolder,
-            $StoreFilesInDBFormatFile,
-            $PasswordProtectionMSIFile
+            $GPOFolder
         )
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Deleting old files if they exist.'
@@ -213,23 +205,6 @@ Function Install-ADPasswordProtection {
         }
     }
 
-    Function Get-InstalledApplications {
-        $InstalledApplications = @()
-        $UninstallKeys = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
-        Foreach ($SubKey in $UninstallKeys) {
-
-            $DisplayName = (Get-ItemProperty -Path "Registry::$($SubKey.Name)" -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
-            if ([string]::IsNullOrEmpty($DisplayName)) {
-            } else {
-                $InstalledApplications += [PSCustomObject]@{
-                    DisplayName = $DisplayName
-                }
-            }
-        }
-
-        Return $InstalledApplications
-    }
-
     #Check if computer is a DC
     if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
         Write-Log -Level Info -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
@@ -238,7 +213,6 @@ Function Install-ADPasswordProtection {
 
     #region Check For Existing components
     $GPOExistsWithCorrectSettings = $false
-    $ADPasswordProtectionAlreadyInstalled = $false
 
     #Check for GPO
     if (Get-GPO -Name 'Password Protection' -ErrorAction SilentlyContinue) {
@@ -250,19 +224,6 @@ Function Install-ADPasswordProtection {
             Write-Log -Level Info -Path $LogDirectory -Message "The GPO $($GPOReport.GPO.Name) will not be created since it already exists"
         }
     }
-
-    #Check for app installed
-    if ((Get-InstalledApplications).displayName -contains 'Lithnet Password Protection for Active Directory') {
-        $ADPasswordProtectionAlreadyInstalled = $true
-        Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application is already installed on this computer"
-    }
-
-    #Check to see if DB files exist
-    if (Test-Path -Path 'C:\Program Files\Lithnet\Active Directory Password Protection\Store\v3\p\FFFF.db') {
-        Write-Log -Level Info -Path $LogDirectory -Message "The HIBP DB files already exist in the default location. Will now sync hashes from Hibp"
-        Sync-HashesFromHibp
-    }
-    #endregion Check For Existing components
 
     #Clean up any old files
     Remove-OldFiles
@@ -283,27 +244,26 @@ Function Install-ADPasswordProtection {
             New-Item -Path 'C:\Temp' -ItemType Directory
         }
 
-        #region DownloadInstallMSI
-        if (-not $ADPasswordProtectionAlreadyInstalled) {
-            $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
+        #region Download and Install
+        $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
 
-            $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" }
-            $json = $latestRelease.Content | ConvertFrom-Json
-            $latestVersion = $json.tag_name
+        $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" }
+        $json = $latestRelease.Content | ConvertFrom-Json
+        $latestVersion = $json.tag_name
 
-            $BuildExe = $latestVersion.Replace('v', 'LithnetPasswordProtection-') + '.exe'
-            $BuildURI = "https://github.com/lithnet/ad-password-protection/releases/download/$latestVersion/" + $BuildExe
+        $BuildExe = $latestVersion.Replace('v', 'LithnetPasswordProtection-') + '.exe'
+        $BuildURI = "https://github.com/lithnet/ad-password-protection/releases/download/$latestVersion/" + $BuildExe
 
-            (New-Object System.Net.WebClient).DownloadFile("$BuildURI", "c:\temp\$BuildExe")
+        (New-Object System.Net.WebClient).DownloadFile("$BuildURI", "c:\temp\$BuildExe")
  
-            Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection MSI'
+        Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection'
 
-            Start-Process -FilePath C:\temp\$BuildExe -ArgumentList "/exenoui" -Wait;
+        Start-Process -FilePath C:\temp\$BuildExe -Wait;
 
-            Sync-HashesFromHibp
+        Sync-HashesFromHibp
 
-            Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
-        }
+        Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
+        
         #endregion DownloadInstallMSI
 
         #region ImportGPO
