@@ -149,7 +149,6 @@ Function Update-ADPasswordProtection {
 
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection MSI'
-        Start-Process msiexec.exe -Wait -ArgumentList "/i $($BuildExe) /exenoui" -PassThru
         Start-Process -FilePath C:\temp\$BuildExe -ArgumentList "/exenoui" -Wait;
 
         Sync-HashesFromHibp

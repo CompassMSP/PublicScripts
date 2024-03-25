@@ -295,10 +295,10 @@ Function Install-ADPasswordProtection {
             $BuildURI = "https://github.com/lithnet/ad-password-protection/releases/download/$latestVersion/" + $BuildExe
 
             (New-Object System.Net.WebClient).DownloadFile("$BuildURI", "c:\temp\$BuildExe")
-
-
+ 
             Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection MSI'
-            Start-Process msiexec.exe -Wait -ArgumentList "/i $($BuildExe) /exenoui /qn /norestart " -PassThru
+
+            Start-Process -FilePath C:\temp\$BuildExe -ArgumentList "/exenoui" -Wait;
 
             Sync-HashesFromHibp
 
