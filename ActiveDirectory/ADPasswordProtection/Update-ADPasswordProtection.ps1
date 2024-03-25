@@ -126,7 +126,8 @@ Function Update-ADPasswordProtection {
         exit
     }
     
-   <# #Check if DC has enough free space
+   <#
+    #Check if DC has enough free space
     if ((Get-PSDrive C).free -lt 30GB) {
         Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 30 GB free. Script will exit'
         Start-Process $LogDirectory
@@ -148,7 +149,8 @@ Function Update-ADPasswordProtection {
 
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection MSI'
-        Start-Process msiexec.exe -Wait -ArgumentList "/i $($BuildExe) /exenoui /qn /norestart " -PassThru
+        Start-Process msiexec.exe -Wait -ArgumentList "/i $($BuildExe) /exenoui" -PassThru
+        Start-Process -FilePath C:\temp\$BuildExe -ArgumentList "/exenoui" -Wait;
 
         Sync-HashesFromHibp
 
