@@ -126,12 +126,13 @@ Function Update-ADPasswordProtection {
         exit
     }
     
-    #Check if DC has enough free space
+   <# #Check if DC has enough free space
     if ((Get-PSDrive C).free -lt 30GB) {
         Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 30 GB free. Script will exit'
         Start-Process $LogDirectory
         exit 
     }
+    #>
     
     if ((Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq "Lithnet Password Protection for Active Directory" }).Version -lt '1.1.53.0') {
         $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
