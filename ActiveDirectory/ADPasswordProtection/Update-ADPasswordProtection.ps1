@@ -16,112 +16,107 @@ Function Update-ADPasswordProtection {
     
     [CmdletBinding()]
     param (
-    [Parameter(Mandatory = $true,
-        HelpMessage = 'example.mail.protection.outlook.com')]
-    [string]$SMTPRelay,
-
-    [Parameter(Mandatory = $true)]
-    [string]$NotificationEmail,
-
-    [Parameter(Mandatory = $true)]
-    [string]$FromEmail
-    )
-    
-    $StoreFilesInDBFormatLink = 'https://rmm.compassmsp.com/softwarepackages/ADPasswordProtectionStore.zip'
-    $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
-    $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
-    $PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection'
-    
-    function Write-Log {
-    [CmdletBinding()]
-    Param
-    (
         [Parameter(Mandatory = $true,
-            ValueFromPipelineByPropertyName = $true)]
-        [ValidateNotNullOrEmpty()]
-        [Alias("LogContent")]
-        [string]$Message,
+            HelpMessage = 'example.mail.protection.outlook.com')]
+        [string]$SMTPRelay,
 
         [Parameter(Mandatory = $true)]
-        [Alias('LogPath')]
-        [string]$Path,
+        [string]$NotificationEmail,
 
-        [Parameter(Mandatory = $false)]
-        [ValidateSet("Error", "Warn", "Info")]
-        [string]$Level = "Info",
-
-        [Parameter(Mandatory = $false)]
-        [switch]$NoClobber,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$DailyMode
+        [Parameter(Mandatory = $true)]
+        [string]$FromEmail
     )
+    
+    $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
+    
+    function Write-Log {
+        [CmdletBinding()]
+        Param
+        (
+            [Parameter(Mandatory = $true,
+                ValueFromPipelineByPropertyName = $true)]
+            [ValidateNotNullOrEmpty()]
+            [Alias("LogContent")]
+            [string]$Message,
 
-    Begin {
-        # Set VerbosePreference to Continue so that verbose messages are displayed.
-        $VerbosePreference = 'Continue'
-        if ($DailyMode) {
-            $Path = $Path.Replace('.', "-$(Get-Date -UFormat "%Y%m%d").")
-        }
-    }
-    Process {
-        # If the file already exists and NoClobber was specified, do not write to the log.
-        if ((Test-Path $Path) -AND $NoClobber) {
-            Write-Error "Log file $Path already exists, and you specified NoClobber. Either delete the file or specify a different name."
-            Return
-        }
+            [Parameter(Mandatory = $true)]
+            [Alias('LogPath')]
+            [string]$Path,
 
-        # If attempting to write to a log file in a folder/path that doesn't exist create the file including the path.
-        elseif (!(Test-Path $Path)) {
-            Write-Verbose "Creating $Path."
-            New-Item $Path -Force -ItemType File
-        }
+            [Parameter(Mandatory = $false)]
+            [ValidateSet("Error", "Warn", "Info")]
+            [string]$Level = "Info",
 
-        else {
-            # Nothing to see here yet.
-        }
+            [Parameter(Mandatory = $false)]
+            [switch]$NoClobber,
 
-        # Format Date for our Log File
-        $FormattedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            [Parameter(Mandatory = $false)]
+            [switch]$DailyMode
+        )
 
-        # Write message to error, warning, or verbose pipeline and specify $LevelText
-        switch ($Level) {
-            'Error' {
-                Write-Error $Message
-                $LevelText = 'ERROR:'
-            }
-            'Warn' {
-                Write-Warning $Message
-                $LevelText = 'WARNING:'
-            }
-            'Info' {
-                Write-Verbose $Message
-                $LevelText = 'INFO:'
+        Begin {
+            # Set VerbosePreference to Continue so that verbose messages are displayed.
+            $VerbosePreference = 'Continue'
+            if ($DailyMode) {
+                $Path = $Path.Replace('.', "-$(Get-Date -UFormat "%Y%m%d").")
             }
         }
-
-        # Write log entry to $Path
-        #try to write to the log file. Rety if it is locked
-        $StopWriteLogloop = $false
-        [int]$WriteLogRetrycount = "0"
-        do {
-            try {
-                "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append -ErrorAction Stop
-                $StopWriteLogloop = $true
+        Process {
+            # If the file already exists and NoClobber was specified, do not write to the log.
+            if ((Test-Path $Path) -AND $NoClobber) {
+                Write-Error "Log file $Path already exists, and you specified NoClobber. Either delete the file or specify a different name."
+                Return
             }
-            catch {
-                if ($WriteLogRetrycount -gt 5) {
+
+            # If attempting to write to a log file in a folder/path that doesn't exist create the file including the path.
+            elseif (!(Test-Path $Path)) {
+                Write-Verbose "Creating $Path."
+                New-Item $Path -Force -ItemType File
+            }
+
+            else {
+                # Nothing to see here yet.
+            }
+
+            # Format Date for our Log File
+            $FormattedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+            # Write message to error, warning, or verbose pipeline and specify $LevelText
+            switch ($Level) {
+                'Error' {
+                    Write-Error $Message
+                    $LevelText = 'ERROR:'
+                }
+                'Warn' {
+                    Write-Warning $Message
+                    $LevelText = 'WARNING:'
+                }
+                'Info' {
+                    Write-Verbose $Message
+                    $LevelText = 'INFO:'
+                }
+            }
+
+            # Write log entry to $Path
+            #try to write to the log file. Rety if it is locked
+            $StopWriteLogloop = $false
+            [int]$WriteLogRetrycount = "0"
+            do {
+                try {
+                    "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append -ErrorAction Stop
                     $StopWriteLogloop = $true
+                } catch {
+                    if ($WriteLogRetrycount -gt 5) {
+                        $StopWriteLogloop = $true
+                    } else {
+                        Start-Sleep -Milliseconds 500
+                        $WriteLogRetrycount++
+                    }
                 }
-                else {
-                    Start-Sleep -Milliseconds 500
-                    $WriteLogRetrycount++
-                }
-            }
-        }While ($StopWriteLogloop -eq $false)
-    }
-    End {
-    }
+            }While ($StopWriteLogloop -eq $false)
+        }
+        End {
+        }
     }
     
     #Check if computer is a DC
@@ -138,72 +133,24 @@ Function Update-ADPasswordProtection {
         exit 
     }
     
-    #Downloads latest version of the HIBP Database
-    $LatestVersionUrl = (Invoke-WebRequest https://haveibeenpwned.com/Passwords -MaximumRedirection 0).Links | Where-Object {$_.href -like "*pwned-passwords-ntlm-ordered-by-hash-v*.7z"} | Select-Object -expand href
-    $compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt).Content 
-    
-    #Variables built out for script 
-    $LatestVersionZip = $($LatestVersionUrl -replace '[a-zA-Z]+://[a-zA-Z]+\.[a-zA-Z]+\.[a-zA-Z]+/[a-zA-Z]+/')
-    $LatestVersionLog = $($LatestVersionZip -replace 'pwned-passwords-ntlm-ordered-by-hash-') 
-    $LatestVersionLog = $($LatestVersionLog -replace '.7z')
-    
-    #Compares HIBP version with the Compass hosted version
-    if ($compassLatestVersion -ne $LatestVersionLog ) {
-        Write-Log -Level Warn -Path $LogDirectory -Message 'The Compass database is out of date. Please open a ticket with internal support. Script will now exit.'
-        Start-Process $LogDirectory
-        exit
-    }
-    
-    #Checks for older database version
-    Write-Log -Level Info -Path $LogDirectory -Message 'Checking HIBP hashes DB against servers version.'
-    
-    if((Test-Path $($PassProtectionPath + '\Version') ) -eq $false) {
-        New-Item -Path $($PassProtectionPath + '\Version')  -ItemType Directory
-    }
-    
-    $CurrentVersionLog = Get-ChildItem -Path $($PassProtectionPath + '\Version\') 
-    
-    #Checks if latest version is installed 
-    if (($CurrentVersionLog).Name -notcontains $LatestVersionLog) {
-        Write-Log -Level Info -Path $LogDirectory -Message 'DC is missing latest HIBP hashes.'
-        
-        Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes.'
-        
-        #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
-        
-        Import-Module BitsTransfer
-        
-        Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
-    
-        Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
-        try {
-            Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose -ErrorAction Stop
-        
-            Write-Log -Level Info -Path $LogDirectory -Message 'Adding new version file'
-        
-            New-Item $($PassProtectionPath + '\Version\' + $LatestVersionLog) -Type File
-            
-            if ($CurrentVersionLog) {
-                Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
-                Remove-Item  -Path $($PassProtectionPath + '\Version\' + $CurrentVersionLog.Name) -Force
-            }
-        
-            $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
-        
-            $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
-        
-            if ($PDC -eq $LocalDC) {
-                Write-Log -Level Info -Path $LogDirectory -Message 'Removing old version file'
-                Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
-            }
-        }
-        catch {
-            Write-Log -Level Warn -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
-        }
-        Write-Log -Level Info -Path $LogDirectory -Message "Removing $StoreFilesInDBFormatFile"
-        Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
-    } else {
-        Write-Log -Level Info -Path $LogDirectory -Message 'DC already has latest HIBP hashes. Script will exit'
-        Start-Process $LogDirectory
-    }    
+    if ((Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq "Lithnet Password Protection for Active Directory" }).Version -lt '1.1.53.0') {
+        $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
+
+        $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" }
+        $json = $latestRelease.Content | ConvertFrom-Json
+        $latestVersion = $json.tag_name
+
+        $BuildExe = $latestVersion.Replace('v', 'LithnetPasswordProtection-') + '.exe'
+        $BuildURI = "https://github.com/lithnet/ad-password-protection/releases/download/$latestVersion/" + $BuildExe
+
+        (New-Object System.Net.WebClient).DownloadFile("$BuildURI", "c:\temp\$BuildExe")
+
+
+        Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection MSI'
+        Start-Process msiexec.exe -Wait -ArgumentList "/i $($BuildExe) /exenoui /qn /norestart " -PassThru
+
+        Sync-HashesFromHibp
+
+        Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
+    } else { Sync-HashesFromHibp }
 }

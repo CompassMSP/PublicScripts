@@ -53,12 +53,10 @@ Function Install-ADPasswordProtection {
         [string]$FromEmail
     )
 
-    $compassLatestVersion = (Invoke-WebRequest https://rmm.compassmsp.com/softwarepackages/hibp-latest.txt -UseBasicParsing).Content 
     $StoreFilesInDBFormatFile = 'C:\Temp\ADPasswordAuditStore.zip'
     $PasswordProtectionMSIFile = 'C:\Windows\Temp\Lithnet.ActiveDirectory.PasswordProtection.msi'
     $GPOPath = 'C:\Windows\Temp\PasswordProtection.zip'
     $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
-    $PassProtectionPath = 'C:\Program Files\Lithnet\Active Directory Password Protection'
 
     $Errors = @()
 
@@ -180,12 +178,10 @@ Function Install-ADPasswordProtection {
                 try {
                     "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append -ErrorAction Stop
                     $StopWriteLogloop = $true
-                }
-                catch {
+                } catch {
                     if ($WriteLogRetrycount -gt 5) {
                         $StopWriteLogloop = $true
-                    }
-                    else {
+                    } else {
                         Start-Sleep -Milliseconds 500
                         $WriteLogRetrycount++
                     }
@@ -207,12 +203,11 @@ Function Install-ADPasswordProtection {
         Write-Log -Level Info -Path $LogDirectory -Message 'Deleting old files if they exist.'
 
         foreach ($item in $ItemsToDelete) {
-            try{
+            try {
                 if (Test-Path -Path $item) {
                     Remove-Item -Path $item -Force -Recurse -ErrorAction SilentlyContinue
                 }
-            }
-            catch{
+            } catch {
                 #item likely did not exist
             }
         }
@@ -225,8 +220,7 @@ Function Install-ADPasswordProtection {
 
             $DisplayName = (Get-ItemProperty -Path "Registry::$($SubKey.Name)" -Name DisplayName -ErrorAction SilentlyContinue).DisplayName
             if ([string]::IsNullOrEmpty($DisplayName)) {
-            }
-            else {
+            } else {
                 $InstalledApplications += [PSCustomObject]@{
                     DisplayName = $DisplayName
                 }
@@ -245,7 +239,6 @@ Function Install-ADPasswordProtection {
     #region Check For Existing components
     $GPOExistsWithCorrectSettings = $false
     $ADPasswordProtectionAlreadyInstalled = $false
-    $HIBPDBFilesExist = $false
 
     #Check for GPO
     if (Get-GPO -Name 'Password Protection' -ErrorAction SilentlyContinue) {
@@ -266,8 +259,8 @@ Function Install-ADPasswordProtection {
 
     #Check to see if DB files exist
     if (Test-Path -Path 'C:\Program Files\Lithnet\Active Directory Password Protection\Store\v3\p\FFFF.db') {
-        $HIBPDBFilesExist = $true
-        Write-Log -Level Info -Path $LogDirectory -Message "The HIBP DB files already exist in the default location"
+        Write-Log -Level Info -Path $LogDirectory -Message "The HIBP DB files already exist in the default location. Will now sync hashes from Hibp"
+        Sync-HashesFromHibp
     }
     #endregion Check For Existing components
 
@@ -275,53 +268,39 @@ Function Install-ADPasswordProtection {
     Remove-OldFiles
 
     #Check if DC has enough free space
-if ((Get-PSDrive C).free -lt 30GB) {
-    Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 30 GB free. Script will exit'
-    Start-Process $LogDirectory
-    exit 
-} else {
-    $FreeSpace = 'yes'
-}
+    if ((Get-PSDrive C).free -lt 30GB) {
+        Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 30 GB free. Script will exit'
+        Start-Process $LogDirectory
+        exit 
+    } else {
+        $FreeSpace = 'yes'
+    }
 
-if ($FreeSpace -eq 'yes') {
+    if ($FreeSpace -eq 'yes') {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-        if((Test-Path 'C:\Temp' ) -eq $false) {
-            New-Item -Path 'C:\Temp'  -ItemType Directory
+        if ((Test-Path 'C:\Temp' ) -eq $false) {
+            New-Item -Path 'C:\Temp' -ItemType Directory
         }
-
-        #region DownloadHIBPHashes
-        if (-not $HIBPDBFilesExist) {
-            Write-Log -Level Info -Path $LogDirectory -Message 'Downloading HIBP hashes'
-
-            #(New-Object System.Net.WebClient).DownloadFile("$StoreFilesInDBFormatLink", "$StoreFilesInDBFormatFile")
-            
-            Import-Module BitsTransfer
-            
-            Start-BitsTransfer -Source $StoreFilesInDBFormatLink -Destination $StoreFilesInDBFormatFile
-
-            #Extract HIBP Hashes
-            Write-Log -Level Info -Path $LogDirectory -Message 'Extracting HIBP hashes'
-
-            try {
-                Expand-Archive -LiteralPath $StoreFilesInDBFormatFile -DestinationPath 'C:\Program Files\Lithnet\Active Directory Password Protection' -Force -Verbose
-                New-Item $($PassProtectionPath + '\Version') -Type Directory
-                New-Item $($PassProtectionPath + '\Version\' + $compassLatestVersion) -Type File
-            }
-            catch {
-                Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
-                $Errors += "Ran into an issue extracting the file $StoreFilesInDBFormatFile"
-            }
-            #Remove-Item $StoreFilesInDBFormatFile -Force -ErrorAction SilentlyContinue
-        }
-        #endregion DownloadHIBHashes
 
         #region DownloadInstallMSI
         if (-not $ADPasswordProtectionAlreadyInstalled) {
-            (New-Object System.Net.WebClient).DownloadFile('https://github.com/lithnet/ad-password-protection/releases/latest/download/Lithnet.ActiveDirectory.PasswordProtection.msi', "$PasswordProtectionMSIFile")
+            $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
+
+            $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" }
+            $json = $latestRelease.Content | ConvertFrom-Json
+            $latestVersion = $json.tag_name
+
+            $BuildExe = $latestVersion.Replace('v', 'LithnetPasswordProtection-') + '.exe'
+            $BuildURI = "https://github.com/lithnet/ad-password-protection/releases/download/$latestVersion/" + $BuildExe
+
+            (New-Object System.Net.WebClient).DownloadFile("$BuildURI", "c:\temp\$BuildExe")
+
 
             Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection MSI'
-            Start-Process msiexec.exe -Wait -ArgumentList "/i $($PasswordProtectionMSIFile) /qn /norestart" -PassThru
+            Start-Process msiexec.exe -Wait -ArgumentList "/i $($BuildExe) /exenoui /qn /norestart " -PassThru
+
+            Sync-HashesFromHibp
 
             Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
         }
@@ -333,14 +312,13 @@ if ($FreeSpace -eq 'yes') {
                 #region Copy ADM files to central store
                 if (Test-Path 'C:\Windows\SYSVOL') {
                     $SYSVOLPath = 'C:\Windows\SYSVOL'
-                }
-                elseif (Test-Path 'C:\Windows\SYSVOL_DFSR') {
+                } elseif (Test-Path 'C:\Windows\SYSVOL_DFSR') {
                     $SYSVOLPath = 'C:\Windows\SYSVOL_DFSR'
                 }
 
                 #Update PolicyDefinitions if it does not Exists
-                if (!(Test-Path "$($SYSVOLPath)\domain\Policies\PolicyDefinitions")){
-                    (New-Object System.Net.WebClient).DownloadFile('https://github.com/CompassMSP/PublicScripts/raw/master/ActiveDirectory/PolicyDefinitions.zip','C:\Windows\Temp\PolicyDefinitions.zip')
+                if (!(Test-Path "$($SYSVOLPath)\domain\Policies\PolicyDefinitions")) {
+                    (New-Object System.Net.WebClient).DownloadFile('https://github.com/CompassMSP/PublicScripts/raw/master/ActiveDirectory/PolicyDefinitions.zip', 'C:\Windows\Temp\PolicyDefinitions.zip')
 
                     Expand-Archive -LiteralPath 'C:\Windows\Temp\PolicyDefinitions.zip' -DestinationPath "C:\Windows\Temp\ADMX"
 
@@ -356,11 +334,10 @@ if ($FreeSpace -eq 'yes') {
                 )
 
                 Foreach ($File in $FilesToCopy) {
-                    if (Test-Path -Path $File){
+                    if (Test-Path -Path $File) {
                         if ($File -like '*.adml') {
                             $Destination = "$($SYSVOLPath)\domain\Policies\PolicyDefinitions\en-US"
-                        }
-                        elseif ($File -like '*.admx') {
+                        } elseif ($File -like '*.admx') {
                             $Destination = "$($SYSVOLPath)\domain\Policies\PolicyDefinitions"
                         }
 
@@ -377,7 +354,7 @@ if ($FreeSpace -eq 'yes') {
 
                 $GPOFolder = $GPOPath.Replace('.zip', '')
 
-                Expand-Archive -LiteralPath  $GPOPath -DestinationPath $GPOFolder
+                Expand-Archive -LiteralPath $GPOPath -DestinationPath $GPOFolder
 
                 $GPOBackupFolder = (Get-ChildItem $GPOFolder).FullName
 
@@ -391,13 +368,11 @@ if ($FreeSpace -eq 'yes') {
                     Import-GPO -Path $GPOBackupFolder -TargetName 'Password Protection' -BackupGpoName $GPOBackupName -ErrorAction Stop
 
                     New-GPLink -Name 'Password Protection' -Target "OU=Domain Controllers,$((Get-ADDomain).DistinguishedName)" -LinkEnabled Yes -ErrorAction Stop
-                }
-                catch {
+                } catch {
                     Write-Log -Level Error -Path $LogDirectory -Message "Ran into an issue importing the GPO from $GPOBackupFolder"
                     $Errors += "Ran into an issue importing the GPO from $GPOBackupFolder"
                 }
-            }
-            else {
+            } else {
                 Write-Log -Level Info -Path $LogDirectory -Message 'Computer is not the PDC. GPO will not be imported'
             }
         }
@@ -418,7 +393,7 @@ if ($FreeSpace -eq 'yes') {
         Start-Process $LogDirectory
     }
 
-if ($Errors.count -gt 0) {
+    if ($Errors.count -gt 0) {
         $EmailBody = $Errors | ForEach-Object { [PSCustomObject]@{'Errors' = $_ } } | ConvertTo-Html -Fragment -Property 'Errors' | Out-String
 
         $SendMailMessageParams = @{
