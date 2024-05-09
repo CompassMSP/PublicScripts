@@ -18,6 +18,7 @@
 # 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function
 # 03-08-2024                    1.9         Cleaned up licenses select display output
 # 05-08-2024                    2.0         Add input box for Variables
+# 05-09-2024                    2.1         Remove user from directory roles
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -51,7 +52,7 @@ $SetUserMailFWD = $result.InputUserFWD
 $GrantUserOneDriveAccess = $result.InputUserOneDriveAccess
 
 if (!$result.InputUserFullControl) { $UserAccessConfirmation = 'n' } else { $UserAccessConfirmation = 'y' }
-if (!$result.InputUserFWD) { $UserFwdConfirmation = 'n'} else { $UserFwdConfirmation = 'y' }
+if (!$result.InputUserFWD) { $UserFwdConfirmation = 'n' } else { $UserFwdConfirmation = 'y' }
 if (!$result.InputUserOneDriveAccess) { $SPOAccessConfirmation = 'n' } else { $SPOAccessConfirmation = 'y' }
 
 $Localpath = 'C:\Temp'
@@ -256,13 +257,18 @@ $KnowBe4App = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object { $_
 
 Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $KnowBe4App.Id -UserId $MgUser.Id
 
+#Find user directory roles
+$AllDirectoryRoles = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.UserPrincipalName).Id | `
+    Where-Object { $_.AdditionalProperties['@odata.type'] -eq '#microsoft.graph.directoryRole' } | `
+    Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
+
+#Remove user from directory roles
+if (!$AllDirectoryRoles) { Write-Host "Skipping removal of directory roles as user is not assigned." } else {
+    Foreach ($DirectoryRole in $AllDirectoryRoles) {
+        Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $DirectoryRole.Id -DirectoryObjectId $MgUser.Id
+    }
+}
 #Find Azure only groups
-
-#$GroupId = Get-MgUserMemberOf -UserId $UserFromAD.UserPrincipalName | `
-#Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL }
-    
-#$AllAzureGroups = $GroupId | ForEach-Object { Get-MgGroup -GroupId $_.Id | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id }
-
 $AllAzureGroups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.UserPrincipalName).Id | `
     Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
     Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
@@ -271,7 +277,7 @@ $AllAzureGroups | Export-Csv c:\temp\terminated_users_exports\$($user)_Groups_Id
     
 Write-Host "Export User Groups Completed. Path: C:\temp\terminated_users_exports\$($user)_Groups_Id.csv" 
 
-#Remove user from all groups
+#Remove user from groups
 Foreach ($365Group in $AllAzureGroups) {
     try {
         Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $MgUser.Id -ErrorAction Stop
