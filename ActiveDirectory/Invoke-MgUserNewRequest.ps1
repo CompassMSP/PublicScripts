@@ -48,7 +48,7 @@ function promptforVariables {
         [string]$NewUserMobile,
         [Parameter(Mandatory)]
         [string]$UserToCopy,
-        [validateset('EXCHANGESTANDARD', 'O365_BUSINESS_ESSENTIALS', 'SPE_E3', 'SPB', 'ENTERPRISEPACK')]
+        [validateset('Exchange Online (Plan 1)', 'Microsoft 365 Business Basic', 'Microsoft 365 E3', 'Microsoft 365 Business Premium', 'Office 365 E3')]
         [string]$InputSku
     )
     [pscustomobject]@{
@@ -65,7 +65,15 @@ $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
 $UserToCopy = $result.InputUserToCopy
 
-if (!$result.InputSku) { Write-Host 'License Sku not selected.' } else { $Sku = $result.InputSku }
+if (!$result.InputSku) { 
+    Write-Host 'License Sku not selected.'
+} else {
+    if ($result.InputSku -eq 'Exchange Online (Plan 1)') { $Sku = "EXCHANGESTANDARD" }
+    if ($result.InputSku -eq 'Microsoft 365 Business Basic') { $Sku = "O365_BUSINESS_ESSENTIALS" }
+    if ($result.InputSku -eq 'Microsoft 365 E3') { $Sku = "SPE_E3" }
+    if ($result.InputSku -eq 'Microsoft 365 Business Premium') { $Sku = "SPB" }
+    if ($result.InputSku -eq 'Office 365 E3') { $Sku = "ENTERPRISEPACK" }
+}
 
 if ($SkipAz -ne 'y') {
     Write-Output 'Logging into 365 services.'
@@ -83,8 +91,24 @@ if ($SkipAz -ne 'y') {
 }
 
 if ($Sku) { 
-    try { 
-        $getLic = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) } -ErrorAction stop
+    try {
+        $SelectObjectPropertyList = @(
+            "SkuPartNumber"
+            "SkuId"
+            @{
+                n = "Available"
+                e = { (($_.PrepaidUnits).Enabled - $_.ConsumedUnits) }
+            }
+        )
+
+        $getLicCount = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) } | Select-Object $SelectObjectPropertyList
+
+        if ($getLicCount.Available -gt 0) {
+            $getLic = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) }
+        } else {
+            Write-Output "No available license for '$($result.InputSku)'. Please add additional licenses via the Microsoft Portal."
+            $Sku = $NULL
+        }
     } catch { 
         Write-Output "License Sku could not be found. Or no Sku was selected."
         $Sku = $NULL
@@ -122,7 +146,7 @@ if (!$Sku) {
                 "ENTERPRISEPACK" { "Office 365 E3" }
             }
             SkuPartNumber = $_.SkuPartNumber
-            LicenseID     = $_.SkuId
+            SkuId     = $_.SkuId
             #NumberTotal   = $_.ActiveUnits
             #NumberUsed    = $_.ConsumedUnits
             Available     = ($_.ActiveUnits - $_.ConsumedUnits)
@@ -263,7 +287,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     if ($getLic) { 
         try {
-            Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.LicenseID } -RemoveLicenses @() -ErrorAction stop
+            Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.SkuId } -RemoveLicenses @() -ErrorAction stop
             Write-Output 'License added.'
         } catch {
             Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal.'
@@ -376,7 +400,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
                     "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
                 }
                 SkuPartNumber = $_.SkuPartNumber
-                LicenseID     = $_.SkuId
+                SkuId     = $_.SkuId
                 #NumberTotal   = $_.ActiveUnits
                 #NumberUsed    = $_.ConsumedUnits
                 Available     = ($_.ActiveUnits - $_.ConsumedUnits)
