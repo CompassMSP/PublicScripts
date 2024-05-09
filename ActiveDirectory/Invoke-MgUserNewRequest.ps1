@@ -37,23 +37,25 @@
 #>
 
 Param (
-[Parameter(Mandatory = $False)]
-[String]$SkipAz
+    [Parameter(Mandatory = $False)]
+    [String]$SkipAz
 )
 
 function promptforVariables {
     param (
+        [Parameter(Mandatory)]
         [string]$NewUser,
         [string]$NewUserMobile,
+        [Parameter(Mandatory)]
         [string]$UserToCopy,
         [validateset('EXCHANGESTANDARD', 'O365_BUSINESS_ESSENTIALS', 'SPE_E3', 'SPB', 'ENTERPRISEPACK')]
         [string]$InputSku
     )
     [pscustomobject]@{
-        InputNewUser = $NewUser
-        InputNewMobile = $NewUserMobile
+        InputNewUser    = $NewUser
+        InputNewMobile  = $NewUserMobile
         InputUserToCopy = $UserToCopy
-        InputSku = $InputSku
+        InputSku        = $InputSku
     }
 }
 

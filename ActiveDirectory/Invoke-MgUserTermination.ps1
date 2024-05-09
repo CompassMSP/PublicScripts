@@ -29,6 +29,7 @@
 
 function promptforVariables {
     param (
+        [Parameter(Mandatory)]
         [string]$InputUser,
         [string]$InputUserFullControl,
         [string]$InputUserFWD,
