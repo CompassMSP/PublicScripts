@@ -31,13 +31,13 @@ function CompassUserTermination {
     param (
         [Parameter(Mandatory)]
         [string]$UserToTerm,
-        [string]$GrantFullControlTo,
+        [string]$GrantMailboxFullControlTo,
         [string]$FowardMailboxTo,
         [string]$GrantOneDriveAccessTo
     )
     [pscustomobject]@{
         InputUserToTerm         = $UserToTerm
-        InputUserFullControl    = $GrantFullControlTo
+        InputUserFullControl    = $GrantMailboxFullControlTo
         InputUserFWD            = $FowardMailboxTo
         InputUserOneDriveAccess = $GrantOneDriveAccessTo
     }
