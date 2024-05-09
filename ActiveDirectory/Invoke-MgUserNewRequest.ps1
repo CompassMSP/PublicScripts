@@ -104,7 +104,7 @@ if ($Sku) {
         $getLicCount = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) } | Select-Object $SelectObjectPropertyList
 
         if ($getLicCount.Available -gt 0) {
-            $getLic = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) }
+            $getLic = $getLicCount
         } else {
             Write-Output "No available license for '$($result.InputSku)'. Please add additional licenses via the Microsoft Portal."
             $Sku = $NULL
