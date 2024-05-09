@@ -27,25 +27,25 @@
 #>
 
 
-function promptforVariables {
+function CompassUserTermination {
     param (
         [Parameter(Mandatory)]
-        [string]$InputUser,
-        [string]$InputUserFullControl,
-        [string]$InputUserFWD,
-        [string]$InputUserOneDriveAccess
+        [string]$UserToTerm,
+        [string]$GrantFullControlTo,
+        [string]$FowardMailboxTo,
+        [string]$GrantOneDriveAccessTo
     )
     [pscustomobject]@{
-        InputUser               = $InputUser
-        InputUserFullControl    = $InputUserFullControl
-        InputUserFWD            = $InputUserFWD
-        InputUserOneDriveAccess = $InputUserOneDriveAccess
+        InputUserToTerm         = $UserToTerm
+        InputUserFullControl    = $GrantFullControlTo
+        InputUserFWD            = $FowardMailboxTo
+        InputUserOneDriveAccess = $GrantOneDriveAccessTo
     }
 }
 
-$result = Invoke-Expression (Show-Command promptforVariables -PassThru)
+$result = Invoke-Expression (Show-Command CompassUserTermination -PassThru)
 
-$User = $result.InputUser
+$User = $result.InputUserToTerm
 $GrantUserFullControl = $result.InputUserFullControl
 $SetUserMailFWD = $result.InputUserFWD
 $GrantUserOneDriveAccess = $result.InputUserOneDriveAccess

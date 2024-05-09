@@ -41,7 +41,7 @@ Param (
     [String]$SkipAz
 )
 
-function promptforVariables {
+function CompassNewUserRequest {
     param (
         [Parameter(Mandatory)]
         [string]$NewUser,
@@ -59,7 +59,7 @@ function promptforVariables {
     }
 }
 
-$result = Invoke-Expression (Show-Command promptforVariables -PassThru)
+$result = Invoke-Expression (Show-Command CompassNewUserRequest -PassThru)
 
 $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
