@@ -17,6 +17,7 @@
 # 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
 # 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function 
 # 03-08-2024                    1.9         Cleaned up licenses select display output
+# 05-08-2024                    2.0         Add input box for Variables
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -36,25 +37,32 @@
 #>
 
 Param (
-    [Parameter(Mandatory = $False)]
-    [String]$UserToCopy,
-    [Parameter(Mandatory = $False)]
-    [String]$NewUser,
-    [Parameter(Mandatory = $False)]
-    [String]$Phone,
-    [Parameter(Mandatory = $False)]
-    [String]$SkipAz
+[Parameter(Mandatory = $False)]
+[String]$SkipAz
 )
 
-IF ([string]::IsNullOrEmpty($UserToCopy)) {
-    $UserToCopy = Read-Host "Please enter the DisplayName of the user template you want to copy. EX: 'Chris Williams'"
+function promptforVariables {
+    param (
+        [string]$InputNewUser,
+        [string]$InputNewMobile,
+        [string]$InputUserToCopy,
+        [validateset('EXCHANGESTANDARD', 'O365_BUSINESS_ESSENTIALS', 'SPE_E3', 'SPB', 'ENTERPRISEPACK')]
+        [string]$InputSku
+    )
+    [pscustomobject]@{
+        InputNewUser = $InputNewUser
+        InputNewMobile = $InputNewMobile
+        InputUserToCopy = $InputUserToCopy
+        InputSku = $InputSku
+    }
 }
-IF ([string]::IsNullOrEmpty($NewUser)) {
-    $NewUser = Read-Host "Please enter the First and Last name of the new user. EX: 'New User'"
-}
-IF ([string]::IsNullOrEmpty($Phone)) {
-    $Phone = Read-Host "Please enter mobile phone number of the new user."
-}
+
+$result = Invoke-Expression (Show-Command promptforVariables -PassThru)
+
+$NewUser = $result.InputNewUser
+$Phone = $result.InputNewMobile
+$UserToCopy = $result.InputUserToCopy
+$Sku = $result.$InputSku
 
 if ($SkipAz -ne 'y') {
     Write-Output 'Logging into 365 services.'
@@ -214,6 +222,7 @@ do {
         $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
         Write-Output "User $NewUser has synced to Azure. Script will now continue."
         $Stoploop = $true
+        $ADSyncCompleteYesorExit = 'yes'
     } catch {
         if ($Retrycount -gt 3) {
             Write-Host "Could not sync AD User to 365 after 3 retries."
@@ -247,26 +256,17 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     Write-Output 'Script now will resume'
 
-    Write-Output 'Setting Usage Location for new user'
-
-    Update-MgUser -UserId $NewMgUser.Id -UsageLocation US
-
     Write-Output 'Adding Office 365 Groups to new user.'
 
     if ($getLic) { 
         try {
-            Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.SkuId } -RemoveLicenses @() -ErrorAction stop
+            Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.LicenseID } -RemoveLicenses @() -ErrorAction stop
             Write-Output 'License added.'
         } catch {
             Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal.'
             exit
         }
     }
-
-    #$GroupId = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
-    #    Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL } 
-
-    # $All365Groups = $GroupId | ForEach-Object { Get-MgGroup -GroupId $_.Id | Where-Object { $_.OnPremisesSyncEnabled -eq $NULL } | Select-Object DisplayName, SecurityEnabled, Mail, Id }
 
     $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
         Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
@@ -283,6 +283,8 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id).Count
     $NewUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $NewUserEmail).Id).Count
 
+    Write-Output 'Setting Usage Location for new user'
+    
     ## Assigns US as UsageLocation
     Update-MgUser -UserId $NewUserEmail -UsageLocation US
 

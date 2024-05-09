@@ -15,7 +15,9 @@
 # 08-02-2023                    1.5         Added OneDrive access grant
 # 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
 # 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
-# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function 
+# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function
+# 03-08-2024                    1.9         Cleaned up licenses select display output
+# 05-08-2024                    2.0         Add input box for Variables
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -25,11 +27,31 @@
 #>
 
 
-[cmdletbinding()]
-param(
-    [Parameter(Mandatory = $true)]
-    [string]$user
-)
+function promptforVariables {
+    param (
+        [string]$InputUser,
+        [string]$InputUserFullControl,
+        [string]$InputUserFWD,
+        [string]$InputUserOneDriveAccess
+    )
+    [pscustomobject]@{
+        InputUser               = $InputUser
+        InputUserFullControl    = $InputUserFullControl
+        InputUserFWD            = $InputUserFWD
+        InputUserOneDriveAccess = $InputUserOneDriveAccess
+    }
+}
+
+$result = Invoke-Expression (Show-Command promptforVariables -PassThru)
+
+$User = $result.InputUser
+$GrantUserFullControl = $result.InputUserFullControl
+$SetUserMailFWD = $result.InputUserFWD
+$GrantUserOneDriveAccess = $result.InputUserOneDriveAccess
+
+if (!$result.InputUserFullControl) { $UserAccessConfirmation = 'n' } else { $UserAccessConfirmation = 'y' }
+if (!$result.InputUserFWD) { $UserFwdConfirmation = 'n'} else { $UserFwdConfirmation = 'y' }
+if (!$result.InputUserOneDriveAccess) { $SPOAccessConfirmation = 'n' } else { $SPOAccessConfirmation = 'y' }
 
 $Localpath = 'C:\Temp'
 
@@ -163,16 +185,14 @@ $termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Objec
 $365Mailbox | Set-Mailbox -Type Shared
 
 # Grant User FullAccess to Mailbox
-$UserAccessConfirmation = Read-Host -Prompt "Would you like to add FullAccess permissions to mailbox to $($UserFromAD.UserPrincipalName)? (Y/N)"
 
 if ($UserAccessConfirmation -eq 'y') {
 
-    $UserAccess = Read-Host -Prompt "Enter the email address of FullAccess recipient"
     try { 
-        $GetAccessUser = get-mailbox $UserAccess -ErrorAction Stop
+        $GetAccessUser = Get-Mailbox $GrantUserFullControl -ErrorAction Stop
         $GetAccessUserCheck = 'yes'
     } catch { 
-        Write-Host "User mailbox $UserAccess not found. Skipping access rights setup" -ForegroundColor Red -BackgroundColor Black
+        Write-Host "User mailbox $GrantUserFullControl not found. Skipping access rights setup" -ForegroundColor Red -BackgroundColor Black
         $GetAccessUserCheck = 'no'
     }
 
@@ -182,21 +202,19 @@ if ($UserAccessConfirmation -eq 'y') {
 
 if ($GetAccessUserCheck -eq 'yes') { 
     Write-Host "Adding Full Access permissions for $($GetAccessUser.PrimarySmtpAddress) to $($UserFromAD.UserPrincipalName)" 
-    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $UserAccess -AccessRights FullAccess -InheritanceType All -AutoMapping $true 
+    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $GrantUserFullControl -AccessRights FullAccess -InheritanceType All -AutoMapping $true 
 }
 
 # Set Mailbox forwarding address 
-$UserFwdConfirmation = Read-Host -Prompt "Would you like to forward users email? (Y/N)"
 
 if ($UserFwdConfirmation -eq 'y') {
 
-    $UserFWD = Read-Host -Prompt "Enter the email address of forward recipient"
     try { 
-        $GetFWDUser = get-mailbox $UserFWD -ErrorAction Stop 
+        $GetFWDUser = Get-Mailbox $SetUserMailFWD -ErrorAction Stop 
         $GetFWDUserCheck = 'yes'
         Write-Host "Applying forward from $($UserFromAD.UserPrincipalName) to $($GetFWDUser.PrimarySmtpAddress)" 
     } catch { 
-        Write-Host "User mailbox $UserFWD not found. Skipping mailbox forward" -ForegroundColor Red -BackgroundColor Black
+        Write-Host "User mailbox $SetUserMailFWD not found. Skipping mailbox forward" -ForegroundColor Red -BackgroundColor Black
         $GetFWDUserCheck = 'no'
     }
     
@@ -204,14 +222,12 @@ if ($UserFwdConfirmation -eq 'y') {
     Write-Host "Skipping mailbox forwarding" 
 }
 
-if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $UserFWD -DeliverToMailboxAndForward $False }
+if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $SetUserMailFWD -DeliverToMailboxAndForward $False }
 
 # Set OneDrive grant access
-$SPOAccessConfirmation = Read-Host -Prompt "Would you like to grant access to the users OneDrive? (Y/N)"
 
 if ($SPOAccessConfirmation -eq 'y') {
 
-    $GrantUserOneDriveAccess = Read-Host -Prompt "Enter the email address of user to needs access to terminated navigators OneDrive"
     try {
         $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop 
         $GetUserOneDriveAccessCheck = 'yes'
@@ -289,5 +305,5 @@ Disconnect-SPOService
 #Start AD Sync
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
 
-Write-Host "User $($user) should now be disabled unless any errors occurred during the process." 
+Write-Host "User $($User) should now be disabled unless any errors occurred during the process." 
 
