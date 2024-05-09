@@ -43,16 +43,16 @@ Param (
 
 function promptforVariables {
     param (
-        [string]$InputNewUser,
-        [string]$InputNewMobile,
-        [string]$InputUserToCopy,
+        [string]$NewUser,
+        [string]$NewUserMobile,
+        [string]$UserToCopy,
         [validateset('EXCHANGESTANDARD', 'O365_BUSINESS_ESSENTIALS', 'SPE_E3', 'SPB', 'ENTERPRISEPACK')]
         [string]$InputSku
     )
     [pscustomobject]@{
-        InputNewUser = $InputNewUser
-        InputNewMobile = $InputNewMobile
-        InputUserToCopy = $InputUserToCopy
+        InputNewUser = $NewUser
+        InputNewMobile = $NewUserMobile
+        InputUserToCopy = $UserToCopy
         InputSku = $InputSku
     }
 }
@@ -62,7 +62,8 @@ $result = Invoke-Expression (Show-Command promptforVariables -PassThru)
 $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
 $UserToCopy = $result.InputUserToCopy
-$Sku = $result.$InputSku
+
+if (!$result.InputSku) { Write-Host 'License Sku not selected.' } else { $Sku = $result.InputSku }
 
 if ($SkipAz -ne 'y') {
     Write-Output 'Logging into 365 services.'
