@@ -336,7 +336,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     
     #Adds user to All Company group.
     New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'All Company'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
-
+    New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'Exclaimer Default'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
     New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'Exclaimer Add-in'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
 
     Write-Output "User $($NewUser) should now be created unless any errors occurred during the process."
