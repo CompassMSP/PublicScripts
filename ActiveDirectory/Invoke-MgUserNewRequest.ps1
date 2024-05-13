@@ -41,6 +41,8 @@ Param (
     [String]$SkipAz
 )
 
+[System.Windows.MessageBox]::Show("For the 'NewUser' and 'UserToCopy' please enter in a DiplayName format: 'FirstName LastName'")
+
 function CompassNewUserRequest {
     param (
         [Parameter(Mandatory)]
@@ -49,13 +51,13 @@ function CompassNewUserRequest {
         [Parameter(Mandatory)]
         [string]$UserToCopy,
         [validateset('Exchange Online (Plan 1)', 'Microsoft 365 Business Basic', 'Microsoft 365 E3', 'Microsoft 365 Business Premium', 'Office 365 E3')]
-        [string]$InputSku
+        [string]$SelectLicenseSku
     )
     [pscustomobject]@{
         InputNewUser    = $NewUser
         InputNewMobile  = $NewUserMobile
         InputUserToCopy = $UserToCopy
-        InputSku        = $InputSku
+        InputSku        = $SelectLicenseSku
     }
 }
 
