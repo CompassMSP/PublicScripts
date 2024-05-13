@@ -29,7 +29,7 @@
 #>
 
 Add-Type -AssemblyName PresentationFramework
-[System.Windows.MessageBox]::Show('For all fields please enter users email address','Compass New User Request')
+[System.Windows.MessageBox]::Show('For all fields please enter users email address','Compass Termination Request')
 
 function CompassUserTermination {
     param (
@@ -69,8 +69,7 @@ if ((Test-Path $Localpath) -eq $false) {
 Write-Host "Attempting to find $($user) in Active Directory" 
 
 try {
-    #$UserFromAD = Get-ADUser -Identity $User -Properties MemberOf -ErrorAction Stop
-    $UserFromAD = Get-ADUser -Filter * | where-object {$_.SamAccountName -eq $User -or $_.userPrincipalName -eq $User}
+    $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$($User)'" -ErrorAction Stop
 } catch {
     Write-Host "Could not find user $($User) in Active Directory" -ForegroundColor Red -BackgroundColor Black
     exit
