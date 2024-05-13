@@ -41,7 +41,8 @@ Param (
     [String]$SkipAz
 )
 
-[System.Windows.MessageBox]::Show("For the 'NewUser' and 'UserToCopy' please enter in a DiplayName format: 'FirstName LastName'")
+Add-Type -AssemblyName PresentationFramework
+[System.Windows.MessageBox]::Show("For the 'NewUser' and 'UserToCopy' please enter in a DiplayName format: 'FirstName LastName'",'Compass New User Request')
 
 function CompassNewUserRequest {
     param (

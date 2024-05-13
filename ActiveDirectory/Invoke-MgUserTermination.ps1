@@ -28,7 +28,8 @@
 # Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, Microsoft.Online.Sharepoint.PowerShell
 #>
 
-[System.Windows.MessageBox]::Show("For all fields please enter users email address")
+Add-Type -AssemblyName PresentationFramework
+[System.Windows.MessageBox]::Show('For all fields please enter users email address','Compass New User Request')
 
 function CompassUserTermination {
     param (
