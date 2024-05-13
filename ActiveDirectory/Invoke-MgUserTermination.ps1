@@ -19,6 +19,7 @@
 # 03-08-2024                    1.9         Cleaned up licenses select display output
 # 05-08-2024                    2.0         Add input box for Variables
 # 05-09-2024                    2.1         Remove user from directory roles
+# 05-13-2024                    2.2         Fixed AppRoleAssignment and added Term User to accept SAM or UPN
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -66,7 +67,8 @@ if ((Test-Path $Localpath) -eq $false) {
 Write-Host "Attempting to find $($user) in Active Directory" 
 
 try {
-    $UserFromAD = Get-ADUser -Identity $User -Properties MemberOf -ErrorAction Stop
+    #$UserFromAD = Get-ADUser -Identity $User -Properties MemberOf -ErrorAction Stop
+    $UserFromAD = Get-ADUser -Filter * | where-object {$_.SamAccountName -eq $User -or $_.userPrincipalName -eq $User}
 } catch {
     Write-Host "Could not find user $($User) in Active Directory" -ForegroundColor Red -BackgroundColor Black
     exit
@@ -255,7 +257,7 @@ $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName
 
 $KnowBe4App = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object { $_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f' } 
 
-Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $KnowBe4App.Id -UserId $MgUser.Id
+Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $KnowBe4App.AppRoleId -UserId $MgUser.Id
 
 #Find user directory roles
 $AllDirectoryRoles = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.UserPrincipalName).Id | `
