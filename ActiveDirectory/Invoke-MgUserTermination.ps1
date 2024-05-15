@@ -20,6 +20,7 @@
 # 05-08-2024                    2.0         Add input box for Variables
 # 05-09-2024                    2.1         Remove user from directory roles
 # 05-13-2024                    2.2         Fixed AppRoleAssignment and added Term User to accept SAM or UPN
+# 05-15-2024                    2.3         Set OneDrive as Readonly
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -186,7 +187,12 @@ $termUserDeviceId | ForEach-Object {
 
 $termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled } 
 
-#Change mailbox to shared
+# Set OneDrive as Read Only 
+$UserOneDriveURL = Get-SPOSite -IncludePersonalSite $true -Limit all -Filter "Url -like '$($UserFromAD.SamAccountName)'" | Select-Object -ExpandProperty Url 
+
+Set-SPOSite $UserOneDriveURL -LockState ReadOnly
+
+# Change mailbox to shared
 $365Mailbox | Set-Mailbox -Type Shared
 
 # Grant User FullAccess to Mailbox
@@ -247,7 +253,6 @@ if ($SPOAccessConfirmation -eq 'y') {
 }
 
 if ($GetUserOneDriveAccessCheck -eq 'yes') { 
-    $UserOneDriveURL = Get-SPOSite -IncludePersonalSite $true -Limit all -Filter "Url -like '-my.sharepoint.com/personal/$($UserFromAD.SamAccountName)'" | Select-Object -ExpandProperty Url 
     Set-SPOUser -Site $UserOneDriveURL -LoginName $GrantUserOneDriveAccess -IsSiteCollectionAdmin:$true
     $UserOneDriveURL
     Read-Host 'Please copy the OneDrive URL. Press any key to continue'
