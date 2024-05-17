@@ -1679,7 +1679,7 @@ Function Update-LTService{
         Write-Debug "Starting $($myInvocation.InvocationName) at line $(LINENUM)"
         Clear-Variable Svr, GoodServer, Settings -EA 0 -WhatIf:$False -Confirm:$False #Clearing Variables for use
         $Settings = Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False
-        $updaterPath = [System.Environment]::ExpandEnvironmentVariables("%windir%\temp\_LTUpdate")
+        $updaterPath = [System.Environment]::ExpandEnvironmentVariables("%windir%\ltsvc\_LTUpdate")
         $xarg=@("/o""$updaterPath""","/y")
         $uarg=@("""$updaterPath\Update.ini""")
     }#End Begin
