@@ -70,7 +70,7 @@ if ((Test-Path $Localpath) -eq $false) {
 Write-Host "Attempting to find $($user) in Active Directory" 
 
 try {
-    $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$($User)'" -ErrorAction Stop
+    $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$($User)'" -Properties MemberOf -ErrorAction Stop
 } catch {
     Write-Host "Could not find user $($User) in Active Directory" -ForegroundColor Red -BackgroundColor Black
     exit
