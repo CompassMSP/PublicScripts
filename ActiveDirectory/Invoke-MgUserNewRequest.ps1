@@ -384,7 +384,12 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             ($_.SkuPartNumber -notlike 'VISIO_PLAN1_DEPT') -and
             ($_.SkuPartNumber -notlike 'FLOW_FREE') -and
             ($_.SkuPartNumber -notlike 'MICROSOFT_BUSINESS_CENTER') -and
-            ($_.SkuPartNumber -notlike 'PHONESYSTEM_VIRTUALUSER')
+            ($_.SkuPartNumber -notlike 'PHONESYSTEM_VIRTUALUSER') -and
+            ($_.SkuPartNumber -notlike 'Microsoft_Copilot_for_Finance_trial') -and
+            ($_.SkuPartNumber -notlike 'POWERAPPS_VIRAL') -and
+            ($_.SkuPartNumber -notlike 'Microsoft_Teams_Exploratory_Dept') -and
+            ($_.SkuPartNumber -notlike 'POWERAPPS_PER_USER') -and
+            ($_.SkuPartNumber -notlike 'Power BI Standard')
         }
     
         $selectLicense2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
