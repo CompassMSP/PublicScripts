@@ -18,6 +18,7 @@
 # 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function 
 # 03-08-2024                    1.9         Cleaned up licenses select display output
 # 05-08-2024                    2.0         Add input box for Variables
+# 05-21-2024                    2.1         Added stop for if UserToCopy cannot be found
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -68,6 +69,16 @@ $result = Invoke-Expression (Show-Command CompassNewUserRequest -PassThru)
 $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
 $UserToCopy = $result.InputUserToCopy
+
+$UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company 
+    
+if ($UserToCopyUPN.Count -gt 1) {  
+        Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes."
+        exit
+    } elseif ($NULL -eq $UserToCopyUPN) {
+    Write-Output "Could not find user $($UserToCopy) in AD to copy from."
+    exit
+}
 
 if (!$result.InputSku) { 
     Write-Host 'License Sku not selected.'
@@ -165,17 +176,6 @@ if (!$Sku) {
     $selectLicenseTEMP = $selectLicense | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments 
     $getLic = $selectLicense | Where-Object { $_.DisplayName -in $selectLicenseTEMP.DisplayName }
 
-}
-
-try {
-    $UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company
-    if ($UserToCopyUPN.Count -gt 1) {  
-        Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes."
-        exit
-    } 
-} catch {
-    Write-Output "Could not find user $($UserToCopy) in AD to copy from."
-    exit
 }
 
 $Domain = $($UserToCopyUPN.UserPrincipalName -replace '.+?(?=@)')
