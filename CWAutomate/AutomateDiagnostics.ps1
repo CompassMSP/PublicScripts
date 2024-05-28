@@ -419,7 +419,8 @@ Function Start-AutomateDiagnostics {
         [switch]$skip_updates,
         [switch]$use_sockets
     )
-
+    # Force $skip_updates to be $true
+    $skip_updates = $true
     if ($verbose) {
         $VerbosePreference = 'Continue'
     }
