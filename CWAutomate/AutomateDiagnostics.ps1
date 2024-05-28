@@ -419,8 +419,7 @@ Function Start-AutomateDiagnostics {
         [switch]$skip_updates,
         [switch]$use_sockets
     )
-    # Force $skip_updates to be $true
-    $skip_updates = $true
+
     if ($verbose) {
         $VerbosePreference = 'Continue'
     }
@@ -655,7 +654,8 @@ Function Start-AutomateDiagnostics {
             $current_version = $info.Version
             if ($target_version -eq $info.Version) {
                 $update_text = 'Version {0} - Latest' -f $info.Version
-            } elseif (!$skip_updates) {
+	# Force $skip_updates by removing ! in front
+            } elseif ($skip_updates) {
                 Write-Verbose 'Starting update'
                 taskkill /im ltsvc.exe /f
                 taskkill /im ltsvcmon.exe /f
