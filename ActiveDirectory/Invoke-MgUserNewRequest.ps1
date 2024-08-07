@@ -37,6 +37,8 @@
 # .\Invoke-MgNewUserRequest.ps1 -UserToCopy "Copy User" -NewUser "Chris Williams" -Phone "555-555-5555"
 #>
 
+Import-Module adsync -UseWindowsPowerShell
+
 Param (
     [Parameter(Mandatory = $False)]
     [String]$SkipAz
