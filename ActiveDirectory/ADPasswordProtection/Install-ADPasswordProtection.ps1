@@ -186,25 +186,6 @@ Function Install-ADPasswordProtection {
         }
     }
 
-    Function Remove-OldFiles {
-        $ItemsToDelete = @(
-            $GPOPath,
-            $GPOFolder
-        )
-
-        Write-Log -Level Info -Path $LogDirectory -Message 'Deleting old files if they exist.'
-
-        foreach ($item in $ItemsToDelete) {
-            try {
-                if (Test-Path -Path $item) {
-                    Remove-Item -Path $item -Force -Recurse -ErrorAction SilentlyContinue
-                }
-            } catch {
-                #item likely did not exist
-            }
-        }
-    }
-
     #Check if computer is a DC
     if ((Get-WmiObject Win32_ComputerSystem).domainRole -lt 4) {
         Write-Log -Level Info -Path $LogDirectory -Message 'Computer is not a DC. Script will exit'
@@ -260,6 +241,8 @@ Function Install-ADPasswordProtection {
 
         Start-Process -FilePath C:\temp\$BuildExe -Wait;
 
+        Import-Module LithnetPasswordProtection
+        
         Sync-HashesFromHibp
 
         Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."

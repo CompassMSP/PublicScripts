@@ -151,8 +151,13 @@ Function Update-ADPasswordProtection {
         Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection'
         Start-Process -FilePath C:\temp\$BuildExe -Wait;
 
+        Import-Module LithnetPasswordProtection
+
         Sync-HashesFromHibp
 
         Write-Log -Level Info -Path $LogDirectory -Message "The Password Protection application has been installed. Restart the computer for the change to take effect."
-    } else { Sync-HashesFromHibp }
+    } else { 
+        Import-Module LithnetPasswordProtection
+        Sync-HashesFromHibp
+     }
 }
