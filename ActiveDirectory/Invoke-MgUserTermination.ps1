@@ -266,7 +266,7 @@ $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName
 
 $KnowBe4App = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object { $_.ResourceId -eq '742ccfa0-3e8b-40e1-80e5-df427a3aa78f' } 
 
-Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $KnowBe4App.AppRoleId -UserId $MgUser.Id
+Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $KnowBe4App.Id -UserId $MgUser.Id
 
 #Find user directory roles
 $AllDirectoryRoles = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.UserPrincipalName).Id | `
