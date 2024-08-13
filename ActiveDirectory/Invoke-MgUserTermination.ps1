@@ -26,14 +26,13 @@
 #
 #
 # The following modules must be installed
-# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, Microsoft.Online.Sharepoint.PowerShell
+# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, PnP.PowerShell
 #>
 
-Import-Module adsync -UseWindowsPowerShell
-Import-Module -Name Microsoft.Online.SharePoint.PowerShell -UseWindowsPowerShell
+#Import-Module adsync -UseWindowsPowerShell
 
 Add-Type -AssemblyName PresentationFramework
-[System.Windows.MessageBox]::Show('For all fields please enter users email address','Compass Termination Request')
+[System.Windows.MessageBox]::Show('For all fields please enter users email address', 'Compass Termination Request')
 
 function CompassUserTermination {
     param (
@@ -110,7 +109,7 @@ $Scopes = @(
     "AppRoleAssignment.ReadWrite.All")
 Connect-MgGraph -Scopes $Scopes -NoWelcome
 Connect-ExchangeOnline -ShowBanner:$false
-Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
+Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
 
@@ -121,7 +120,7 @@ try {
     Write-Host "Could not find user $($UserFromAD.UserPrincipalName) in Azure" -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-MgGraph
-    Disconnect-SPOService
+    Disconnect-PnPOnline
     exit
 }
 
@@ -137,7 +136,7 @@ if ($Confirmation -ne 'y') {
     Write-Host 'User did not enter "Y"' -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-MgGraph
-    Disconnect-SPOService
+    Disconnect-PnPOnline
     exit
 }
 
@@ -190,11 +189,6 @@ $termUserDeviceId | ForEach-Object {
 
 $termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled } 
 
-# Set OneDrive as Read Only 
-$UserOneDriveURL = Get-SPOSite -IncludePersonalSite $true -Limit all -Filter "Url -like '$($UserFromAD.SamAccountName)'" | Select-Object -ExpandProperty Url 
-
-Set-SPOSite $UserOneDriveURL -LockState ReadOnly
-
 # Change mailbox to shared
 $365Mailbox | Set-Mailbox -Type Shared
 
@@ -238,8 +232,13 @@ if ($UserFwdConfirmation -eq 'y') {
 
 if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $SetUserMailFWD -DeliverToMailboxAndForward $False }
 
-# Set OneDrive grant access
+# Set OneDrive as Read Only
 
+$UserOneDriveURL = (Get-PnPUserProfileProperty -Account cwooden@compassmsp.com -Properties PersonalUrl).PersonalUrl
+
+Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly
+        
+# Set OneDrive grant access
 if ($SPOAccessConfirmation -eq 'y') {
 
     try {
@@ -250,13 +249,13 @@ if ($SPOAccessConfirmation -eq 'y') {
         Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
         $GetUserOneDriveAccessCheck = 'no'
     }
-    
+
 } Else {
     Write-Host "Skipping OneDrive access grant" 
 }
 
 if ($GetUserOneDriveAccessCheck -eq 'yes') { 
-    Set-SPOUser -Site $UserOneDriveURL -LoginName $GrantUserOneDriveAccess -IsSiteCollectionAdmin:$true
+    Set-PnPTenantSite -Url $UserOneDriveURL -Owners $GrantUserOneDriveAccess
     $UserOneDriveURL
     Read-Host 'Please copy the OneDrive URL. Press any key to continue'
 }
@@ -318,7 +317,7 @@ Write-Host "Removal of user licenses completed."
 #Disconnect from Exchange and Graph
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
-Disconnect-SPOService
+Disconnect-PnPOnline
 
 #Start AD Sync
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta

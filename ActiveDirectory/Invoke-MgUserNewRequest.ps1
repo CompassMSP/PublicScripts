@@ -24,7 +24,7 @@
 # Run from the Primary Domain Controller with AD Connect installed
 #
 # The following modules must be installed
-# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, Microsoft.Online.Sharepoint.PowerShell
+# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, PnP.PowerShell
 #
 # Azure licenses Sku - Selected Sku must have free licenses available. This MUST be set in the portal before running the script
 #
@@ -37,8 +37,7 @@
 # .\Invoke-MgNewUserRequest.ps1 -UserToCopy "Copy User" -NewUser "Chris Williams" -Phone "555-555-5555"
 #>
 
-Import-Module adsync -UseWindowsPowerShell
-Import-Module -Name Microsoft.Online.SharePoint.PowerShell -UseWindowsPowerShell
+#Import-Module adsync -UseWindowsPowerShell
 
 Param (
     [Parameter(Mandatory = $False)]
@@ -105,7 +104,7 @@ if ($SkipAz -ne 'y') {
         "AppRoleAssignment.ReadWrite.All")
     Connect-MgGraph -Scopes $Scopes -NoWelcome
     Connect-ExchangeOnline -ShowBanner:$false 
-    Connect-SPOService -Url "https://compassmsp-admin.sharepoint.com"
+    Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
 }
 
 if ($Sku) { 
@@ -323,7 +322,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     Update-MgUser -UserId $NewUserEmail -UsageLocation US
 
     ## Creates OneDrive
-    Request-SPOPersonalSite -UserEmails $NewUserEmail -NoWait
+    Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
 
     ## Add user to KnowBe4 SCIM App
     $MgUser = Get-MgUser -UserId $NewUserEmail
