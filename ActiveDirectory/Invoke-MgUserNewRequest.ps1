@@ -38,6 +38,7 @@
 #>
 
 Import-Module adsync -UseWindowsPowerShell
+Import-Module -Name Microsoft.Online.SharePoint.PowerShell -UseWindowsPowerShell
 
 Param (
     [Parameter(Mandatory = $False)]

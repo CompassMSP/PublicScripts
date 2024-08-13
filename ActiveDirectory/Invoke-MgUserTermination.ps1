@@ -30,6 +30,7 @@
 #>
 
 Import-Module adsync -UseWindowsPowerShell
+Import-Module -Name Microsoft.Online.SharePoint.PowerShell -UseWindowsPowerShell
 
 Add-Type -AssemblyName PresentationFramework
 [System.Windows.MessageBox]::Show('For all fields please enter users email address','Compass Termination Request')
