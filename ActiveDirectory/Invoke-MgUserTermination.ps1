@@ -316,7 +316,7 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
 #Disconnect from Exchange and Graph
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
-Disconnect-PnPOnline
+#Disconnect-PnPOnline
 
 #Start AD Sync
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
