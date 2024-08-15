@@ -281,8 +281,14 @@ Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | ForEach-Object {
 
 Write-Host "Removal of user licenses completed."
 
-# Set OneDrive as Read Only - NOT WORKING
+#Disconnect from Exchange and Graph
+Disconnect-ExchangeOnline -Confirm:$false
+Disconnect-Graph
+
+
 <#
+# Set OneDrive as Read Only - NOT WORKING
+
 Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
 
 $UserOneDriveURL = (Get-PnPUserProfileProperty -Account cwooden@compassmsp.com -Properties PersonalUrl).PersonalUrl
@@ -310,13 +316,11 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
     $UserOneDriveURL
     Read-Host 'Please copy the OneDrive URL. Press any key to continue'
 }
+
+Disconnect-PnPOnline
+
 #>
 #endregion Office365
-
-#Disconnect from Exchange and Graph
-Disconnect-ExchangeOnline -Confirm:$false
-Disconnect-Graph
-#Disconnect-PnPOnline
 
 #Start AD Sync
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
