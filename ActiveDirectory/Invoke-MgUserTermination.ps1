@@ -31,7 +31,7 @@
 
 #Import-Module adsync -UseWindowsPowerShell
 
-Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName PresentationFramework -UseWindowsPowerShell
 [System.Windows.MessageBox]::Show('For all fields please enter users email address', 'Compass Termination Request')
 
 function CompassUserTermination {
@@ -98,7 +98,7 @@ if ($DisabledOUs.count -gt 0) {
 }
 #endregion pre-check
 
-Write-Host "Logging into Azure services. You should get 3 prompts." 
+Write-Host "Logging into Azure services. You should get 2 prompts." 
 $Scopes = @(
     "Directory.ReadWrite.All",
     "User.ReadWrite.All",
@@ -109,7 +109,6 @@ $Scopes = @(
     "AppRoleAssignment.ReadWrite.All")
 Connect-MgGraph -Scopes $Scopes -NoWelcome
 Connect-ExchangeOnline -ShowBanner:$false
-Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
 
@@ -120,7 +119,6 @@ try {
     Write-Host "Could not find user $($UserFromAD.UserPrincipalName) in Azure" -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-MgGraph
-    Disconnect-PnPOnline
     exit
 }
 
@@ -136,7 +134,6 @@ if ($Confirmation -ne 'y') {
     Write-Host 'User did not enter "Y"' -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-MgGraph
-    Disconnect-PnPOnline
     exit
 }
 
@@ -232,34 +229,6 @@ if ($UserFwdConfirmation -eq 'y') {
 
 if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $SetUserMailFWD -DeliverToMailboxAndForward $False }
 
-# Set OneDrive as Read Only
-
-$UserOneDriveURL = (Get-PnPUserProfileProperty -Account cwooden@compassmsp.com -Properties PersonalUrl).PersonalUrl
-
-Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly
-        
-# Set OneDrive grant access
-if ($SPOAccessConfirmation -eq 'y') {
-
-    try {
-        $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop 
-        $GetUserOneDriveAccessCheck = 'yes'
-        Write-Host "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)" 
-    } catch { 
-        Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
-        $GetUserOneDriveAccessCheck = 'no'
-    }
-
-} Else {
-    Write-Host "Skipping OneDrive access grant" 
-}
-
-if ($GetUserOneDriveAccessCheck -eq 'yes') { 
-    Set-PnPTenantSite -Url $UserOneDriveURL -Owners $GrantUserOneDriveAccess
-    $UserOneDriveURL
-    Read-Host 'Please copy the OneDrive URL. Press any key to continue'
-}
-
 ## Remove user from KnowBe4 SCIM App
 $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName
 
@@ -310,7 +279,37 @@ Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Where-Object `
 
 $removeLicOutput = Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId }
 
-Write-Host "Removal of user licenses completed." 
+Write-Host "Removal of user licenses completed."
+
+# Set OneDrive as Read Only
+
+Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
+
+$UserOneDriveURL = (Get-PnPUserProfileProperty -Account cwooden@compassmsp.com -Properties PersonalUrl).PersonalUrl
+
+Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly
+        
+# Set OneDrive grant access
+if ($SPOAccessConfirmation -eq 'y') {
+
+    try {
+        $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop 
+        $GetUserOneDriveAccessCheck = 'yes'
+        Write-Host "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)" 
+    } catch { 
+        Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
+        $GetUserOneDriveAccessCheck = 'no'
+    }
+
+} Else {
+    Write-Host "Skipping OneDrive access grant" 
+}
+
+if ($GetUserOneDriveAccessCheck -eq 'yes') { 
+    Set-PnPTenantSite -Url $UserOneDriveURL -Owners $GrantUserOneDriveAccess
+    $UserOneDriveURL
+    Read-Host 'Please copy the OneDrive URL. Press any key to continue'
+}
 
 #endregion Office365
 
