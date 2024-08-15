@@ -31,8 +31,8 @@
 
 #Import-Module adsync -UseWindowsPowerShell
 
-Add-Type -AssemblyName PresentationFramework -UseWindowsPowerShell
-[System.Windows.MessageBox]::Show('For all fields please enter users email address', 'Compass Termination Request')
+#Add-Type -AssemblyName PresentationFramework -UseWindowsPowerShell
+#[System.Windows.MessageBox]::Show('For all fields please enter users email address', 'Compass Termination Request')
 
 function CompassUserTermination {
     param (

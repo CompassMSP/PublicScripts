@@ -104,7 +104,6 @@ if ($SkipAz -ne 'y') {
         "AppRoleAssignment.ReadWrite.All")
     Connect-MgGraph -Scopes $Scopes -NoWelcome
     Connect-ExchangeOnline -ShowBanner:$false 
-    Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
 }
 
 if ($Sku) { 
@@ -321,9 +320,6 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     ## Assigns US as UsageLocation
     Update-MgUser -UserId $NewUserEmail -UsageLocation US
 
-    ## Creates OneDrive
-    Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
-
     ## Add user to KnowBe4 SCIM App
     $MgUser = Get-MgUser -UserId $NewUserEmail
 
@@ -437,4 +433,9 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             }   
         }
     }
+
+    Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
+    ## Creates OneDrive
+    Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
+    
 }
