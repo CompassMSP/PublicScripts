@@ -282,7 +282,7 @@ $removeLicOutput = Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName
 Write-Host "Removal of user licenses completed."
 
 # Set OneDrive as Read Only
-
+<#
 Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
 
 $UserOneDriveURL = (Get-PnPUserProfileProperty -Account cwooden@compassmsp.com -Properties PersonalUrl).PersonalUrl
@@ -310,7 +310,7 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
     $UserOneDriveURL
     Read-Host 'Please copy the OneDrive URL. Press any key to continue'
 }
-
+#>
 #endregion Office365
 
 #Disconnect from Exchange and Graph
