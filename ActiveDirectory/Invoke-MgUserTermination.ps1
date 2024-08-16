@@ -37,16 +37,17 @@
 function CompassUserTermination {
     param (
         [Parameter(Mandatory)]
+        #[string]$GrantOneDriveAccessTo,
         [string]$UserToTerm,
         [string]$GrantMailboxFullControlTo,
-        [string]$FowardMailboxTo,
-        [string]$GrantOneDriveAccessTo
+        [string]$FowardMailboxTo
+
     )
     [pscustomobject]@{
         InputUserToTerm         = $UserToTerm
         InputUserFullControl    = $GrantMailboxFullControlTo
         InputUserFWD            = $FowardMailboxTo
-        InputUserOneDriveAccess = $GrantOneDriveAccessTo
+        #InputUserOneDriveAccess = $GrantOneDriveAccessTo
     }
 }
 
@@ -55,11 +56,11 @@ $result = Invoke-Expression (Show-Command CompassUserTermination -PassThru)
 $User = $result.InputUserToTerm
 $GrantUserFullControl = $result.InputUserFullControl
 $SetUserMailFWD = $result.InputUserFWD
-$GrantUserOneDriveAccess = $result.InputUserOneDriveAccess
+#$GrantUserOneDriveAccess = $result.InputUserOneDriveAccess
 
 if (!$result.InputUserFullControl) { $UserAccessConfirmation = 'n' } else { $UserAccessConfirmation = 'y' }
 if (!$result.InputUserFWD) { $UserFwdConfirmation = 'n' } else { $UserFwdConfirmation = 'y' }
-if (!$result.InputUserOneDriveAccess) { $SPOAccessConfirmation = 'n' } else { $SPOAccessConfirmation = 'y' }
+#if (!$result.InputUserOneDriveAccess) { $SPOAccessConfirmation = 'n' } else { $SPOAccessConfirmation = 'y' }
 
 $Localpath = 'C:\Temp'
 

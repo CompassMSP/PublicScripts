@@ -45,7 +45,7 @@ Param (
 )
 
 
-Add-Type -AssemblyName PresentationFramework
+#Add-Type -AssemblyName PresentationFramework
 [System.Windows.MessageBox]::Show("For the 'NewUser' and 'UserToCopy' please enter in a DiplayName format: 'FirstName LastName'",'Compass New User Request')
 
 function CompassNewUserRequest {
@@ -434,8 +434,8 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
-    Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
-    ## Creates OneDrive
-    Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
+    ## Creates OneDrive - Not working
+    #Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
+    #Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
     
 }
