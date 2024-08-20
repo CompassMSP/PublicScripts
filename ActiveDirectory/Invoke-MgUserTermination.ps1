@@ -286,10 +286,9 @@ Write-Host "Removal of user licenses completed."
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
 
-# Set OneDrive as Read Only - NOT WORKING
+# Set OneDrive as Read Only
 
-#Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
-Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -CertificatePath "c:\temp\PnPPowerShell.pfx"
+Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -Thumbprint '3b51fcc465d26593303453c8a636b13587e0dc81'
 
 $UserOneDriveURL = (Get-PnPUserProfileProperty -Account cwooden@compassmsp.com -Properties PersonalUrl).PersonalUrl
 
