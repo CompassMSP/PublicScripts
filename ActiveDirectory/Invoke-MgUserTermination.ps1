@@ -44,9 +44,9 @@ function CompassUserTermination {
 
     )
     [pscustomobject]@{
-        InputUserToTerm         = $UserToTerm
-        InputUserFullControl    = $GrantMailboxFullControlTo
-        InputUserFWD            = $FowardMailboxTo
+        InputUserToTerm      = $UserToTerm
+        InputUserFullControl = $GrantMailboxFullControlTo
+        InputUserFWD         = $FowardMailboxTo
         #InputUserOneDriveAccess = $GrantOneDriveAccessTo
     }
 }
@@ -286,11 +286,10 @@ Write-Host "Removal of user licenses completed."
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
 
-
-<#
 # Set OneDrive as Read Only - NOT WORKING
 
-Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
+#Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
+Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -CertificatePath "c:\temp\PnPPowerShell.pfx"
 
 $UserOneDriveURL = (Get-PnPUserProfileProperty -Account cwooden@compassmsp.com -Properties PersonalUrl).PersonalUrl
 
@@ -320,7 +319,6 @@ if ($GetUserOneDriveAccessCheck -eq 'yes') {
 
 Disconnect-PnPOnline
 
-#>
 #endregion Office365
 
 #Start AD Sync

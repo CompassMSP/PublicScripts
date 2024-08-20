@@ -46,7 +46,7 @@ Param (
 
 
 #Add-Type -AssemblyName PresentationFramework
-[System.Windows.MessageBox]::Show("For the 'NewUser' and 'UserToCopy' please enter in a DiplayName format: 'FirstName LastName'",'Compass New User Request')
+[System.Windows.MessageBox]::Show("For the 'NewUser' and 'UserToCopy' please enter in a DiplayName format: 'FirstName LastName'", 'Compass New User Request')
 
 function CompassNewUserRequest {
     param (
@@ -75,9 +75,9 @@ $UserToCopy = $result.InputUserToCopy
 $UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company 
     
 if ($UserToCopyUPN.Count -gt 1) {  
-        Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes."
-        exit
-    } elseif ($NULL -eq $UserToCopyUPN) {
+    Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes."
+    exit
+} elseif ($NULL -eq $UserToCopyUPN) {
     Write-Output "Could not find user $($UserToCopy) in AD to copy from."
     exit
 }
@@ -162,7 +162,7 @@ if (!$Sku) {
                 "ENTERPRISEPACK" { "Office 365 E3" }
             }
             SkuPartNumber = $_.SkuPartNumber
-            SkuId     = $_.SkuId
+            SkuId         = $_.SkuId
             #NumberTotal   = $_.ActiveUnits
             #NumberUsed    = $_.ConsumedUnits
             Available     = ($_.ActiveUnits - $_.ConsumedUnits)
@@ -407,7 +407,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
                     "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
                 }
                 SkuPartNumber = $_.SkuPartNumber
-                SkuId     = $_.SkuId
+                SkuId         = $_.SkuId
                 #NumberTotal   = $_.ActiveUnits
                 #NumberUsed    = $_.ConsumedUnits
                 Available     = ($_.ActiveUnits - $_.ConsumedUnits)
@@ -434,8 +434,10 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
-    ## Creates OneDrive - Not working
+    ## Creates OneDrive
     #Connect-PnPOnline -Url "https://compassmsp-admin.sharepoint.com" -Interactive
-    #Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
+    Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -CertificatePath "c:\temp\PnPPowerShell.pfx"
+    Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
+    Disconnect-PnPOnline
     
 }
