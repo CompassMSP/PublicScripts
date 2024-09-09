@@ -434,6 +434,10 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
+    #Disconnect from Exchange and Graph
+    Disconnect-ExchangeOnline -Confirm:$false
+    Disconnect-Graph
+
     ## Creates OneDrive
     Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -Thumbprint '3b51fcc465d26593303453c8a636b13587e0dc81'
     Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
