@@ -187,6 +187,9 @@ $termUserDeviceId | ForEach-Object {
 
 $termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled } 
 
+# Disabled mailbox forwarding
+$365Mailbox | Set-Mailbox -ForwardingAddress $null -ForwardingSmtpAddress $null 
+
 # Change mailbox to shared
 $365Mailbox | Set-Mailbox -Type Shared
 
