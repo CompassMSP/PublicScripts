@@ -37,8 +37,8 @@
 function CompassUserTermination {
     param (
         [Parameter(Mandatory)]
-        [string]$GrantOneDriveAccessTo,
         [string]$UserToTerm,
+        [string]$GrantOneDriveAccessTo,
         [string]$GrantMailboxFullControlTo,
         [string]$FowardMailboxTo
 
