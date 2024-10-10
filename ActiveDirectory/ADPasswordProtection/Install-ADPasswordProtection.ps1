@@ -9,12 +9,7 @@ Function Install-ADPasswordProtection {
     The script will do the following:
         Install the application on the DC
         Create the GPO (if the server is the PDC)
-        Copy the HIBP DB into the Store location
-
-    .PARAMETER StoreFilesInDBFormatLink
-    A URL to the ZIP file where the HIBP DB files will be hosted. The script will download this ZIP and extract it directly to its store.
-
-    This file will need to be manually updated any time there is a HIBP DB update (about once or twice a year)
+        Update the HIBP DB into the Store location
 
     .PARAMETER SMTPRelay
     SMTP server that will be used to send notifications if the script runs into any issues.
@@ -32,7 +27,8 @@ Function Install-ADPasswordProtection {
     https://github.com/lithnet/ad-password-protection
     https://github.com/CompassMSP/PublicScripts/blob/master/ActiveDirectory/Install-ADPasswordProtection.ps1
 
-    Andy Morales
+    Andy Morales - 2020-03-03 - Initial version
+    Chris Williams - 2024-10-10 - Updated to use Modules
     #>
     #Requires -Version 5 -RunAsAdministrator
 
@@ -206,9 +202,6 @@ Function Install-ADPasswordProtection {
         }
     }
 
-    #Clean up any old files
-    Remove-OldFiles
-
     #Check if DC has enough free space
     if ((Get-PSDrive C).free -lt 30GB) {
         Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 30 GB free. Script will exit'
@@ -351,6 +344,4 @@ Function Install-ADPasswordProtection {
         Send-MailMessage @SendMailMessageParams
     }
 
-    #Cleanup
-    Remove-OldFiles
 }
