@@ -221,7 +221,7 @@ Function Install-ADPasswordProtection {
         #region Download and Install
         $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
 
-        $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" }
+        $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" } -UseBasicParsing
         $json = $latestRelease.Content | ConvertFrom-Json
         $latestVersion = $json.tag_name
 
