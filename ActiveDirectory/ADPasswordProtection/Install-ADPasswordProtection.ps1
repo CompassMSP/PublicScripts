@@ -234,7 +234,7 @@ Function Install-ADPasswordProtection {
 
         Start-Process -FilePath C:\temp\$BuildExe -Wait;
 
-        Import-Module LithnetPasswordProtection
+        Import-Module LithnetPasswordProtection -Force
         
         Sync-HashesFromHibp
 
