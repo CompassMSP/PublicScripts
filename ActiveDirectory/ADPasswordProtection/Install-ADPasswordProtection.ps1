@@ -212,6 +212,7 @@ Function Install-ADPasswordProtection {
     }
 
     if ($FreeSpace -eq 'yes') {
+        
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
         if ((Test-Path 'C:\Temp' ) -eq $false) {
@@ -232,7 +233,7 @@ Function Install-ADPasswordProtection {
  
         Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection'
 
-        Start-Process -FilePath C:\temp\$BuildExe -Wait;
+        Start-Process -FilePath C:\temp\$BuildExe -Wait
 
         Import-Module LithnetPasswordProtection -Force
         
@@ -321,6 +322,17 @@ Function Install-ADPasswordProtection {
 
         if ($PDC -eq $LocalDC) {
             Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
+
+            $TaskArgument = "-Command '. C:\Scripts\Invoke-ADPasswordAudit.ps1; Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail'"
+
+            if ((Test-Path 'C:\Scripts' ) -eq $false) { New-Item -Path 'C:\Scripts' -ItemType Directory }
+
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            (New-Object System.Net.WebClient).DownloadFile("https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1", "C:\Scripts\Invoke-ADPasswordAudit.ps1")
+            
+            $taskTrigger = New-ScheduledTaskTrigger -Daily -At '4:00 AM'
+            $taskAction = New-ScheduledTaskAction -Execute "PowerShell" -Argument $TaskArgument -WorkingDirectory $ScriptsFolder
+            Register-ScheduledTask 'Invoke-ADPasswordAudit' -Action $taskAction -Trigger $taskTrigger -User "System" -RunLevel Highest
         }
         #endregion RunInvoke-ADPasswordAudit
     } else {

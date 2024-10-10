@@ -39,10 +39,6 @@ Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubu
 
 # Parameters
 
-  StoreFilesInDBFormatLink is stored on the CompassMSP Automate web server. This is a prebuilt database for the Lithnet application. Which is manually updated.
-
-    -StoreFilesInDBFormatLink 'https://rmm.compassmsp.com/softwarepackages/ADPasswordProtectionStore.zip'
-
   NotificationEmail is the email you want to receive the error logs as well as the password audit notification.
 
     -NotificationEmail 'cwilliams@compassmsp.com'
@@ -61,8 +57,6 @@ To update the HIBP hash database you will run the following command. This will g
 The script will run a password audit on the primary domain controller once it installs successfully.
 
 Please make sure to run this on all domain controllers.
-
-Note that the update script does NOT need the StoreFilesInDBFormatLink parameter as it defaults to the Compass hosted database. 
 
 ````powershell
 Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
