@@ -233,7 +233,12 @@ Function Install-ADPasswordProtection {
  
         Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection'
 
-        Start-Process -FilePath C:\temp\$BuildExe -Wait
+        #Start-Process -FilePath C:\temp\$BuildExe -Wait
+        $arguments ="/extract /exenoui"
+        $install = "C:\temp\LithnetPasswordProtection.msi"
+        
+        Start-Process -FilePath C:\temp\$BuildExe $arguments -Wait
+        Start-Process -FilePath $env:systemroot\system32\msiexec.exe "/i $install /qn /quiet /norestart" -Wait;
 
         Import-Module LithnetPasswordProtection -Force
         
