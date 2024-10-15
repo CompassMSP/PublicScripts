@@ -222,7 +222,7 @@ Function Install-ADPasswordProtection {
         #region Download and Install
         $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
 
-        $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" } -UseBasicParsing
+        $latestRelease = Invoke-WebRequest $URI -Headers @{"Accept" = "application/json" }
         $json = $latestRelease.Content | ConvertFrom-Json
         $latestVersion = $json.tag_name
 
@@ -236,7 +236,7 @@ Function Install-ADPasswordProtection {
         #Start-Process -FilePath C:\temp\$BuildExe -Wait
         $arguments ="/extract /exenoui"
         $install = "C:\temp\LithnetPasswordProtection.msi"
-        
+
         Start-Process -FilePath C:\temp\$BuildExe $arguments -Wait
         Start-Process -FilePath $env:systemroot\system32\msiexec.exe "/i $install /qn /quiet /norestart" -Wait;
 
