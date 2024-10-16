@@ -88,7 +88,7 @@ Function Invoke-ADPasswordAudit {
         $SendMailMessageParams = @{
             To         = $NotificationEmail
             From       = $FromEmail
-            Subject    = "Compromised passwords found on DC: $((Get-WmiObject Win32_Computersystem).Name)"
+            Subject    = "Compromised passwords found on DC: $((Get-WmiObject Win32_Computersystem).Name) - Domain: $((Get-WmiObject Win32_ComputerSystem).Domain)"
             Body       = $EmailBody
             BodyAsHtml = $true
             SmtpServer = $SMTPRelay
