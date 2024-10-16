@@ -27,8 +27,7 @@ Function Install-ADPasswordProtection {
     https://github.com/lithnet/ad-password-protection
     https://github.com/CompassMSP/PublicScripts/blob/master/ActiveDirectory/Install-ADPasswordProtection.ps1
 
-    Andy Morales - 2020-03-03 - Initial version
-    Chris Williams - 2024-10-10 - Updated to use Modules
+    Chris Williams
     #>
     #Requires -Version 5 -RunAsAdministrator
 
@@ -331,13 +330,12 @@ Function Install-ADPasswordProtection {
         if ($PDC -eq $LocalDC) {
             Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
 
-            $TaskArgument = "-Command '. C:\Scripts\Invoke-ADPasswordAudit.ps1; Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail'"
-
             if ((Test-Path 'C:\Scripts' ) -eq $false) { New-Item -Path 'C:\Scripts' -ItemType Directory }
 
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             (New-Object System.Net.WebClient).DownloadFile("https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1", "C:\Scripts\Invoke-ADPasswordAudit.ps1")
             
+            $TaskArgument = "-Command '. C:\Scripts\Invoke-ADPasswordAudit.ps1; Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail'"
             $taskTrigger = New-ScheduledTaskTrigger -Daily -At '4:00 AM'
             $taskAction = New-ScheduledTaskAction -Execute "PowerShell" -Argument $TaskArgument -WorkingDirectory $ScriptsFolder
             Register-ScheduledTask 'Invoke-ADPasswordAudit' -Action $taskAction -Trigger $taskTrigger -User "System" -RunLevel Highest

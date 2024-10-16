@@ -4,7 +4,7 @@ Function Update-ADPasswordProtection {
     This script updates the Lithnet AD Password Protection database with latest HIBP password list. Must be run on each DC.
     
     .EXAMPLE
-    Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail 'cwilliams@compassmsp.com' -SMTPRelay 'compassmsp-com.mail.protection.outlook.com' -FromEmail 'cwilliams@compassmsp.com'
+    Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection 
     .LINK
     https://haveibeenpwned.com/Passwords
     https://github.com/lithnet/ad-password-protection
@@ -13,19 +13,6 @@ Function Update-ADPasswordProtection {
     Chris Williams
     #>
     #Requires -Version 5 -RunAsAdministrator
-    
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true,
-            HelpMessage = 'example.mail.protection.outlook.com')]
-        [string]$SMTPRelay,
-
-        [Parameter(Mandatory = $true)]
-        [string]$NotificationEmail,
-
-        [Parameter(Mandatory = $true)]
-        [string]$FromEmail
-    )
     
     $LogDirectory = 'C:\Windows\Temp\PasswordProtection.log'
     
@@ -126,14 +113,12 @@ Function Update-ADPasswordProtection {
         exit
     }
     
-   <#
     #Check if DC has enough free space
     if ((Get-PSDrive C).free -lt 30GB) {
         Write-Log -Level Warn -Path $LogDirectory -Message 'DC has less than 30 GB free. Script will exit'
         Start-Process $LogDirectory
         exit 
     }
-    #>
 
     $URI = "https://github.com/lithnet/ad-password-protection/releases/latest"
 
