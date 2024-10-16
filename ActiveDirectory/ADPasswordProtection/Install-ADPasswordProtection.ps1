@@ -323,11 +323,12 @@ Function Install-ADPasswordProtection {
             Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1'); Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail
 
             if ((Test-Path 'C:\Scripts' ) -eq $false) { 
-                    New-Item -Path 'C:\Scripts' -ItemType Directory } else {
-                        if ((Test-Path 'C:\Scripts\Invoke-ADPasswordAudit.ps1' ) -eq $true) { 
-                            Remove-Item -Path "C:\Scripts\Invoke-ADPasswordAudit.ps1" -Force 
-                        }
-                    }
+                New-Item -Path 'C:\Scripts' -ItemType Directory 
+            } else {
+                if ((Test-Path 'C:\Scripts\Invoke-ADPasswordAudit.ps1' ) -eq $true) { 
+                    Remove-Item -Path "C:\Scripts\Invoke-ADPasswordAudit.ps1" -Force 
+                }
+            }
                 
             $taskName = “Invoke-ADPasswordAudit”
             $task = Get-ScheduledTask | Where-Object { $_.TaskName -eq $taskName } | Select-Object -First 1
