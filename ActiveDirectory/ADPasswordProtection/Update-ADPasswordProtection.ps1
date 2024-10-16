@@ -131,6 +131,33 @@ Function Update-ADPasswordProtection {
     
     if ((Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq "Lithnet Password Protection for Active Directory" }).Version -lt "$BuildVersion") {
 
+        $PDC = (Get-ADForest | Select-Object -ExpandProperty RootDomain | Get-ADDomain).PDCEmulator
+
+        $LocalDC = [System.Net.Dns]::GetHostByName($env:computerName).HostName
+    
+        if ($PDC -eq $LocalDC) {
+
+            if ((Test-Path 'C:\Scripts' ) -eq $false) { 
+                New-Item -Path 'C:\Scripts' -ItemType Directory 
+            } else {
+                if ((Test-Path 'C:\Scripts\Invoke-ADPasswordAudit.ps1' ) -eq $true) { 
+                    Remove-Item -Path "C:\Scripts\Invoke-ADPasswordAudit.ps1" -Force 
+                }
+            }
+                    
+            $taskName = “Invoke-ADPasswordAudit”
+            $task = Get-ScheduledTask | Where-Object { $_.TaskName -eq $taskName } | Select-Object -First 1
+            if ($null -ne $task) { $task | Unregister-ScheduledTask -Confirm:$false }
+    
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                (New-Object System.Net.WebClient).DownloadFile("https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Invoke-ADPasswordAudit.ps1", "C:\Scripts\Invoke-ADPasswordAudit.ps1")
+                
+            $TaskArgument = "-Command '. C:\Scripts\Invoke-ADPasswordAudit.ps1; Invoke-ADPasswordAudit -NotificationEmail $NotificationEmail -SMTPRelay $SMTPRelay -FromEmail $FromEmail'"
+            $taskTrigger = New-ScheduledTaskTrigger -Daily -At '4:00 AM'
+            $taskAction = New-ScheduledTaskAction -Execute "PowerShell" -Argument $TaskArgument -WorkingDirectory $ScriptsFolder
+            Register-ScheduledTask 'Invoke-ADPasswordAudit' -Action $taskAction -Trigger $taskTrigger -User "System" -RunLevel Highest
+        }
+
         (New-Object System.Net.WebClient).DownloadFile("$BuildURI", "c:\temp\$BuildExe")
 
         Write-Log -Level Info -Path $LogDirectory -Message 'Installing Password Protection'
