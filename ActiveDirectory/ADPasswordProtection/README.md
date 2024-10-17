@@ -27,7 +27,7 @@ The script will run a password audit on the primary domain controller once it in
 
 You will need to run this on all domain controllers.
 
-First you will need to enable TLS1.2 inside of Powershell.
+First you will need to enable TLS1.2 inside of Powershell and put the AV/EDR into a monitor/read only mode temporarily
 
 ````powershell
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -60,7 +60,7 @@ The script will run a password audit on the primary domain controller once it in
 Please make sure to run this on all domain controllers.
 
 ````powershell
-Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
+Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Update-ADPasswordProtection.ps1'); Update-ADPasswordProtection
 ````
 
 # Verify Install
