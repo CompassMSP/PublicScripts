@@ -25,13 +25,10 @@ Run the command below as admin on a PowerShell terminal. This will perform the a
 
 The script will run a password audit on the primary domain controller once it installs successfully.
 
+First you MUST put the AV/EDR into a monitor/read only mode. If you do not do this, the script will fail.
+
 You will need to run this on all domain controllers.
 
-First you will need to enable TLS1.2 inside of Powershell and put the AV/EDR into a monitor/read only mode temporarily
-
-````powershell
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-````
 Then you can run the following command to start the setup process. 
 
 ````powershell
