@@ -19,6 +19,7 @@
 # 03-08-2024                    1.9         Cleaned up licenses select display output
 # 05-08-2024                    2.0         Add input box for Variables
 # 05-21-2024                    2.1         Added stop for if UserToCopy cannot be found
+# 10-21-2024                    2.2         Add MeetWithMeId and AD User properties
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -320,7 +321,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     ## Assigns US as UsageLocation
     Update-MgUser -UserId $NewUserEmail -UsageLocation US
 
-    #Adds user to All Company group.
+    # Adds user to All Company group.
     New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'All Company'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
     New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'Exclaimer Default'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
     New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'Exclaimer Add-in'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
@@ -328,6 +329,14 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     Write-Output "User $($NewUser) should now be created unless any errors occurred during the process."
     Write-Output "Copy User group count: $($CopyUserGroupCount)"
     Write-Output "New User group count: $($NewUserGroupCount)"
+
+    ## Add BookWithMeId to the extensionAttribute15 property of the new user.
+    $NewUserExchGuid = (Get-Mailbox -Identity $NewUserEmail).ExchangeGuid.Guid -replace "-" -replace ""
+    $extAttr15 = $NewUserExchGuid  + '@compassmsp.com?anonymous&ep=plink'
+
+    Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15="$extAttr15"}
+
+    ## Add additional 365 licenses 
 
     $AddLic = Read-Host "Would you like to add additional licenses? (Y/N)"
 
