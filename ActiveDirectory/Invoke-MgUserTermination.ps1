@@ -157,7 +157,7 @@ $SetADUserParams = @{
         'facsimileTelephoneNumber',
         'mobile',
         'telephoneNumber',
-        'l', # l is for Location because Microsoft AD attribute are stupid
+        'l', # l is for Location because Microsoft AD attributes are stupid
         'Manager',
         'extensionAttribute1',
         'extensionAttribute2',
