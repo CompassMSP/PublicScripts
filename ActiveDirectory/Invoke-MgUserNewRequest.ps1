@@ -19,7 +19,9 @@
 # 03-08-2024                    1.9         Cleaned up licenses select display output
 # 05-08-2024                    2.0         Add input box for Variables
 # 05-21-2024                    2.1         Added stop for if UserToCopy cannot be found
-# 10-21-2024                    2.2         Add MeetWithMeId and AD User properties
+# 10-15-2024                    2.2         Remove AppRoleAssignment for KnowBe4 SCIM App
+# 10-21-2024                    2.3         Add MeetWithMeId and AD User properties
+# 10-22-2024                    2.4         Add KB4 offboarding email delivery to SecurePath
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -95,6 +97,7 @@ if (!$result.InputSku) {
 
 if ($SkipAz -ne 'y') {
     Write-Output 'Logging into 365 services.'
+    <#
     $Scopes = @(
         "Directory.ReadWrite.All",
         "User.ReadWrite.All",
@@ -104,6 +107,11 @@ if ($SkipAz -ne 'y') {
         "Organization.Read.All",
         "AppRoleAssignment.ReadWrite.All")
     Connect-MgGraph -Scopes $Scopes -NoWelcome
+    #>
+    $AppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
+    $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
+    $Certificate = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+    Connect-Graph -TenantId $TenantId -AppId $AppId -Certificate $Certificate -NoWelcome
     Connect-ExchangeOnline -ShowBanner:$false 
 }
 
@@ -332,9 +340,34 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     ## Add BookWithMeId to the extensionAttribute15 property of the new user.
     $NewUserExchGuid = (Get-Mailbox -Identity $NewUserEmail).ExchangeGuid.Guid -replace "-" -replace ""
-    $extAttr15 = $NewUserExchGuid  + '@compassmsp.com?anonymous&ep=plink'
+    $extAttr15 = $NewUserExchGuid + '@compassmsp.com?anonymous&ep=plink'
 
-    Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15="$extAttr15"}
+    Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15 = "$extAttr15" }
+
+    ## Sends email to SecurePath Team (soc@compassmsp.com) with the new user information.
+    $MgUser = Get-MgUser -UserId $NewUserEmail
+
+    $MsgFrom = 'noreply@compassmsp.com'
+
+    $params = @{
+        message         = @{
+            subject      = "KB4 – New User"
+            body         = @{
+                contentType = "HTML"
+                content     = "The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)"
+            }
+            toRecipients = @(
+                @{
+                    emailAddress = @{
+                        address = "soc@compassmsp.com"
+                    }
+                }
+            )
+        }
+        saveToSentItems = "false"
+    }
+
+    Send-MgUserMail -UserId $MsgFrom -BodyParameter $params
 
     ## Add additional 365 licenses 
 
