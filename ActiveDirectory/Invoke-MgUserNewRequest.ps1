@@ -79,11 +79,11 @@ $UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properti
     
 if ($UserToCopyUPN.Count -gt 1) {  
     Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 } elseif ($NULL -eq $UserToCopyUPN) {
     Write-Output "Could not find user $($UserToCopy) in AD to copy from. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
@@ -204,7 +204,7 @@ $NewUserEmail = $($NewUserSamAccountName + $Domain).ToLower()
 $CheckNewUserUPN = $(try { Get-ADUser -Identity $NewUserSamAccountName } catch { $null })
 if ($null -ne $CheckNewUserUPN) {
     Write-Host "SamAccountName exist for user $NewUser. Please check AD for accounts with duplicate SamAccountName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 } 
 
@@ -225,7 +225,7 @@ Continue? (Y/N)`n"
 
 if ($Confirmation -ne 'y') {
     Write-Output 'User did not enter "Y". Press any key to exit script.'
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
@@ -245,7 +245,7 @@ try {
         -Enabled $True
 } catch { 
     Write-Host "New User creation was not successful. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
@@ -294,7 +294,7 @@ if (!$NewMgUser) {
 
 if ($ADSyncCompleteYesorExit -eq 'exit') {
     Write-Output 'You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
@@ -303,13 +303,16 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
     if (!$NewMgUser) { 
         Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
-        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
         exit
     }
 
     Write-Output 'Script now will resume'
 
-    Write-Output 'Adding Office 365 Groups to new user.'
+    Write-Output 'Setting Usage Location for new user'
+    
+    ## Assigns US as UsageLocation
+    Update-MgUser -UserId $NewUserEmail -UsageLocation US
 
     if ($getLic) { 
         try {
@@ -317,10 +320,12 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             Write-Output 'License added.'
         } catch {
             Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
-            $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+            $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
             exit
         }
     }
+
+    Write-Output 'Adding Office 365 Groups to new user.'
 
     $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
         Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
@@ -336,16 +341,6 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id).Count
     $NewUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $NewUserEmail).Id).Count
-
-    Write-Output 'Setting Usage Location for new user'
-    
-    ## Assigns US as UsageLocation
-    Update-MgUser -UserId $NewUserEmail -UsageLocation US
-
-    # Adds user to All Company group.
-    New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'All Company'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
-    New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'Exclaimer Default'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
-    New-MgGroupMember -GroupId (Get-MgGroup -Filter "DisplayName eq 'Exclaimer Add-in'").Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id
 
     Write-Output "User $($NewUser) should now be created unless any errors occurred during the process."
     Write-Output "Copy User group count: $($CopyUserGroupCount)"
@@ -478,16 +473,19 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     Disconnect-Graph
 
     ## Connect to PnP PowerShell
+    <#
     $PnPAppId = "24e3c6ad-9658-4a0d-b85f-82d67d148449"
     $Org = "compassmsp.onmicrosoft.com"
-    $PnPCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=$PnP PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+    $PnPCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=PnP PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
     if ($NULL -eq $PnPCert) {
         Write-Host "No valid PnP PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
         $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
         exit
     }
     Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId $PnPAppId -Tenant $Org -Thumbprint $($PNPCert.Thumbprint)
-    #Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -Thumbprint '3b51fcc465d26593303453c8a636b13587e0dc81'
+    #>
+    Connect-PnPOnline -Url https://compassmsp-admin.sharepoint.com -UseWebLogin
+    
     ## Creates OneDrive
     Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
     Disconnect-PnPOnline

@@ -337,14 +337,13 @@ Disconnect-Graph
 ## Connect to PnP PowerShell
 $PnPAppId = "24e3c6ad-9658-4a0d-b85f-82d67d148449"
 $Org = "compassmsp.onmicrosoft.com"
-$PnPCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=$PnP PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+$PnPCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=PnP PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
 if ($NULL -eq $PnPCert) {
     Write-Host "No valid PnP PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId $PnPAppId -Tenant $Org -Thumbprint $($PNPCert.Thumbprint)
-#Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -Thumbprint '3b51fcc465d26593303453c8a636b13587e0dc81'
 
 ## Set OneDrive as Read Only
 $UserOneDriveURL = (Get-PnPUserProfileProperty -Account $UserFromAD.UserPrincipalName -Properties PersonalUrl).PersonalUrl
