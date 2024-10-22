@@ -78,10 +78,12 @@ $UserToCopy = $result.InputUserToCopy
 $UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company 
     
 if ($UserToCopyUPN.Count -gt 1) {  
-    Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes."
+    Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 } elseif ($NULL -eq $UserToCopyUPN) {
-    Write-Output "Could not find user $($UserToCopy) in AD to copy from."
+    Write-Output "Could not find user $($UserToCopy) in AD to copy from. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 }
 
@@ -111,6 +113,11 @@ if ($SkipAz -ne 'y') {
     $AppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
     $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
     $Certificate = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+    if ($NULL -eq $Certificate) {
+        Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+        exit
+    }
     Connect-Graph -TenantId $TenantId -AppId $AppId -Certificate $Certificate -NoWelcome
     Connect-ExchangeOnline -ShowBanner:$false 
 }
@@ -196,7 +203,8 @@ $NewUserEmail = $($NewUserSamAccountName + $Domain).ToLower()
 
 $CheckNewUserUPN = $(try { Get-ADUser -Identity $NewUserSamAccountName } catch { $null })
 if ($null -ne $CheckNewUserUPN) {
-    Write-Host "SamAccountName exist for user $NewUser. Please check AD for accounts with duplicate SamAccountName attributes."
+    Write-Host "SamAccountName exist for user $NewUser. Please check AD for accounts with duplicate SamAccountName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 } 
 
@@ -216,7 +224,8 @@ Template User to Copy = $($UserToCopy)`n
 Continue? (Y/N)`n"
 
 if ($Confirmation -ne 'y') {
-    Write-Output 'User did not enter "Y"'
+    Write-Output 'User did not enter "Y". Press any key to exit script.'
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 }
 
@@ -235,7 +244,8 @@ try {
         -Instance $UserToCopyUPN `
         -Enabled $True
 } catch { 
-    Write-Host "New User creation was not successful."
+    Write-Host "New User creation was not successful. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 }
 
@@ -283,7 +293,8 @@ if (!$NewMgUser) {
 }
 
 if ($ADSyncCompleteYesorExit -eq 'exit') {
-    Write-Output 'You will need to set the license and add Office 365 groups via the portal. Script will now exit'
+    Write-Output 'You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 }
 
@@ -291,7 +302,8 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
     if (!$NewMgUser) { 
-        Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal.'
+        Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
         exit
     }
 
@@ -304,7 +316,8 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.SkuId } -RemoveLicenses @() -ErrorAction stop
             Write-Output 'License added.'
         } catch {
-            Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal.'
+            Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
+            $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
             exit
         }
     }

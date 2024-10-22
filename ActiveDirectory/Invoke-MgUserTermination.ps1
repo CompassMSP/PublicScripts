@@ -78,6 +78,7 @@ try {
     $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$($User)'" -Properties MemberOf -ErrorAction Stop
 } catch {
     Write-Host "Could not find user $($User) in Active Directory" -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 }
 
@@ -97,6 +98,7 @@ if ($DisabledOUs.count -gt 0) {
     }
 } else {
     Write-Host "Could not find disabled OU in Active Directory" -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 }
 #endregion pre-check
@@ -128,6 +130,7 @@ try {
     Write-Host "Could not find user $($UserFromAD.UserPrincipalName) in Azure" -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-MgGraph
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 }
 
@@ -143,6 +146,7 @@ if ($Confirmation -ne 'y') {
     Write-Host 'User did not enter "Y"' -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-MgGraph
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
     exit
 }
 
@@ -363,4 +367,3 @@ Disconnect-PnPOnline
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
 
 Write-Host "User $($User) should now be disabled unless any errors occurred during the process." 
-
