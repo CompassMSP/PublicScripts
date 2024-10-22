@@ -99,17 +99,6 @@ if (!$result.InputSku) {
 
 if ($SkipAz -ne 'y') {
     Write-Output 'Logging into 365 services.'
-    <#
-    $Scopes = @(
-        "Directory.ReadWrite.All",
-        "User.ReadWrite.All",
-        "Directory.AccessAsUser.All",
-        "Group.ReadWrite.All",
-        "GroupMember.Read.All", 
-        "Organization.Read.All",
-        "AppRoleAssignment.ReadWrite.All")
-    Connect-MgGraph -Scopes $Scopes -NoWelcome
-    #>
     $AppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
     $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
     $Certificate = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
@@ -386,7 +375,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     $AddLic = Read-Host "Would you like to add additional licenses? (Y/N)"
 
-    if ($AddLic -ne 'y') { Write-Output 'Goodbye!' }
+    if ($AddLic -ne 'y') { Write-Output 'You have selected not to add any additional licenses.' }
 
     if ($AddLic -eq 'y') { 
 
