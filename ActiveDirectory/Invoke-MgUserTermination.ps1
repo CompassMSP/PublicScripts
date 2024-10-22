@@ -102,13 +102,28 @@ if ($DisabledOUs.count -gt 0) {
     exit
 }
 #endregion pre-check
-
-Write-Host "Logging into Azure services. You should get 2 prompts." 
-$AppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
+#Connect-Graph
+Write-Host "Logging into Azure services." 
+$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
 $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
-$Certificate = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-Connect-Graph -TenantId $TenantId -AppId $AppId -Certificate $Certificate -NoWelcome
-Connect-ExchangeOnline -ShowBanner:$false
+$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $GraphCert) {
+    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+
+#Connect-ExchangeOnline 
+$ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
+$Org = "compassmsp.onmicrosoft.com"
+$ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $ExOCert) {
+    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
 
@@ -319,12 +334,20 @@ Send-MgUserMail -UserId $MsgFrom -BodyParameter $params
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
 
-# Set OneDrive as Read Only
+## Connect to PnP PowerShell
+$PnPAppId = "24e3c6ad-9658-4a0d-b85f-82d67d148449"
+$Org = "compassmsp.onmicrosoft.com"
+$PnPCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=$PnP PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $PnPCert) {
+    Write-Host "No valid PnP PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId $PnPAppId -Tenant $Org -Thumbprint $($PNPCert.Thumbprint)
+#Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -Thumbprint '3b51fcc465d26593303453c8a636b13587e0dc81'
 
-Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId '24e3c6ad-9658-4a0d-b85f-82d67d148449' -Tenant compassmsp.onmicrosoft.com -Thumbprint '3b51fcc465d26593303453c8a636b13587e0dc81'
-
+## Set OneDrive as Read Only
 $UserOneDriveURL = (Get-PnPUserProfileProperty -Account $UserFromAD.UserPrincipalName -Properties PersonalUrl).PersonalUrl
-
 Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly
         
 # Set OneDrive grant access
