@@ -155,7 +155,8 @@ $SetADUserParams = @{
         'physicalDeliveryOfficeName',
         'Department',
         'facsimileTelephoneNumber',
-        'mobile', 'telephoneNumber',
+        'mobile',
+        'telephoneNumber',
         'l', # l is for Location because Microsoft AD attribues are stupid
         'Manager',
         'extensionAttribute1',
