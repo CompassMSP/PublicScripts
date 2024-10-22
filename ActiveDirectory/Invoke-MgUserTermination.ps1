@@ -104,17 +104,6 @@ if ($DisabledOUs.count -gt 0) {
 #endregion pre-check
 
 Write-Host "Logging into Azure services. You should get 2 prompts." 
-<#
-$Scopes = @(
-    "Directory.ReadWrite.All",
-    "User.ReadWrite.All",
-    "Directory.AccessAsUser.All",
-    "Group.ReadWrite.All",
-    "GroupMember.Read.All",
-    "Device.ReadWrite.All",
-    "AppRoleAssignment.ReadWrite.All")
-Connect-MgGraph -Scopes $Scopes -NoWelcome
-#>
 $AppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
 $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
 $Certificate = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
@@ -366,4 +355,4 @@ Disconnect-PnPOnline
 #Start AD Sync
 powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
 
-Write-Host "User $($User) should now be disabled unless any errors occurred during the process." 
+Write-Host "User $($User) should now be disabled unless any errors occurred during the process."
