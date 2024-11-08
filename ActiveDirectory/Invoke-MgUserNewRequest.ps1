@@ -43,11 +43,6 @@
 
 #Import-Module adsync -UseWindowsPowerShell
 
-Param (
-    [Parameter(Mandatory = $False)]
-    [String]$SkipAz
-)
-
 Add-Type -AssemblyName PresentationFramework
 
 # Function to validate display names
@@ -69,9 +64,7 @@ function Format-MobileNumber {
     # Check if we have 10 digits
     if ($digits.Length -eq 10) {
         return "($($digits.Substring(0, 3))) $($digits.Substring(3, 3))-$($digits.Substring(6, 4))"
-    } else {
-        throw "Invalid mobile number format. Please enter a valid 10-digit mobile number."
-    }
+    } 
 }
 
 # Function to create and show a custom WPF window
@@ -85,32 +78,78 @@ function Show-CustomNewUserRequestWindow {
 
     # Create a StackPanel to hold the controls
     $stackPanel = New-Object System.Windows.Controls.StackPanel
-    $stackPanel.Margin = '10'  # Add margin around the stack panel
+    $stackPanel.Margin = '3'  # Add margin around the stack panel
     $window.Content = $stackPanel
 
-    # Create and add labels and text boxes for input
-    $labels = @("New User (First Last):", "New User Mobile:", "User To Copy (First Last):")
-    $textBoxes = @()
+    # Create a StackPanel for the new user input and checkbox
+    $newuserPanel = New-Object System.Windows.Controls.StackPanel
+    $newuserPanel.Margin = '0,0,0,3'  # Add margin below the new user panel
 
-    foreach ($label in $labels) {
-        $lbl = New-Object System.Windows.Controls.Label
-        $lbl.Content = $label
-        $stackPanel.Children.Add($lbl)
+    # Create and add a label for the new user 
+    $newuserLabel = New-Object System.Windows.Controls.Label
+    $newuserLabel.Content = "New User (First Last):"
+    $newuserLabel.Margin = '0,0,0,4'  # Add margin below the label
+    $newuserPanel.Children.Add($newuserLabel)
 
-        $txtBox = New-Object System.Windows.Controls.TextBox
-        $txtBox.Margin = '0,0,0,10'
-        $textBoxes += $txtBox
-        $stackPanel.Children.Add($txtBox)
-    }
+    # Create and add TextBox for New User
+    $newUserTextBox = New-Object System.Windows.Controls.TextBox
+    $newUserTextBox.Margin = '0,0,0,3'  # Add margin below the text box
+    $newuserPanel.Children.Add($newUserTextBox)  # Add to new user panel
+
+    # Add the new user panel to the stack panel
+    $stackPanel.Children.Add($newuserPanel)
+
+    # Create a StackPanel for the copy user input and checkbox
+    $copyuserPanel = New-Object System.Windows.Controls.StackPanel
+    $copyuserPanel.Margin = '0,0,0,3'  # Add margin below the copy user panel
+
+    # Create and add a label for the copy user
+    $copyuserLabel = New-Object System.Windows.Controls.Label
+    $copyuserLabel.Content = "User To Copy (First Last):"
+    $copyuserLabel.Margin = '0,0,0,4'  # Add margin below the label
+    $copyuserPanel.Children.Add($copyuserLabel)
+
+    # Create and add TextBox for User To Copy
+    $userToCopyTextBox = New-Object System.Windows.Controls.TextBox
+    $userToCopyTextBox.Margin = '0,0,0,3'  # Add margin below the text box
+    $copyuserPanel.Children.Add($userToCopyTextBox)  # Add to copy user panel
+
+    # Add the copy user panel to the stack panel
+    $stackPanel.Children.Add($copyuserPanel)
+
+    # Create a StackPanel for the mobile number input and checkbox
+    $mobilePanel = New-Object System.Windows.Controls.StackPanel
+    $mobilePanel.Margin = '0,0,0,3'  # Add margin below the mobile panel
+
+    # Create and add a label for the mobile number
+    $mobileLabel = New-Object System.Windows.Controls.Label
+    $mobileLabel.Content = "Mobile Number:"
+    $mobileLabel.Margin = '0,0,0,4'  # Add margin below the label
+    $mobilePanel.Children.Add($mobileLabel)
+
+    # Create and add the mobile number text box
+    $mobileTextBox = New-Object System.Windows.Controls.TextBox
+    $mobileTextBox.Margin = '0,0,0,5'  # Add margin below the text box
+    $mobilePanel.Children.Add($mobileTextBox)
+
+    # Create a CheckBox for bypassing mobile number formatting
+    $bypassFormattingCheckBox = New-Object System.Windows.Controls.CheckBox
+    $bypassFormattingCheckBox.Content = "Bypass Mobile Number Formatting"
+    $bypassFormattingCheckBox.Margin = '0,0,0,3'  # Add margin below the checkbox
+    $mobilePanel.Children.Add($bypassFormattingCheckBox)
+
+    # Add the mobile panel to the stack panel
+    $stackPanel.Children.Add($mobilePanel)
 
     # Create a ComboBox for License SKU selection
     $comboBoxLabel = New-Object System.Windows.Controls.Label
     $comboBoxLabel.Content = "Select License SKU:"
+    $comboBoxLabel.Margin = '0,0,0,4'  # Add margin below the label
     $stackPanel.Children.Add($comboBoxLabel)
 
     $comboBox = New-Object System.Windows.Controls.ComboBox
-    $comboBox.Margin = '0,0,0,10'
-    $comboBox.ItemsSource = @('Exchange Online (Plan 1)', 'Microsoft 365 Business Basic', 'Microsoft 365 E3', 'Microsoft 365 Business Premium', 'Office 365 E3')
+    $comboBox.Margin = '0,0,0,3'
+    $comboBox.ItemsSource = @('Exchange Online (Plan 1)', 'Microsoft 364 Business Basic', 'Microsoft 364 E3', 'Microsoft 364 Business Premium', 'Office 364 E3')
     $stackPanel.Children.Add($comboBox)
 
     # Create and add OK and Cancel buttons
@@ -123,43 +162,53 @@ function Show-CustomNewUserRequestWindow {
     $okButton.Content = "OK"
     $okButton.Margin = '0,0,10,0'  # Add margin to the right of the OK button
     $okButton.Add_Click({
-            # Validate New User input
-            if (-not $textBoxes[0].Text) {
-                [System.Windows.MessageBox]::Show("New User is a mandatory field. Please enter a valid Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                return
-            }
-            if (-not (Validate-DisplayName $textBoxes[0].Text)) {
-                [System.Windows.MessageBox]::Show("Invalid format for New User. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                return
-            }
+        # Validate New User input
+        if (-not $newUserTextBox.Text) {
+            [System.Windows.MessageBox]::Show("New User is a mandatory field. Please enter a valid Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            return
+        }
+        if (-not (Validate-DisplayName $newUserTextBox.Text)) {
+            [System.Windows.MessageBox]::Show("Invalid format for New User. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            return
+        }
 
-            # Validate User To Copy input
-            if (-not $textBoxes[2].Text) {
-                [System.Windows.MessageBox]::Show("User To Copy is a mandatory field. Please enter a Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                return
-            }
-            if (-not (Validate-DisplayName $textBoxes[2].Text)) {
-                [System.Windows.MessageBox]::Show("Invalid format for User To Copy. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                return
-            }
+        # Validate User To Copy input
+        if (-not $userToCopyTextBox.Text) {
+            [System.Windows.MessageBox]::Show("User To Copy is a mandatory field. Please enter a Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            return
+        }
+        if (-not (Validate-DisplayName $userToCopyTextBox.Text)) {
+            [System.Windows.MessageBox]::Show("Invalid format for User To Copy. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            return
+        }
 
-            if (-not $comboBox.SelectedItem) {
-                [System.Windows.MessageBox]::Show("Selecting a License SKU is mandatory. Please select an option.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+        # Validate Mobile Number
+        if (-not $bypassFormattingCheckBox.IsChecked) {
+            $unformattedMobile = $mobileTextBox.Text
+            $digits = -join ($unformattedMobile -replace '\D', '')  # Remove non-digit characters
+            if ($digits.Length -ne 10) {
+                [System.Windows.MessageBox]::Show("Invalid mobile number format. Please enter a valid 10-digit mobile number.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
+        }
 
-            # Set the DialogResult to true and close the window
-            $window.DialogResult = $true
-            $window.Close()
-        })
+        if (-not $comboBox.SelectedItem) {
+            [System.Windows.MessageBox]::Show("Selecting a License SKU is mandatory. Please select an option.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            return
+        }
+
+        # Set the DialogResult to true and close the window
+        $window.DialogResult = $true
+        $window.Close()
+    })
     $buttonPanel.Children.Add($okButton)
 
     $cancelButton = New-Object System.Windows.Controls.Button
     $cancelButton.Content = "Cancel"
     $cancelButton.Add_Click({
-            $window.DialogResult = $false
-            $window.Close()
-        })
+        $window.DialogResult = $false
+        $window.Close()
+    })
     $buttonPanel.Children.Add($cancelButton)
 
     $stackPanel.Children.Add($buttonPanel)
@@ -167,27 +216,26 @@ function Show-CustomNewUserRequestWindow {
     # Show the window
     $result = $window.ShowDialog()
 
-    $unformattedMobile = $textBoxes[1].Text
-
     # Initialize formattedMobile variable
-    if ($null -ne $unformattedMobile) {
-        try {
-            $formattedMobile = Format-MobileNumber $textBoxes[1].Text
-        } catch {
-            [System.Windows.MessageBox]::Show($_.Exception.Message, "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            return
-        }
-
-        if ($result -eq $true) {
-            return @{
-                InputNewUser    = $textBoxes[0].Text
-                InputNewMobile  = $formattedMobile  # Use the formatted mobile number
-                InputUserToCopy = $textBoxes[2].Text
-                InputSku        = $comboBox.SelectedItem
-            }
+    $formattedMobile = $null  # Initialize to null
+    if ($null -ne $mobileTextBox.Text) {
+        # Check if the checkbox is checked
+        if (-not $bypassFormattingCheckBox.IsChecked) {
+            $formattedMobile = Format-MobileNumber $mobileTextBox.Text
         } else {
-            return $null
+            $formattedMobile = $mobileTextBox.Text  # Use the unformatted mobile number
         }
+    }
+
+    if ($result -eq $true) {
+        return @{
+            InputNewUser    = $newUserTextBox.Text
+            InputNewMobile  = $formattedMobile  # Use the formatted or unformatted mobile number
+            InputUserToCopy = $userToCopyTextBox.Text
+            InputSku        = $comboBox.SelectedItem
+        }
+    } else {
+        return $null
     }
 }
 
@@ -220,30 +268,29 @@ if (!$result.InputSku) {
     if ($result.InputSku -eq 'Office 365 E3') { $Sku = "ENTERPRISEPACK" }
 }
 
-if ($SkipAz -ne 'y') {
-    #Connect-Graph
-    Write-Host "Logging into Azure services." 
-    $GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
-    $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
-    $GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-    if ($NULL -eq $GraphCert) {
-        Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-        exit
-    }
-    Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
-
-    #Connect-ExchangeOnline 
-    $ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
-    $Org = "compassmsp.onmicrosoft.com"
-    $ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-    if ($NULL -eq $ExOCert) {
-        Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-        exit
-    }
-    Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+#Connect-Graph
+Write-Host "Logging into Azure services." 
+$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
+$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
+$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $GraphCert) {
+    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
 }
+Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+
+#Connect-ExchangeOnline 
+$ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
+$Org = "compassmsp.onmicrosoft.com"
+$ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $ExOCert) {
+    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+
 
 if ($Sku) { 
     try {
