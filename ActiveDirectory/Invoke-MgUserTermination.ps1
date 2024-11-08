@@ -68,7 +68,7 @@ function Show-CustomTerminationWindow {
         $stackPanel.Children.Add($lbl)
 
         $txtBox = New-Object System.Windows.Controls.TextBox
-        $txtBox.Margin = '0,0,0,10'
+        $txtBox.Margin = '0,0,0,4'
         $textBoxes += $txtBox
         $stackPanel.Children.Add($txtBox)
     }
@@ -86,10 +86,6 @@ function Show-CustomTerminationWindow {
             # Validate user termination inputs
             if (-not $textBoxes[0].Text) {
                 [System.Windows.MessageBox]::Show("User to Terminate is a mandatory field. Please enter a email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                return
-            }
-            if (-not (Validate-Email $textBoxes[0].Text)) {
-                [System.Windows.MessageBox]::Show("Invalid email format for: User to Terminate. Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
 
