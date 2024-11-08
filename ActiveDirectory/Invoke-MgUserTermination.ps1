@@ -23,6 +23,7 @@
 # 05-15-2024                    2.3         Set OneDrive as Readonly
 # 10-15-2024                    2.4         Remove AppRoleAssignment for KnowBe4 SCIM App
 # 10-22-2024                    2.5         Add KB4 offboarding email delivery to SecurePath
+# 11-08-2024                    2.6         Added better UI boxes for variables
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -34,26 +35,105 @@
 #Import-Module adsync -UseWindowsPowerShell
 
 Add-Type -AssemblyName PresentationFramework
-[System.Windows.MessageBox]::Show('For all fields please enter users email address', 'Compass Termination Request')
 
-function CompassUserTermination {
+# Function to validate email addresses
+function Validate-Email {
     param (
-        [Parameter(Mandatory)]
-        [string]$UserToTerm,
-        [string]$GrantOneDriveAccessTo,
-        [string]$GrantMailboxFullControlTo,
-        [string]$FowardMailboxTo
-
+        [string]$Email
     )
-    [pscustomobject]@{
-        InputUserToTerm         = $UserToTerm
-        InputUserFullControl    = $GrantMailboxFullControlTo
-        InputUserFWD            = $FowardMailboxTo
-        InputUserOneDriveAccess = $GrantOneDriveAccessTo
+    return $Email -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'  # Basic email regex
+}
+
+# Function to create and show a custom WPF window for user termination
+function Show-CustomTerminationWindow {
+    # Create a new WPF window
+    $window = New-Object System.Windows.Window
+    $window.Title = "User Termination Request"
+    $window.Width = 500
+    $window.Height = 310
+    $window.WindowStartupLocation = 'CenterScreen'
+
+    # Create a StackPanel to hold the controls
+    $stackPanel = New-Object System.Windows.Controls.StackPanel
+    $stackPanel.Margin = '10'
+    $window.Content = $stackPanel
+
+    # Create and add labels and text boxes for input
+    $labels = @("User to Terminate (Email):", "Grant OneDrive Access To (Email):", "Grant Mailbox Full Control To (Email):", "Forward Mailbox To (Email):")
+    $textBoxes = @()
+
+    foreach ($label in $labels) {
+        $lbl = New-Object System.Windows.Controls.Label
+        $lbl.Content = $label
+        $stackPanel.Children.Add($lbl)
+
+        $txtBox = New-Object System.Windows.Controls.TextBox
+        $txtBox.Margin = '0,0,0,10'
+        $textBoxes += $txtBox
+        $stackPanel.Children.Add($txtBox)
+    }
+
+    # Create and add OK and Cancel buttons
+    $buttonPanel = New-Object System.Windows.Controls.StackPanel
+    $buttonPanel.Orientation = 'Horizontal'
+    $buttonPanel.HorizontalAlignment = 'Right'
+    $buttonPanel.Margin = '0,10,0,0'
+
+    $okButton = New-Object System.Windows.Controls.Button
+    $okButton.Content = "OK"
+    $okButton.Margin = '0,0,10,0'
+    $okButton.Add_Click({
+            # Validate user termination inputs
+            if (-not $textBoxes[0].Text) {
+                [System.Windows.MessageBox]::Show("User to Terminate is a mandatory field. Please enter a email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+            if (-not (Validate-Email $textBoxes[0].Text)) {
+                [System.Windows.MessageBox]::Show("Invalid email format for: User to Terminate. Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+
+            # Validate optional email inputs
+            for ($i = 1; $i -lt $textBoxes.Count; $i++) {
+                if ($textBoxes[$i].Text -and -not (Validate-Email $textBoxes[$i].Text)) {
+                    [System.Windows.MessageBox]::Show("Invalid email format for: $($labels[$i]). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                    return
+                }
+            }
+
+            # Set the DialogResult to true and close the window
+            $window.DialogResult = $true
+            $window.Close()
+        })
+    $buttonPanel.Children.Add($okButton)
+
+    $cancelButton = New-Object System.Windows.Controls.Button
+    $cancelButton.Content = "Cancel"
+    $cancelButton.Add_Click({
+            $window.DialogResult = $false
+            $window.Close()
+        })
+    $buttonPanel.Children.Add($cancelButton)
+
+    $stackPanel.Children.Add($buttonPanel)
+
+    # Show the window
+    $result = $window.ShowDialog()
+
+    if ($result -eq $true) {
+        return @{
+            InputUserToTerm         = $textBoxes[0].Text
+            InputUserFullControl    = $textBoxes[1].Text
+            InputUserFWD            = $textBoxes[2].Text
+            InputUserOneDriveAccess = $textBoxes[3].Text
+        }
+    } else {
+        return $null
     }
 }
 
-$result = Invoke-Expression (Show-Command CompassUserTermination -PassThru)
+# Call the custom input window function
+$result = Show-CustomTerminationWindow
 
 $User = $result.InputUserToTerm
 $GrantUserFullControl = $result.InputUserFullControl
@@ -78,7 +158,7 @@ try {
     $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$($User)'" -Properties MemberOf -ErrorAction Stop
 } catch {
     Write-Host "Could not find user $($User) in Active Directory" -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
@@ -98,7 +178,7 @@ if ($DisabledOUs.count -gt 0) {
     }
 } else {
     Write-Host "Could not find disabled OU in Active Directory" -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 #endregion pre-check
@@ -134,7 +214,7 @@ try {
     Write-Host "Could not find user $($UserFromAD.UserPrincipalName) in Azure" -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-MgGraph
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
@@ -150,7 +230,7 @@ if ($Confirmation -ne 'y') {
     Write-Host 'User did not enter "Y"' -ForegroundColor Red -BackgroundColor Black
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-MgGraph
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 

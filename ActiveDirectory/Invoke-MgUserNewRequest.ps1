@@ -22,6 +22,7 @@
 # 10-15-2024                    2.2         Remove AppRoleAssignment for KnowBe4 SCIM App
 # 10-21-2024                    2.3         Add MeetWithMeId and AD User properties
 # 10-22-2024                    2.4         Add KB4 offboarding email delivery to SecurePath
+# 11-08-2024                    2.5         Added better UI boxes for variables
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -47,29 +48,151 @@ Param (
     [String]$SkipAz
 )
 
-
 Add-Type -AssemblyName PresentationFramework
-[System.Windows.MessageBox]::Show("For the 'NewUser' and 'UserToCopy' please enter in a DiplayName format: 'FirstName LastName'", 'Compass New User Request')
 
-function CompassNewUserRequest {
+# Function to validate display names
+function Validate-DisplayName {
     param (
-        [Parameter(Mandatory)]
-        [string]$NewUser,
-        [string]$NewUserMobile,
-        [Parameter(Mandatory)]
-        [string]$UserToCopy,
-        [validateset('Exchange Online (Plan 1)', 'Microsoft 365 Business Basic', 'Microsoft 365 E3', 'Microsoft 365 Business Premium', 'Office 365 E3')]
-        [string]$SelectLicenseSku
+        [string]$DisplayName
     )
-    [pscustomobject]@{
-        InputNewUser    = $NewUser
-        InputNewMobile  = $NewUserMobile
-        InputUserToCopy = $UserToCopy
-        InputSku        = $SelectLicenseSku
+    return $DisplayName -match '^[A-Za-z]+ [A-Za-z]+$'  # Regex to check for "First Last"
+}
+
+# Function to validate and format mobile numbers
+function Format-MobileNumber {
+    param (
+        [string]$MobileNumber
+    )
+    # Remove all non-digit characters
+    $digits = -join ($MobileNumber -replace '\D', '')
+
+    # Check if we have 10 digits
+    if ($digits.Length -eq 10) {
+        return "($($digits.Substring(0, 3))) $($digits.Substring(3, 3))-$($digits.Substring(6, 4))"
+    } else {
+        throw "Invalid mobile number format. Please enter a valid 10-digit mobile number."
     }
 }
 
-$result = Invoke-Expression (Show-Command CompassNewUserRequest -PassThru)
+# Function to create and show a custom WPF window
+function Show-CustomNewUserRequestWindow {
+    # Create a new WPF window
+    $window = New-Object System.Windows.Window
+    $window.Title = "New User Request"
+    $window.Width = 500  # Set a wider fixed width for the window
+    $window.Height = 315  # Set the ideal height for the window
+    $window.WindowStartupLocation = 'CenterScreen'
+
+    # Create a StackPanel to hold the controls
+    $stackPanel = New-Object System.Windows.Controls.StackPanel
+    $stackPanel.Margin = '10'  # Add margin around the stack panel
+    $window.Content = $stackPanel
+
+    # Create and add labels and text boxes for input
+    $labels = @("New User (First Last):", "New User Mobile:", "User To Copy (First Last):")
+    $textBoxes = @()
+
+    foreach ($label in $labels) {
+        $lbl = New-Object System.Windows.Controls.Label
+        $lbl.Content = $label
+        $stackPanel.Children.Add($lbl)
+
+        $txtBox = New-Object System.Windows.Controls.TextBox
+        $txtBox.Margin = '0,0,0,10'
+        $textBoxes += $txtBox
+        $stackPanel.Children.Add($txtBox)
+    }
+
+    # Create a ComboBox for License SKU selection
+    $comboBoxLabel = New-Object System.Windows.Controls.Label
+    $comboBoxLabel.Content = "Select License SKU:"
+    $stackPanel.Children.Add($comboBoxLabel)
+
+    $comboBox = New-Object System.Windows.Controls.ComboBox
+    $comboBox.Margin = '0,0,0,10'
+    $comboBox.ItemsSource = @('Exchange Online (Plan 1)', 'Microsoft 365 Business Basic', 'Microsoft 365 E3', 'Microsoft 365 Business Premium', 'Office 365 E3')
+    $stackPanel.Children.Add($comboBox)
+
+    # Create and add OK and Cancel buttons
+    $buttonPanel = New-Object System.Windows.Controls.StackPanel
+    $buttonPanel.Orientation = 'Horizontal'
+    $buttonPanel.HorizontalAlignment = 'Right'
+    $buttonPanel.Margin = '0,10,0,0'  # Add margin above the button panel
+
+    $okButton = New-Object System.Windows.Controls.Button
+    $okButton.Content = "OK"
+    $okButton.Margin = '0,0,10,0'  # Add margin to the right of the OK button
+    $okButton.Add_Click({
+            # Validate New User input
+            if (-not $textBoxes[0].Text) {
+                [System.Windows.MessageBox]::Show("New User is a mandatory field. Please enter a valid Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+            if (-not (Validate-DisplayName $textBoxes[0].Text)) {
+                [System.Windows.MessageBox]::Show("Invalid format for New User. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+
+            # Validate User To Copy input
+            if (-not $textBoxes[2].Text) {
+                [System.Windows.MessageBox]::Show("User To Copy is a mandatory field. Please enter a Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+            if (-not (Validate-DisplayName $textBoxes[2].Text)) {
+                [System.Windows.MessageBox]::Show("Invalid format for User To Copy. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+
+            if (-not $comboBox.SelectedItem) {
+                [System.Windows.MessageBox]::Show("Selecting a License SKU is mandatory. Please select an option.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+
+            # Set the DialogResult to true and close the window
+            $window.DialogResult = $true
+            $window.Close()
+        })
+    $buttonPanel.Children.Add($okButton)
+
+    $cancelButton = New-Object System.Windows.Controls.Button
+    $cancelButton.Content = "Cancel"
+    $cancelButton.Add_Click({
+            $window.DialogResult = $false
+            $window.Close()
+        })
+    $buttonPanel.Children.Add($cancelButton)
+
+    $stackPanel.Children.Add($buttonPanel)
+
+    # Show the window
+    $result = $window.ShowDialog()
+
+    $unformattedMobile = $textBoxes[1].Text
+
+    # Initialize formattedMobile variable
+    if ($null -ne $unformattedMobile) {
+        try {
+            $formattedMobile = Format-MobileNumber $textBoxes[1].Text
+        } catch {
+            [System.Windows.MessageBox]::Show($_.Exception.Message, "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            return
+        }
+
+        if ($result -eq $true) {
+            return @{
+                InputNewUser    = $textBoxes[0].Text
+                InputNewMobile  = $formattedMobile  # Use the formatted mobile number
+                InputUserToCopy = $textBoxes[2].Text
+                InputSku        = $comboBox.SelectedItem
+            }
+        } else {
+            return $null
+        }
+    }
+}
+
+# Call the custom input window function
+$result = Show-CustomNewUserRequestWindow
 
 $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
