@@ -69,8 +69,48 @@ Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprin
 
 Add-Type -AssemblyName PresentationFramework
 
-# Show a pop-up message before the input window
-[System.Windows.MessageBox]::Show("Please check the Microsoft 365 portal for available licenses.", "License Check", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+# Define the properties to select from the subscribed SKUs
+$SelectObjectPropertyList = @(
+    "SkuPartNumber"
+    "SkuId"
+    @{
+        n = "ActiveUnits"
+        e = { ($_.PrepaidUnits).Enabled }
+    }
+    "ConsumedUnits"
+)
+
+# Define the filter for the SKUs
+$WhereObjectFilter = {
+    ($_.SkuPartNumber -eq 'EXCHANGESTANDARD') -or 
+    ($_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS') -or 
+    ($_.SkuPartNumber -eq 'SPE_E3') -or 
+    ($_.SkuPartNumber -eq 'SPB') -or 
+    ($_.SkuPartNumber -eq 'ENTERPRISEPACK') -or
+    ($_.SkuPartNumber -eq "AAD_PREMIUM_P2")
+}
+
+# Retrieve the available licenses
+$selectLicense = Get-MgSubscribedSku | 
+Select-Object $SelectObjectPropertyList | 
+Where-Object -FilterScript $WhereObjectFilter | 
+ForEach-Object {
+    [PSCustomObject]@{
+        Available = ($_.ActiveUnits - $_.ConsumedUnits)
+        SkuName   = switch -Regex ($_.SkuPartNumber) {
+            "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
+            "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
+            "SPE_E3" { "Microsoft 365 E3" }
+            "SPB" { "Microsoft 365 Business Premium" }
+            "ENTERPRISEPACK" { "Office 365 E3" }
+            "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
+        }
+    }
+} | Sort-Object SkuName
+
+# Show a pop-up message with available licenses before the input window
+$licenseInfo = $selectLicense | Out-String
+[System.Windows.MessageBox]::Show("Please check the Microsoft 365 portal for available licenses.`n`nAvailable Licenses:`n$licenseInfo", "License Check", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
 
 # Function to validate display names
 function Test-DisplayName {
