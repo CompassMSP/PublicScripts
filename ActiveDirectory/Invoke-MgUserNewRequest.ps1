@@ -266,6 +266,7 @@ function Show-CustomNewUserRequestWindow {
                 }
             }
 
+            # Validate License SKU selection
             if (-not $SkucomboBox.SelectedItem) {
                 [System.Windows.MessageBox]::Show("Selecting a License SKU is mandatory. Please select an option.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
@@ -321,11 +322,12 @@ function Show-CustomNewUserRequestWindow {
 # Call the custom input window function
 $result = Show-CustomNewUserRequestWindow
 
-
+# Setting variables from window function result
 $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
 $UserToCopy = $result.InputUserToCopy
 
+## Set Sku from Sku displayName
 if ($result.InputSku -eq 'Exchange Online (Plan 1)') { $Sku = "EXCHANGESTANDARD" }
 if ($result.InputSku -eq 'Microsoft 365 Business Basic') { $Sku = "O365_BUSINESS_ESSENTIALS" }
 if ($result.InputSku -eq 'Microsoft 365 E3') { $Sku = "SPE_E3" }
@@ -333,7 +335,8 @@ if ($result.InputSku -eq 'Microsoft 365 Business Premium') { $Sku = "SPB" }
 if ($result.InputSku -eq 'Office 365 E3') { $Sku = "ENTERPRISEPACK" }
 
 $UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company 
-    
+
+## Check for duuplicate DisplayName in AD for selected UserToCopy
 if ($UserToCopyUPN.Count -gt 1) {  
     Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
@@ -344,6 +347,7 @@ if ($UserToCopyUPN.Count -gt 1) {
     exit
 }
 
+## Sku availability check
 if ($Sku) { 
     try {
         $SelectObjectPropertyList = @(
@@ -369,6 +373,7 @@ if ($Sku) {
     }
 }
 
+## Check if no Sku was selected or if no Sku was found
 if (!$Sku) {
 
     $SelectObjectPropertyList = @(
@@ -429,6 +434,7 @@ if ($null -ne $CheckNewUserUPN) {
     exit
 } 
 
+## New user creation in AD
 function Get-NewPassword { -join ('abcdefghkmnrstuvwxyzABCDEFGHKLMNPRSTUVWXYZ23456789$%&*#'.ToCharArray() | Get-Random -Count 16) }
 
 $Password = Get-NewPassword
@@ -486,6 +492,7 @@ Write-Output 'Waiting 90 seconds for AD Connect sync process.'
 
 Start-Sleep -Seconds 90
 
+## Check if AD User has synced to Azure loop
 $Stoploop = $false
 [int]$Retrycount = "0"
  
@@ -590,6 +597,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     Write-Output 'Adding Office 365 Groups to new user.'
 
+    ## Copy groups to new user from old user
     $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
         Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
         Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
@@ -706,8 +714,6 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
                 }
                 SkuPartNumber = $_.SkuPartNumber
                 SkuId         = $_.SkuId
-                #NumberTotal   = $_.ActiveUnits
-                #NumberUsed    = $_.ConsumedUnits
                 Available     = ($_.ActiveUnits - $_.ConsumedUnits)
             }
         } | Sort-Object DisplayName
