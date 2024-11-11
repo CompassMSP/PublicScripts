@@ -23,6 +23,7 @@
 # 10-21-2024                    2.3         Add MeetWithMeId and AD User properties
 # 10-22-2024                    2.4         Add KB4 offboarding email delivery to SecurePath
 # 11-08-2024                    2.5         Added better UI boxes for variables
+# 11-11-2024                    2.6         Added added checkbox for EntraID P2 license
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -46,7 +47,7 @@
 Add-Type -AssemblyName PresentationFramework
 
 # Function to validate display names
-function Validate-DisplayName {
+function Test-DisplayName {
     param (
         [string]$DisplayName
     )
@@ -173,7 +174,7 @@ function Show-CustomNewUserRequestWindow {
                 [System.Windows.MessageBox]::Show("New User is a mandatory field. Please enter a valid Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
-            if (-not (Validate-DisplayName $newUserTextBox.Text)) {
+            if (-not (Test-DisplayName $newUserTextBox.Text)) {
                 [System.Windows.MessageBox]::Show("Invalid format for New User. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
@@ -523,7 +524,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             ($_.SkuPartNumber -like 'AAD_PREMIUM_P2')
         }
     
-        $getLicenseEntraID2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
+        $getLicenseEntraIDP2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
             ForEach-Object {
             [PSCustomObject]@{
                 DisplayName   = switch -Regex ($_.SkuPartNumber) {
@@ -535,9 +536,9 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             }
         } | Sort-Object DisplayName
     
-        if ($getLicenseEntraID2 -ne 0) {
+        if ($getLicenseEntraIDP2 -ne 0) {
             try {
-                Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLicenseEntraID2.SkuId } -RemoveLicenses @() -ErrorAction stop
+                Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLicenseEntraIDP2.SkuId } -RemoveLicenses @() -ErrorAction stop
                 Write-Output "$($_.SkuPartNumber) License added."
             } catch {
                 Write-Output "$($_.SkuPartNumber) License could not be added."
