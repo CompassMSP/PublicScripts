@@ -73,7 +73,7 @@ function Show-CustomNewUserRequestWindow {
     $window = New-Object System.Windows.Window
     $window.Title = "New User Request"
     $window.Width = 500  # Set a wider fixed width for the window
-    $window.Height = 315  # Set the ideal height for the window
+    $window.Height = 330  # Set the ideal height for the window
     $window.WindowStartupLocation = 'CenterScreen'
 
     # Create a StackPanel to hold the controls
@@ -142,15 +142,21 @@ function Show-CustomNewUserRequestWindow {
     $stackPanel.Children.Add($mobilePanel)
 
     # Create a ComboBox for License SKU selection
-    $comboBoxLabel = New-Object System.Windows.Controls.Label
-    $comboBoxLabel.Content = "Select License SKU:"
-    $comboBoxLabel.Margin = '0,0,0,4'  # Add margin below the label
-    $stackPanel.Children.Add($comboBoxLabel)
+    $SkucomboBoxLabel = New-Object System.Windows.Controls.Label
+    $SkucomboBoxLabel.Content = "Select License SKU:"
+    $SkucomboBoxLabel.Margin = '0,0,0,4'  # Add margin below the label
+    $stackPanel.Children.Add($SkucomboBoxLabel)
 
-    $comboBox = New-Object System.Windows.Controls.ComboBox
-    $comboBox.Margin = '0,0,0,3'
-    $comboBox.ItemsSource = @('Exchange Online (Plan 1)', 'Microsoft 364 Business Basic', 'Microsoft 364 E3', 'Microsoft 364 Business Premium', 'Office 364 E3')
-    $stackPanel.Children.Add($comboBox)
+    $SkucomboBox = New-Object System.Windows.Controls.ComboBox
+    $SkucomboBox.Margin = '0,0,0,3'
+    $SkucomboBox.ItemsSource = @('Exchange Online (Plan 1)', 'Microsoft 364 Business Basic', 'Microsoft 364 E3', 'Microsoft 364 Business Premium', 'Office 364 E3')
+    $stackPanel.Children.Add($SkucomboBox)
+
+    # Create a CheckBox for adding the EntraID P2
+    $AddEntraIDP2CheckBox = New-Object System.Windows.Controls.CheckBox
+    $AddEntraIDP2CheckBox.Content = "Add EntraID P2"
+    $AddEntraIDP2CheckBox.Margin = '0,0,0,3'  # Add margin below the checkbox
+    $stackPanel.Children.Add($AddEntraIDP2CheckBox)
 
     # Create and add OK and Cancel buttons
     $buttonPanel = New-Object System.Windows.Controls.StackPanel
@@ -162,53 +168,53 @@ function Show-CustomNewUserRequestWindow {
     $okButton.Content = "OK"
     $okButton.Margin = '0,0,10,0'  # Add margin to the right of the OK button
     $okButton.Add_Click({
-        # Validate New User input
-        if (-not $newUserTextBox.Text) {
-            [System.Windows.MessageBox]::Show("New User is a mandatory field. Please enter a valid Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            return
-        }
-        if (-not (Validate-DisplayName $newUserTextBox.Text)) {
-            [System.Windows.MessageBox]::Show("Invalid format for New User. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            return
-        }
-
-        # Validate User To Copy input
-        if (-not $userToCopyTextBox.Text) {
-            [System.Windows.MessageBox]::Show("User To Copy is a mandatory field. Please enter a Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            return
-        }
-        if (-not (Validate-DisplayName $userToCopyTextBox.Text)) {
-            [System.Windows.MessageBox]::Show("Invalid format for User To Copy. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            return
-        }
-
-        # Validate Mobile Number
-        if (-not $bypassFormattingCheckBox.IsChecked) {
-            $unformattedMobile = $mobileTextBox.Text
-            $digits = -join ($unformattedMobile -replace '\D', '')  # Remove non-digit characters
-            if ($digits.Length -ne 10) {
-                [System.Windows.MessageBox]::Show("Invalid mobile number format. Please enter a valid 10-digit mobile number.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            # Validate New User input
+            if (-not $newUserTextBox.Text) {
+                [System.Windows.MessageBox]::Show("New User is a mandatory field. Please enter a valid Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
-        }
+            if (-not (Validate-DisplayName $newUserTextBox.Text)) {
+                [System.Windows.MessageBox]::Show("Invalid format for New User. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
 
-        if (-not $comboBox.SelectedItem) {
-            [System.Windows.MessageBox]::Show("Selecting a License SKU is mandatory. Please select an option.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            return
-        }
+            # Validate User To Copy input
+            if (-not $userToCopyTextBox.Text) {
+                [System.Windows.MessageBox]::Show("User To Copy is a mandatory field. Please enter a Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+            if (-not (Validate-DisplayName $userToCopyTextBox.Text)) {
+                [System.Windows.MessageBox]::Show("Invalid format for User To Copy. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
 
-        # Set the DialogResult to true and close the window
-        $window.DialogResult = $true
-        $window.Close()
-    })
+            # Validate Mobile Number
+            if (-not $bypassFormattingCheckBox.IsChecked) {
+                $unformattedMobile = $mobileTextBox.Text
+                $digits = -join ($unformattedMobile -replace '\D', '')  # Remove non-digit characters
+                if ($digits.Length -ne 10) {
+                    [System.Windows.MessageBox]::Show("Invalid mobile number format. Please enter a valid 10-digit mobile number.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                    return
+                }
+            }
+
+            if (-not $SkucomboBox.SelectedItem) {
+                [System.Windows.MessageBox]::Show("Selecting a License SKU is mandatory. Please select an option.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+
+            # Set the DialogResult to true and close the window
+            $window.DialogResult = $true
+            $window.Close()
+        })
     $buttonPanel.Children.Add($okButton)
 
     $cancelButton = New-Object System.Windows.Controls.Button
     $cancelButton.Content = "Cancel"
     $cancelButton.Add_Click({
-        $window.DialogResult = $false
-        $window.Close()
-    })
+            $window.DialogResult = $false
+            $window.Close()
+        })
     $buttonPanel.Children.Add($cancelButton)
 
     $stackPanel.Children.Add($buttonPanel)
@@ -227,12 +233,17 @@ function Show-CustomNewUserRequestWindow {
         }
     }
 
+    if ($AddEntraIDP2CheckBox.IsChecked) {
+        $AddEntraIDP2 = 'Yes'
+    }
+
     if ($result -eq $true) {
         return @{
-            InputNewUser    = $newUserTextBox.Text
-            InputNewMobile  = $formattedMobile  # Use the formatted or unformatted mobile number
-            InputUserToCopy = $userToCopyTextBox.Text
-            InputSku        = $comboBox.SelectedItem
+            InputNewUser      = $newUserTextBox.Text
+            InputNewMobile    = $formattedMobile  # Use the formatted or unformatted mobile number
+            InputUserToCopy   = $userToCopyTextBox.Text
+            InputSku          = $SkucomboBox.SelectedItem
+            InputSkuEntraIDP2 = $AddEntraIDP2
         }
     } else {
         return $null
@@ -241,6 +252,7 @@ function Show-CustomNewUserRequestWindow {
 
 # Call the custom input window function
 $result = Show-CustomNewUserRequestWindow
+
 
 $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
@@ -492,6 +504,46 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
             $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
             exit
+        }
+    }
+
+    if ($result.InputSkuEntraIDP2 -eq 'y') { 
+
+        $SelectObjectPropertyList = @(
+            "SkuPartNumber"
+            "SkuId"
+            @{
+                n = "ActiveUnits"
+                e = { ($_.PrepaidUnits).Enabled }
+            }
+            "ConsumedUnits"
+        )
+    
+        $WhereObjectFilter = {
+            ($_.SkuPartNumber -like 'AAD_PREMIUM_P2')
+        }
+    
+        $getLicenseEntraID2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
+            ForEach-Object {
+            [PSCustomObject]@{
+                DisplayName   = switch -Regex ($_.SkuPartNumber) {
+                    "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
+                }
+                SkuPartNumber = $_.SkuPartNumber
+                SkuId         = $_.SkuId
+                Available     = ($_.ActiveUnits - $_.ConsumedUnits)
+            }
+        } | Sort-Object DisplayName
+    
+        if ($getLicenseEntraID2 -ne 0) {
+            try {
+                Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLicenseEntraID2.SkuId } -RemoveLicenses @() -ErrorAction stop
+                Write-Output "$($_.SkuPartNumber) License added."
+            } catch {
+                Write-Output "$($_.SkuPartNumber) License could not be added."
+            }   
+        } else {
+            Write-Output "$($_.SkuPartNumber) no avaible license. Please add license and add manually"
         }
     }
 
