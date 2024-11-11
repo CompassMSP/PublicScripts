@@ -326,6 +326,12 @@ $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
 $UserToCopy = $result.InputUserToCopy
 
+if ($result.InputSku -eq 'Exchange Online (Plan 1)') { $Sku = "EXCHANGESTANDARD" }
+if ($result.InputSku -eq 'Microsoft 365 Business Basic') { $Sku = "O365_BUSINESS_ESSENTIALS" }
+if ($result.InputSku -eq 'Microsoft 365 E3') { $Sku = "SPE_E3" }
+if ($result.InputSku -eq 'Microsoft 365 Business Premium') { $Sku = "SPB" }
+if ($result.InputSku -eq 'Office 365 E3') { $Sku = "ENTERPRISEPACK" }
+
 $UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company 
     
 if ($UserToCopyUPN.Count -gt 1) {  
@@ -336,16 +342,6 @@ if ($UserToCopyUPN.Count -gt 1) {
     Write-Output "Could not find user $($UserToCopy) in AD to copy from. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
-}
-
-if (!$result.InputSku) { 
-    Write-Host 'License Sku not selected.'
-} else {
-    if ($result.InputSku -eq 'Exchange Online (Plan 1)') { $Sku = "EXCHANGESTANDARD" }
-    if ($result.InputSku -eq 'Microsoft 365 Business Basic') { $Sku = "O365_BUSINESS_ESSENTIALS" }
-    if ($result.InputSku -eq 'Microsoft 365 E3') { $Sku = "SPE_E3" }
-    if ($result.InputSku -eq 'Microsoft 365 Business Premium') { $Sku = "SPB" }
-    if ($result.InputSku -eq 'Office 365 E3') { $Sku = "ENTERPRISEPACK" }
 }
 
 if ($Sku) { 
@@ -419,6 +415,7 @@ if (!$Sku) {
 
 }
 
+## Building out new user variables
 $Domain = $($UserToCopyUPN.UserPrincipalName -replace '.+?(?=@)')
 $NewUserFirstName = $($NewUser.split(' ')[-2])
 $NewUserLastName = $($NewUser -replace '.+\s')
@@ -538,6 +535,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     ## Assigns US as UsageLocation
     Update-MgUser -UserId $NewUserEmail -UsageLocation US
 
+    ## Assign primary license to new user
     if ($getLic) { 
         try {
             Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.SkuId } -RemoveLicenses @() -ErrorAction stop
@@ -549,6 +547,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
+    ## Assign P2 license to new user
     if ($result.InputSkuEntraIDP2 -eq 'Yes') { 
 
         $SelectObjectPropertyList = @(
