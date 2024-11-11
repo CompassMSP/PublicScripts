@@ -44,7 +44,33 @@
 
 #Import-Module adsync -UseWindowsPowerShell
 
+#Connect-Graph
+Write-Host "Logging into Azure services." 
+$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
+$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
+$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $GraphCert) {
+    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+
+#Connect-ExchangeOnline 
+$ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
+$Org = "compassmsp.onmicrosoft.com"
+$ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $ExOCert) {
+    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+
 Add-Type -AssemblyName PresentationFramework
+
+# Show a pop-up message before the input window
+[System.Windows.MessageBox]::Show("Please check the Microsoft 365 portal for available licenses.", "License Check", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
 
 # Function to validate display names
 function Test-DisplayName {
@@ -157,6 +183,7 @@ function Show-CustomNewUserRequestWindow {
     $AddEntraIDP2CheckBox = New-Object System.Windows.Controls.CheckBox
     $AddEntraIDP2CheckBox.Content = "Add EntraID P2"
     $AddEntraIDP2CheckBox.Margin = '0,0,0,3'  # Add margin below the checkbox
+    $AddEntraIDP2CheckBox.IsChecked = $true  # Set the checkbox to checked by default
     $stackPanel.Children.Add($AddEntraIDP2CheckBox)
 
     # Create and add OK and Cancel buttons
@@ -281,30 +308,6 @@ if (!$result.InputSku) {
     if ($result.InputSku -eq 'Office 365 E3') { $Sku = "ENTERPRISEPACK" }
 }
 
-#Connect-Graph
-Write-Host "Logging into Azure services." 
-$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
-$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
-$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-if ($NULL -eq $GraphCert) {
-    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
-
-#Connect-ExchangeOnline 
-$ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
-$Org = "compassmsp.onmicrosoft.com"
-$ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-if ($NULL -eq $ExOCert) {
-    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
-
-
 if ($Sku) { 
     try {
         $SelectObjectPropertyList = @(
@@ -362,8 +365,6 @@ if (!$Sku) {
             }
             SkuPartNumber = $_.SkuPartNumber
             SkuId         = $_.SkuId
-            #NumberTotal   = $_.ActiveUnits
-            #NumberUsed    = $_.ConsumedUnits
             Available     = ($_.ActiveUnits - $_.ConsumedUnits)
         }
     } | Sort-Object DisplayName
@@ -508,7 +509,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         }
     }
 
-    if ($result.InputSkuEntraIDP2 -eq 'y') { 
+    if ($result.InputSkuEntraIDP2 -eq 'Yes') { 
 
         $SelectObjectPropertyList = @(
             "SkuPartNumber"
