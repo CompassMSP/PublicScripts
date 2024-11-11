@@ -150,7 +150,7 @@ function Show-CustomNewUserRequestWindow {
 
     $SkucomboBox = New-Object System.Windows.Controls.ComboBox
     $SkucomboBox.Margin = '0,0,0,3'
-    $SkucomboBox.ItemsSource = @('Exchange Online (Plan 1)', 'Microsoft 364 Business Basic', 'Microsoft 364 E3', 'Microsoft 364 Business Premium', 'Office 364 E3')
+    $SkucomboBox.ItemsSource = @('Exchange Online (Plan 1)', 'Microsoft 365 Business Basic', 'Microsoft 365 E3', 'Microsoft 365 Business Premium', 'Office 365 E3')
     $stackPanel.Children.Add($SkucomboBox)
 
     # Create a CheckBox for adding the EntraID P2
