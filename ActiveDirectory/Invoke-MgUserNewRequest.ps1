@@ -257,7 +257,7 @@ function Show-CustomNewUserRequestWindow {
                 [System.Windows.MessageBox]::Show("User To Copy is a mandatory field. Please enter a Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
-            if (-not (Validate-DisplayName $userToCopyTextBox.Text)) {
+            if (-not (Test-DisplayName $userToCopyTextBox.Text)) {
                 [System.Windows.MessageBox]::Show("Invalid format for User To Copy. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
