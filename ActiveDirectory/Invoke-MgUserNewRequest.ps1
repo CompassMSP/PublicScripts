@@ -67,6 +67,7 @@ if ($NULL -eq $ExOCert) {
 }
 Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
 
+# Build out UI for user input
 Add-Type -AssemblyName PresentationFramework
 
 # Define the properties to select from the subscribed SKUs
@@ -108,9 +109,14 @@ ForEach-Object {
     }
 } | Sort-Object SkuName
 
+# Format the license information for display
+$licenseInfo = "Available Licenses:`n"
+foreach ($license in $selectLicense) {
+    $licenseInfo += "$($license.SkuName): $($license.Available) available`n"  # Simple list format
+}
+
 # Show a pop-up message with available licenses before the input window
-$licenseInfo = $selectLicense | Out-String
-[System.Windows.MessageBox]::Show("Please check the Microsoft 365 portal for available licenses.`n`nAvailable Licenses:`n$licenseInfo", "License Check", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+[System.Windows.MessageBox]::Show("Please check the Microsoft 365 portal for available licenses.`n`n$licenseInfo", "License Check", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
 
 # Function to validate display names
 function Test-DisplayName {
