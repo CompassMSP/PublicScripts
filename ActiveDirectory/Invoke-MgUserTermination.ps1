@@ -143,12 +143,12 @@ if (!$result.InputUserOneDriveAccess) { $SPOAccessConfirmation = 'n' } else { $S
 $Localpath = 'C:\Temp'
 
 if ((Test-Path $Localpath) -eq $false) {
-    Write-Host "Creating temp directory for user group export" 
+    Write-Host "Creating temp directory for user group export"
     New-Item -Path $Localpath -ItemType Directory
 }
 
 #region pre-check
-Write-Host "Attempting to find $($user) in Active Directory" 
+Write-Host "Attempting to find $($user) in Active Directory"
 
 try {
     $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$($User)'" -Properties MemberOf -ErrorAction Stop
@@ -178,19 +178,8 @@ if ($DisabledOUs.count -gt 0) {
     exit
 }
 #endregion pre-check
-#Connect-Graph
-Write-Host "Logging into Azure services." 
-$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
-$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
-$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-if ($NULL -eq $GraphCert) {
-    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
 
-#Connect-ExchangeOnline 
+#Connect-ExchangeOnline
 $ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
 $Org = "compassmsp.onmicrosoft.com"
 $ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
@@ -201,7 +190,19 @@ if ($NULL -eq $ExOCert) {
 }
 Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
 
-Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" 
+#Connect-Graph
+Write-Host "Logging into Azure services."
+$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
+$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
+$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $GraphCert) {
+    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+
+Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure"
 
 try {
     $365Mailbox = Get-Mailbox -Identity $UserFromAD.UserPrincipalName -ErrorAction Stop
@@ -233,7 +234,7 @@ if ($Confirmation -ne 'y') {
 #region ActiveDirectory
 
 #Modify the AD user account
-Write-Host "Performing Active Directory Steps" 
+Write-Host "Performing Active Directory Steps"
 
 $SetADUserParams = @{
     Identity    = $UserFromAD.SamAccountName
@@ -272,13 +273,13 @@ $UserFromAD | Move-ADObject -TargetPath $DestinationOU
 #endregion ActiveDirectory
 
 #region Azure
-Write-Host "Performing Azure Steps" 
+Write-Host "Performing Azure Steps"
 
 #Revoke all sessions
 Revoke-MgUserSignInSession -UserId $UserFromAD.UserPrincipalName -ErrorAction SilentlyContinue
 
 #Remove Mobile Device
-Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue } 
+Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue }
 
 #Disable AzureAD registered devices
 $termUserDeviceId = Get-MgUserRegisteredDevice -UserId $UserFromAD.UserPrincipalName
@@ -290,10 +291,10 @@ $termUserDeviceId | ForEach-Object {
     Update-MgDevice -DeviceId $_.Id -BodyParameter $params
 }
 
-$termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled } 
+$termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled }
 
 # Disabled mailbox forwarding
-$365Mailbox | Set-Mailbox -ForwardingAddress $null -ForwardingSmtpAddress $null 
+$365Mailbox | Set-Mailbox -ForwardingAddress $null -ForwardingSmtpAddress $null
 
 # Change mailbox to shared
 $365Mailbox | Set-Mailbox -Type Shared
@@ -302,10 +303,10 @@ $365Mailbox | Set-Mailbox -Type Shared
 
 if ($UserAccessConfirmation -eq 'y') {
 
-    try { 
+    try {
         $GetAccessUser = Get-Mailbox $GrantUserFullControl -ErrorAction Stop
         $GetAccessUserCheck = 'yes'
-    } catch { 
+    } catch {
         Write-Host "User mailbox $GrantUserFullControl not found. Skipping access rights setup" -ForegroundColor Red -BackgroundColor Black
         $GetAccessUserCheck = 'no'
     }
@@ -314,26 +315,26 @@ if ($UserAccessConfirmation -eq 'y') {
     Write-Host "Skipping access rights setup"
 }
 
-if ($GetAccessUserCheck -eq 'yes') { 
-    Write-Host "Adding Full Access permissions for $($GetAccessUser.PrimarySmtpAddress) to $($UserFromAD.UserPrincipalName)" 
-    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $GrantUserFullControl -AccessRights FullAccess -InheritanceType All -AutoMapping $true 
+if ($GetAccessUserCheck -eq 'yes') {
+    Write-Host "Adding Full Access permissions for $($GetAccessUser.PrimarySmtpAddress) to $($UserFromAD.UserPrincipalName)"
+    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $GrantUserFullControl -AccessRights FullAccess -InheritanceType All -AutoMapping $true
 }
 
-# Set Mailbox forwarding address 
+# Set Mailbox forwarding address
 
 if ($UserFwdConfirmation -eq 'y') {
 
-    try { 
-        $GetFWDUser = Get-Mailbox $SetUserMailFWD -ErrorAction Stop 
+    try {
+        $GetFWDUser = Get-Mailbox $SetUserMailFWD -ErrorAction Stop
         $GetFWDUserCheck = 'yes'
-        Write-Host "Applying forward from $($UserFromAD.UserPrincipalName) to $($GetFWDUser.PrimarySmtpAddress)" 
-    } catch { 
+        Write-Host "Applying forward from $($UserFromAD.UserPrincipalName) to $($GetFWDUser.PrimarySmtpAddress)"
+    } catch {
         Write-Host "User mailbox $SetUserMailFWD not found. Skipping mailbox forward" -ForegroundColor Red -BackgroundColor Black
         $GetFWDUserCheck = 'no'
     }
-    
+
 } Else {
-    Write-Host "Skipping mailbox forwarding" 
+    Write-Host "Skipping mailbox forwarding"
 }
 
 if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $SetUserMailFWD -DeliverToMailboxAndForward $False }
@@ -355,8 +356,8 @@ $AllAzureGroups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.Us
     Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
 
 $AllAzureGroups | Export-Csv c:\temp\terminated_users_exports\$($user)_Groups_Id.csv -NoTypeInformation
-    
-Write-Host "Export User Groups Completed. Path: C:\temp\terminated_users_exports\$($user)_Groups_Id.csv" 
+
+Write-Host "Export User Groups Completed. Path: C:\temp\terminated_users_exports\$($user)_Groups_Id.csv"
 
 #Remove user from groups
 Foreach ($365Group in $AllAzureGroups) {
@@ -367,13 +368,13 @@ Foreach ($365Group in $AllAzureGroups) {
     }
 }
 
-#Export user licenses 
+#Export user licenses
 Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\terminated_users_exports\$($user)_License_Id.csv -NoTypeInformation
-    
-Write-Host "Export User Licenses Completed. Path: C:\temp\terminated_users_exports\$($user)_License_Id.csv" 
+
+Write-Host "Export User Licenses Completed. Path: C:\temp\terminated_users_exports\$($user)_License_Id.csv"
 
 #Remove Licenses
-Write-Host "Starting removal of user licenses." 
+Write-Host "Starting removal of user licenses."
 
 Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Where-Object `
 { ($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
@@ -424,24 +425,24 @@ Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId $PnPAppId -Tena
 ## Set OneDrive as Read Only
 $UserOneDriveURL = (Get-PnPUserProfileProperty -Account $UserFromAD.UserPrincipalName -Properties PersonalUrl).PersonalUrl
 Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly
-        
+
 # Set OneDrive grant access
 if ($SPOAccessConfirmation -eq 'y') {
 
     try {
-        $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop 
+        $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop
         $GetUserOneDriveAccessCheck = 'yes'
-        Write-Host "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)" 
-    } catch { 
+        Write-Host "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)"
+    } catch {
         Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
         $GetUserOneDriveAccessCheck = 'no'
     }
 
 } Else {
-    Write-Host "Skipping OneDrive access grant" 
+    Write-Host "Skipping OneDrive access grant"
 }
 
-if ($GetUserOneDriveAccessCheck -eq 'yes') { 
+if ($GetUserOneDriveAccessCheck -eq 'yes') {
     Set-PnPTenantSite -Url $UserOneDriveURL -Owners $GrantUserOneDriveAccess
     $UserOneDriveURL
     Read-Host 'Please copy the OneDrive URL. Press any key to continue'

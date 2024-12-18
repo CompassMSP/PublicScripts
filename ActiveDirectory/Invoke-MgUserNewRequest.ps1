@@ -2,20 +2,20 @@
 
 <#Author       : Chris Williams
 # Creation Date: 03-02-2022
-# Usage        : Copies user template and creates new user with groups and licenses 
+# Usage        : Copies user template and creates new user with groups and licenses
 
 #********************************************************************************
 # Date                     Version      Changes
 #--------------------------------------------------------------------------------
 # 03-02-2022                    1.0         Initial Version
-# 03-04-2022                    1.1         Add Checks For Duplicate Attributes 
+# 03-04-2022                    1.1         Add Checks For Duplicate Attributes
 # 03-06-2022                    1.2         Add Check Loop for AD Sync
 # 06-27-2022                    1.3         Change Group Lookup and Member Add
 # 09-29-2022                    1.4         Add fax attributes copy
 # 10-07-2022                    1.5         Add check for duplicate SamAccountName attributes
 # 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
 # 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
-# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function 
+# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function
 # 03-08-2024                    1.9         Cleaned up licenses select display output
 # 05-08-2024                    2.0         Add input box for Variables
 # 05-21-2024                    2.1         Added stop for if UserToCopy cannot be found
@@ -44,19 +44,7 @@
 
 #Import-Module adsync -UseWindowsPowerShell
 
-#Connect-Graph
-Write-Host "Logging into Azure services." 
-$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
-$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
-$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-if ($NULL -eq $GraphCert) {
-    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
-
-#Connect-ExchangeOnline 
+#Connect-ExchangeOnline
 $ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
 $Org = "compassmsp.onmicrosoft.com"
 $ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
@@ -66,6 +54,18 @@ if ($NULL -eq $ExOCert) {
     exit
 }
 Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+
+#Connect-Graph
+Write-Host "Logging into Azure services."
+$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
+$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
+$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $GraphCert) {
+    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
 
 # Build out UI for user input
 Add-Type -AssemblyName PresentationFramework
@@ -83,18 +83,18 @@ $SelectObjectPropertyList = @(
 
 # Define the filter for the SKUs
 $WhereObjectFilter = {
-    ($_.SkuPartNumber -eq 'EXCHANGESTANDARD') -or 
-    ($_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS') -or 
-    ($_.SkuPartNumber -eq 'SPE_E3') -or 
-    ($_.SkuPartNumber -eq 'SPB') -or 
+    ($_.SkuPartNumber -eq 'EXCHANGESTANDARD') -or
+    ($_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS') -or
+    ($_.SkuPartNumber -eq 'SPE_E3') -or
+    ($_.SkuPartNumber -eq 'SPB') -or
     ($_.SkuPartNumber -eq 'ENTERPRISEPACK') -or
     ($_.SkuPartNumber -eq "AAD_PREMIUM_P2")
 }
 
 # Retrieve the available licenses
-$selectLicense = Get-MgSubscribedSku | 
-Select-Object $SelectObjectPropertyList | 
-Where-Object -FilterScript $WhereObjectFilter | 
+$selectLicense = Get-MgSubscribedSku |
+Select-Object $SelectObjectPropertyList |
+Where-Object -FilterScript $WhereObjectFilter |
 ForEach-Object {
     [PSCustomObject]@{
         Available = ($_.ActiveUnits - $_.ConsumedUnits)
@@ -137,7 +137,7 @@ function Format-MobileNumber {
     # Check if we have 10 digits
     if ($digits.Length -eq 10) {
         return "($($digits.Substring(0, 3))) $($digits.Substring(3, 3))-$($digits.Substring(6, 4))"
-    } 
+    }
 }
 
 # Function to create and show a custom WPF window
@@ -158,7 +158,7 @@ function Show-CustomNewUserRequestWindow {
     $newuserPanel = New-Object System.Windows.Controls.StackPanel
     $newuserPanel.Margin = '0,0,0,3'  # Add margin below the new user panel
 
-    # Create and add a label for the new user 
+    # Create and add a label for the new user
     $newuserLabel = New-Object System.Windows.Controls.Label
     $newuserLabel.Content = "New User (First Last):"
     $newuserLabel.Margin = '0,0,0,4'  # Add margin below the label
@@ -340,10 +340,10 @@ if ($result.InputSku -eq 'Microsoft 365 E3') { $Sku = "SPE_E3" }
 if ($result.InputSku -eq 'Microsoft 365 Business Premium') { $Sku = "SPB" }
 if ($result.InputSku -eq 'Office 365 E3') { $Sku = "ENTERPRISEPACK" }
 
-$UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company 
+$UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company
 
 ## Check for duuplicate DisplayName in AD for selected UserToCopy
-if ($UserToCopyUPN.Count -gt 1) {  
+if ($UserToCopyUPN.Count -gt 1) {
     Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
@@ -354,7 +354,7 @@ if ($UserToCopyUPN.Count -gt 1) {
 }
 
 ## Sku availability check
-if ($Sku) { 
+if ($Sku) {
     try {
         $SelectObjectPropertyList = @(
             "SkuPartNumber"
@@ -373,7 +373,7 @@ if ($Sku) {
             Write-Output "No available license for '$($result.InputSku)'. Please add additional licenses via the Microsoft Portal."
             $Sku = $NULL
         }
-    } catch { 
+    } catch {
         Write-Output "License Sku could not be found. Or no Sku was selected."
         $Sku = $NULL
     }
@@ -393,10 +393,10 @@ if (!$Sku) {
     )
 
     $WhereObjectFilter = {
-        ($_.SkuPartNumber -eq 'EXCHANGESTANDARD') -or 
-        ($_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS') -or 
-        ($_.SkuPartNumber -eq 'SPE_E3') -or 
-        ($_.SkuPartNumber -eq 'SPB') -or 
+        ($_.SkuPartNumber -eq 'EXCHANGESTANDARD') -or
+        ($_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS') -or
+        ($_.SkuPartNumber -eq 'SPE_E3') -or
+        ($_.SkuPartNumber -eq 'SPB') -or
         ($_.SkuPartNumber -eq 'ENTERPRISEPACK')
     }
 
@@ -415,13 +415,13 @@ if (!$Sku) {
             Available     = ($_.ActiveUnits - $_.ConsumedUnits)
         }
     } | Sort-Object DisplayName
-    
+
     $GridArguments = @{
         OutputMode = 'Single'
         Title      = 'Please select a license and click OK'
     }
-    
-    $selectLicenseTEMP = $selectLicense | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments 
+
+    $selectLicenseTEMP = $selectLicense | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments
     $getLic = $selectLicense | Where-Object { $_.DisplayName -in $selectLicenseTEMP.DisplayName }
 
 }
@@ -438,7 +438,7 @@ if ($null -ne $CheckNewUserUPN) {
     Write-Host "SamAccountName exist for user $NewUser. Please check AD for accounts with duplicate SamAccountName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
-} 
+}
 
 ## New user creation in AD
 function Get-NewPassword { -join ('abcdefghkmnrstuvwxyzABCDEFGHKLMNPRSTUVWXYZ23456789$%&*#'.ToCharArray() | Get-Random -Count 16) }
@@ -476,7 +476,7 @@ try {
         -Path $($UserToCopyUPN.DistinguishedName.split(",", 2)[1]) `
         -Instance $UserToCopyUPN `
         -Enabled $True
-} catch { 
+} catch {
     Write-Host "New User creation was not successful. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
@@ -501,7 +501,7 @@ Start-Sleep -Seconds 90
 ## Check if AD User has synced to Azure loop
 $Stoploop = $false
 [int]$Retrycount = "0"
- 
+
 do {
     try {
         $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
@@ -520,9 +520,9 @@ do {
     }
 } while ($Stoploop -eq $false)
 
-if (!$NewMgUser) { 
+if (!$NewMgUser) {
     $ADSyncCompleteYesorExit = Read-Host -Prompt 'AD Sync has not completed within allotted time frame. Please wait for AD sync. To resume type yes or exit'
-} while ("yes", "exit" -notcontains $ADSyncCompleteYesorExit ) { 
+} while ("yes", "exit" -notcontains $ADSyncCompleteYesorExit ) {
     $ADSyncCompleteYesorExit = Read-Host "Please enter your response (yes/exit)"
 }
 
@@ -535,7 +535,7 @@ if ($ADSyncCompleteYesorExit -eq 'exit') {
 if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
-    if (!$NewMgUser) { 
+    if (!$NewMgUser) {
         Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
         $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
         exit
@@ -544,12 +544,12 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     Write-Output 'Script now will resume'
 
     Write-Output 'Setting Usage Location for new user'
-    
+
     ## Assigns US as UsageLocation
     Update-MgUser -UserId $NewUserEmail -UsageLocation US
 
     ## Assign primary license to new user
-    if ($getLic) { 
+    if ($getLic) {
         try {
             Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.SkuId } -RemoveLicenses @() -ErrorAction stop
             Write-Output 'License added.'
@@ -561,7 +561,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     }
 
     ## Assign P2 license to new user
-    if ($result.InputSkuEntraIDP2 -eq 'Yes') { 
+    if ($result.InputSkuEntraIDP2 -eq 'Yes') {
 
         $SelectObjectPropertyList = @(
             "SkuPartNumber"
@@ -572,11 +572,11 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             }
             "ConsumedUnits"
         )
-    
+
         $WhereObjectFilter = {
             ($_.SkuPartNumber -like 'AAD_PREMIUM_P2')
         }
-    
+
         $getLicenseEntraIDP2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
             ForEach-Object {
             [PSCustomObject]@{
@@ -588,14 +588,14 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
                 Available     = ($_.ActiveUnits - $_.ConsumedUnits)
             }
         } | Sort-Object DisplayName
-    
+
         if ($getLicenseEntraIDP2 -ne 0) {
             try {
                 Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLicenseEntraIDP2.SkuId } -RemoveLicenses @() -ErrorAction stop
                 Write-Output "$($_.SkuPartNumber) License added."
             } catch {
                 Write-Output "$($_.SkuPartNumber) License could not be added."
-            }   
+            }
         } else {
             Write-Output "$($_.SkuPartNumber) no avaible license. Please add license and add manually"
         }
@@ -610,7 +610,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     Foreach ($365Group in $All365Groups) {
         try {
-            New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id -ErrorAction Stop  
+            New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id -ErrorAction Stop
         } catch {
             Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction 'SilentlyContinue'
         }
@@ -654,13 +654,13 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     Send-MgUserMail -UserId $MsgFrom -BodyParameter $params
 
-    ## Add additional 365 licenses 
+    ## Add additional 365 licenses
 
     $AddLic = Read-Host "Would you like to add additional licenses? (Y/N)"
 
     if ($AddLic -ne 'y') { Write-Output 'You have selected not to add any additional licenses.' }
 
-    if ($AddLic -eq 'y') { 
+    if ($AddLic -eq 'y') {
 
         $SelectObjectPropertyList = @(
             "SkuPartNumber"
@@ -671,11 +671,11 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             }
             "ConsumedUnits"
         )
-    
+
         $WhereObjectFilter = {
-            ($_.SkuPartNumber -notlike 'EXCHANGESTANDARD') -and 
-            ($_.SkuPartNumber -notlike 'O365_BUSINESS_ESSENTIALS') -and 
-            ($_.SkuPartNumber -notlike 'SPE_E3') -and 
+            ($_.SkuPartNumber -notlike 'EXCHANGESTANDARD') -and
+            ($_.SkuPartNumber -notlike 'O365_BUSINESS_ESSENTIALS') -and
+            ($_.SkuPartNumber -notlike 'SPE_E3') -and
             ($_.SkuPartNumber -notlike 'SPB') -and
             ($_.SkuPartNumber -notlike 'ENTERPRISEPACK') -and
             ($_.SkuPartNumber -notlike 'PROJECT_MADEIRA_PREVIEW_IW_SKU') -and
@@ -701,7 +701,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             ($_.SkuPartNumber -notlike 'Power BI Standard') -and
             ($_.SkuPartNumber -notlike 'AAD_PREMIUM_P2')
         }
-    
+
         $selectLicense2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
             ForEach-Object {
             [PSCustomObject]@{
@@ -723,24 +723,24 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
                 Available     = ($_.ActiveUnits - $_.ConsumedUnits)
             }
         } | Sort-Object DisplayName
-    
+
         $GridArguments = @{
             OutputMode = 'Multiple'
             Title      = 'Please select licenses and click OK (Hold CTRL to select multiple licenses)'
         }
-    
-        $selectLicenseTEMP2 = $selectLicense2 | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments 
+
+        $selectLicenseTEMP2 = $selectLicense2 | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments
         $getLic2 = $selectLicense2 | Where-Object { $_.DisplayName -in $selectLicenseTEMP2.DisplayName }
     }
 
-    if ($GetLic2) { 
+    if ($GetLic2) {
         $GetLic2 | ForEach-Object {
             try {
                 Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $_.SkuId } -RemoveLicenses @() -ErrorAction stop
                 Write-Output "$($_.SkuPartNumber) License added."
             } catch {
                 Write-Output "$($_.SkuPartNumber) License could not be added."
-            }   
+            }
         }
     }
 
@@ -761,9 +761,9 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId $PnPAppId -Tenant $Org -Thumbprint $($PNPCert.Thumbprint)
     #>
     Connect-PnPOnline -Url https://compassmsp-admin.sharepoint.com -UseWebLogin
-    
+
     ## Creates OneDrive
     Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
     Disconnect-PnPOnline
-    
+
 }
