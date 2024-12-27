@@ -58,20 +58,41 @@ function Show-CustomTerminationWindow {
     $stackPanel.Margin = '10'
     $window.Content = $stackPanel
 
-    # Create and add labels and text boxes for input
-    $labels = @("User to Terminate (Email):", "Grant OneDrive Access To (Email):", "Grant Mailbox Full Control To (Email):", "Forward Mailbox To (Email):")
-    $textBoxes = @()
+    # Create label and textbox for User to Terminate
+    $lblUserToTerm = New-Object System.Windows.Controls.Label
+    $lblUserToTerm.Content = "User to Terminate (Email):"
+    $stackPanel.Children.Add($lblUserToTerm)
 
-    foreach ($label in $labels) {
-        $lbl = New-Object System.Windows.Controls.Label
-        $lbl.Content = $label
-        $stackPanel.Children.Add($lbl)
+    $txtUserToTerm = New-Object System.Windows.Controls.TextBox
+    $txtUserToTerm.Margin = '0,0,0,4'
+    $stackPanel.Children.Add($txtUserToTerm)
 
-        $txtBox = New-Object System.Windows.Controls.TextBox
-        $txtBox.Margin = '0,0,0,4'
-        $textBoxes += $txtBox
-        $stackPanel.Children.Add($txtBox)
-    }
+    # Create label and textbox for OneDrive Access
+    $lblOneDriveAccess = New-Object System.Windows.Controls.Label
+    $lblOneDriveAccess.Content = "Grant OneDrive Access To (Email):"
+    $stackPanel.Children.Add($lblOneDriveAccess)
+
+    $txtOneDriveAccess = New-Object System.Windows.Controls.TextBox
+    $txtOneDriveAccess.Margin = '0,0,0,4'
+    $stackPanel.Children.Add($txtOneDriveAccess)
+
+    # Create label and textbox for Mailbox Full Control
+    $lblMailboxControl = New-Object System.Windows.Controls.Label
+    $lblMailboxControl.Content = "Grant Mailbox Full Control To (Email):"
+    $stackPanel.Children.Add($lblMailboxControl)
+
+    $txtMailboxControl = New-Object System.Windows.Controls.TextBox
+    $txtMailboxControl.Margin = '0,0,0,4'
+    $stackPanel.Children.Add($txtMailboxControl)
+
+    # Create label and textbox for Forward Mailbox
+    $lblForwardMailbox = New-Object System.Windows.Controls.Label
+    $lblForwardMailbox.Content = "Forward Mailbox To (Email):"
+    $stackPanel.Children.Add($lblForwardMailbox)
+
+    $txtForwardMailbox = New-Object System.Windows.Controls.TextBox
+    $txtForwardMailbox.Margin = '0,0,0,4'
+    $stackPanel.Children.Add($txtForwardMailbox)
 
     # Create and add OK and Cancel buttons
     $buttonPanel = New-Object System.Windows.Controls.StackPanel
@@ -83,16 +104,22 @@ function Show-CustomTerminationWindow {
     $okButton.Content = "OK"
     $okButton.Margin = '0,0,10,0'
     $okButton.Add_Click({
-            # Validate user termination inputs
-            if (-not $textBoxes[0].Text) {
+            # Validate user termination input
+            if (-not $txtUserToTerm.Text) {
                 [System.Windows.MessageBox]::Show("User to Terminate is a mandatory field. Please enter a email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
 
             # Validate optional email inputs
-            for ($i = 1; $i -lt $textBoxes.Count; $i++) {
-                if ($textBoxes[$i].Text -and -not (Validate-Email $textBoxes[$i].Text)) {
-                    [System.Windows.MessageBox]::Show("Invalid email format for: $($labels[$i]). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            $emailInputs = @{
+                "Grant OneDrive Access To (Email):"      = $txtOneDriveAccess.Text
+                "Grant Mailbox Full Control To (Email):" = $txtMailboxControl.Text
+                "Forward Mailbox To (Email):"            = $txtForwardMailbox.Text
+            }
+
+            foreach ($input in $emailInputs.GetEnumerator()) {
+                if ($input.Value -and -not (Validate-Email $input.Value)) {
+                    [System.Windows.MessageBox]::Show("Invalid email format for: $($input.Key). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                     return
                 }
             }
@@ -118,10 +145,10 @@ function Show-CustomTerminationWindow {
 
     if ($result -eq $true) {
         return @{
-            InputUserToTerm         = $textBoxes[0].Text
-            InputUserFullControl    = $textBoxes[1].Text
-            InputUserFWD            = $textBoxes[2].Text
-            InputUserOneDriveAccess = $textBoxes[3].Text
+            InputUserToTerm         = $txtUserToTerm.Text
+            InputUserFullControl    = $txtMailboxControl.Text
+            InputUserFWD            = $txtForwardMailbox.Text
+            InputUserOneDriveAccess = $txtOneDriveAccess.Text
         }
     } else {
         return $null
