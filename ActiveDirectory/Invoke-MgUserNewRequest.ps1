@@ -441,7 +441,7 @@ if ($null -ne $CheckNewUserUPN) {
     exit
 }
 
-$CheckNewUserEmail = $(try { Get-MgUser -Identity $NewUserEmail } catch { $null })
+$CheckNewUserEmail = $(try { Get-MgUser -UserId $NewUserEmail } catch { $null })
 if ($null -ne $CheckNewUserEmail) {
     Write-Host "Account in 365 exist for user $NewUser. Please check 365 for accounts with duplicate SMTP Address. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
