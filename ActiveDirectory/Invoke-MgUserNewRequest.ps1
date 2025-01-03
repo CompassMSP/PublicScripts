@@ -24,6 +24,7 @@
 # 10-22-2024                    2.4         Add KB4 offboarding email delivery to SecurePath
 # 11-08-2024                    2.5         Added better UI boxes for variables
 # 11-11-2024                    2.6         Added added checkbox for EntraID P2 license
+# 01-03-2025                    2.7         Added added check for duplicate SMTP Address
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -436,6 +437,13 @@ $NewUserEmail = $($NewUserSamAccountName + $Domain).ToLower()
 $CheckNewUserUPN = $(try { Get-ADUser -Identity $NewUserSamAccountName } catch { $null })
 if ($null -ne $CheckNewUserUPN) {
     Write-Host "SamAccountName exist for user $NewUser. Please check AD for accounts with duplicate SamAccountName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
+}
+
+$CheckNewUserEmail = $(try { Get-MgUser -Identity $NewUserEmail } catch { $null })
+if ($null -ne $CheckNewUserEmail) {
+    Write-Host "Account in 365 exist for user $NewUser. Please check 365 for accounts with duplicate SMTP Address. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
