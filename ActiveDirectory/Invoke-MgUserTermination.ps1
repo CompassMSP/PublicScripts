@@ -34,6 +34,118 @@
 
 #Import-Module adsync -UseWindowsPowerShell
 
+$QuickEditCodeSnippet=@"
+using System;
+using System.Runtime.InteropServices;
+
+public static class ConsoleModeSettings
+{
+    const uint ENABLE_QUICK_EDIT = 0x0040;
+    const uint ENABLE_INSERT_MODE = 0x0020;
+
+    const int STD_INPUT_HANDLE = -10;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr GetStdHandle(int nStdHandle);
+
+    [DllImport("kernel32.dll")]
+    static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+
+    [DllImport("kernel32.dll")]
+    static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+
+    public static void EnableQuickEditMode()
+    {
+        SetConsoleFlag(ENABLE_QUICK_EDIT, true);
+    }
+
+    public static void DisableQuickEditMode()
+    {
+        SetConsoleFlag(ENABLE_QUICK_EDIT, false);
+    }
+
+    public static void EnableInsertMode()
+    {
+        SetConsoleFlag(ENABLE_INSERT_MODE, true);
+    }
+
+    public static void DisableInsertMode()
+    {
+        SetConsoleFlag(ENABLE_INSERT_MODE, false);
+    }
+
+    private static void SetConsoleFlag(uint modeFlag, bool enable)
+    {
+        IntPtr consoleHandle = GetStdHandle(STD_INPUT_HANDLE);
+        uint consoleMode;
+        if (GetConsoleMode(consoleHandle, out consoleMode))
+        {
+            if (enable)
+                consoleMode |= modeFlag;
+            else
+                consoleMode &= ~modeFlag;
+
+            SetConsoleMode(consoleHandle, consoleMode);
+        }
+    }
+}
+
+"@
+
+$QuickEditMode=add-type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
+
+function Set-ConsoleProperties()
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [switch]$EnableQuickEditMode=$false,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$DisableQuickEditMode=$false,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$EnableInsertMode=$false,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$DisableInsertMode=$false
+    )
+
+    if ($PSBoundParameters.Count -eq 0)
+    {
+        [ConsoleModeSettings]::EnableQuickEditMode()
+        [ConsoleModeSettings]::EnableInsertMode()
+        Write-Output "All settings have been enabled"
+        return
+    }
+
+    if ($EnableQuickEditMode)
+    {
+        [ConsoleModeSettings]::EnableQuickEditMode()
+        Write-Output "QuickEditMode has been enabled"
+    }
+
+    if ($DisableQuickEditMode)
+    {
+        [ConsoleModeSettings]::DisableQuickEditMode()
+        Write-Output "QuickEditMode has been disabled"
+    }
+
+    if ($EnableInsertMode)
+    {
+        [ConsoleModeSettings]::EnableInsertMode()
+        Write-Output "InsertMode has been enabled"
+    }
+
+    if ($DisableInsertMode)
+    {
+        [ConsoleModeSettings]::DisableInsertMode()
+        Write-Output "InsertMode has been disabled"
+    }
+}
+
+Set-ConsoleProperties -DisableQuickEditMode -DisableInsertMode
+
 Add-Type -AssemblyName PresentationFramework
 
 # Function to validate email addresses
