@@ -24,6 +24,7 @@
 # 10-15-2024                    2.4         Remove AppRoleAssignment for KnowBe4 SCIM App
 # 10-22-2024                    2.5         Add KB4 offboarding email delivery to SecurePath
 # 11-08-2024                    2.6         Added better UI boxes for variables
+# 01-10-2025                    2.7         Add function to disable QuickEdit and InsertMode to resolve script issues
 #********************************************************************************
 # Run from the Primary Domain Controller with AD Connect installed
 #
@@ -92,7 +93,7 @@ public static class ConsoleModeSettings
 
 "@
 
-$QuickEditMode=add-type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
+Add-Type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
 
 function Set-ConsoleProperties()
 {
@@ -149,7 +150,7 @@ Set-ConsoleProperties -DisableQuickEditMode -DisableInsertMode
 Add-Type -AssemblyName PresentationFramework
 
 # Function to validate email addresses
-function Validate-Email {
+function Test-EmailAddress {
     param (
         [string]$Email
     )
@@ -230,7 +231,7 @@ function Show-CustomTerminationWindow {
             }
 
             foreach ($input in $emailInputs.GetEnumerator()) {
-                if ($input.Value -and -not (Validate-Email $input.Value)) {
+                if ($input.Value -and -not (Test-EmailAddress -Email $input.Value)) {
                     [System.Windows.MessageBox]::Show("Invalid email format for: $($input.Key). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                     return
                 }

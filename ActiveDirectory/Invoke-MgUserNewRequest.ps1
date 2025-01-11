@@ -25,6 +25,7 @@
 # 11-08-2024                    2.5         Added better UI boxes for variables
 # 11-11-2024                    2.6         Added added checkbox for EntraID P2 license
 # 01-03-2025                    2.7         Added added check for duplicate SMTP Address
+# 01-10-2025                    2.8         Add function to disable QuickEdit and InsertMode to resolve script issues
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -103,7 +104,7 @@ public static class ConsoleModeSettings
 
 "@
 
-$QuickEditMode=add-type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
+Add-Type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
 
 function Set-ConsoleProperties()
 {
