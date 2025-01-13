@@ -425,10 +425,10 @@ Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remov
 $termUserDeviceId = Get-MgUserRegisteredDevice -UserId $UserFromAD.UserPrincipalName
 
 $termUserDeviceId | ForEach-Object {
-    $params = @{
+    $MgDeviceparams = @{
         AccountEnabled = $false
     }
-    Update-MgDevice -DeviceId $_.Id -BodyParameter $params
+    Update-MgDevice -DeviceId $_.Id -BodyParameter $MgDeviceparams
 }
 
 $termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled }
@@ -527,7 +527,7 @@ Write-Host "Removal of user licenses completed."
 ## Sends email to SecurePath Team (soc@compassmsp.com) with the offboarding user information.
 $MsgFrom = 'noreply@compassmsp.com'
 
-$params = @{
+$Emailparams = @{
     message         = @{
         subject      = "KB4 – Remove User"
         body         = @{
@@ -545,7 +545,7 @@ $params = @{
     saveToSentItems = "false"
 }
 
-Send-MgUserMail -UserId $MsgFrom -BodyParameter $params
+Send-MgUserMail -UserId $MsgFrom -BodyParameter $Emailparams
 
 #Disconnect from Exchange and Graph
 Disconnect-ExchangeOnline -Confirm:$false
