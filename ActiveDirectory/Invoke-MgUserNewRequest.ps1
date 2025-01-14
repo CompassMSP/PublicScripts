@@ -177,9 +177,7 @@ if ($NULL -eq $GraphCert) {
 Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
 
 # Build out UI for user input
-Add-Type -AssemblyName PresentationFramework
-Add-Type -AssemblyName PresentationCore
-Add-Type -AssemblyName WindowsBase
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
 # Function to create and show a custom WPF window
 function Show-NewUserRequestWindow {
@@ -718,7 +716,9 @@ if ($ADSyncCompleteYesorExit -eq 'exit') {
 
 if ($ADSyncCompleteYesorExit -eq 'yes') {
 
-    $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
+    $MgUserCopy = Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName
+    $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
+
     if (!$NewMgUser) {
         Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
         $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
@@ -730,7 +730,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     Write-Output 'Setting Usage Location for new user'
 
     ## Assigns US as UsageLocation
-    Update-MgUser -UserId $NewUserEmail -UsageLocation US
+    Update-MgUser -UserId $MgUser.Id -UsageLocation US
 
     Start-Sleep -Seconds 20
 
@@ -766,20 +766,20 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     Write-Output 'Adding Office 365 Groups to new user.'
 
     ## Copy groups to new user from old user
-    $All365Groups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id | `
+    $All365Groups = Get-MgUserMemberOf -UserId $MgUserCopy.Id | `
         Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
         Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
 
     Foreach ($365Group in $All365Groups) {
         try {
-            New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $(Get-MgUser -UserId $NewUserEmail).Id -ErrorAction Stop
+            New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $MgUser.Id -ErrorAction Stop
         } catch {
             Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction 'SilentlyContinue'
         }
     }
 
-    $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName).Id).Count
-    $NewUserGroupCount = (Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $NewUserEmail).Id).Count
+    $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $MgUserCopy.Id).Count
+    $NewUserGroupCount = (Get-MgUserMemberOf -UserId $MgUser.Id).Count
 
     Write-Output "User $($NewUser) should now be created unless any errors occurred during the process."
     Write-Output "Copy User group count: $($CopyUserGroupCount)"
@@ -791,9 +791,10 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15 = "$extAttr15" }
 
-    ## Sends email to SecurePath Team (soc@compassmsp.com) with the new user information.
-    $MgUser = Get-MgUser -UserId $NewUserEmail
+    ## Provision New Users OneDrive
+    Get-MgUserDefaultDrive -UserId $MgUser.Id
 
+    ## Sends email to SecurePath Team (soc@compassmsp.com) with the new user information.
     $MsgFrom = 'noreply@compassmsp.com'
 
     $params = @{
@@ -819,23 +820,5 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     #Disconnect from Exchange and Graph
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-Graph
-
-    ## Connect to PnP PowerShell
-    <#
-    $PnPAppId = "24e3c6ad-9658-4a0d-b85f-82d67d148449"
-    $Org = "compassmsp.onmicrosoft.com"
-    $PnPCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=PnP PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-    if ($NULL -eq $PnPCert) {
-        Write-Host "No valid PnP PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-        exit
-    }
-    Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId $PnPAppId -Tenant $Org -Thumbprint $($PNPCert.Thumbprint)
-    #>
-    Connect-PnPOnline -Url https://compassmsp-admin.sharepoint.com -UseWebLogin
-
-    ## Creates OneDrive
-    Request-PnPPersonalSite -UserEmails $NewUserEmail -NoWait
-    Disconnect-PnPOnline
 
 }
