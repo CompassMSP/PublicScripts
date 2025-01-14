@@ -26,6 +26,7 @@
 # 11-11-2024                    2.6         Added added checkbox for EntraID P2 license
 # 01-03-2025                    2.7         Added added check for duplicate SMTP Address
 # 01-10-2025                    2.8         Add function to disable QuickEdit and InsertMode to resolve script issues
+# 01-13-2025                    2.9         Rework custom WPF window
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -46,7 +47,7 @@
 
 #Import-Module adsync -UseWindowsPowerShell
 
-$QuickEditCodeSnippet=@"
+$QuickEditCodeSnippet = @"
 using System;
 using System.Runtime.InteropServices;
 
@@ -106,51 +107,45 @@ public static class ConsoleModeSettings
 
 Add-Type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
 
-function Set-ConsoleProperties()
-{
+function Set-ConsoleProperties() {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory=$false)]
-        [switch]$EnableQuickEditMode=$false,
+        [Parameter(Mandatory = $false)]
+        [switch]$EnableQuickEditMode = $false,
 
-        [Parameter(Mandatory=$false)]
-        [switch]$DisableQuickEditMode=$false,
+        [Parameter(Mandatory = $false)]
+        [switch]$DisableQuickEditMode = $false,
 
-        [Parameter(Mandatory=$false)]
-        [switch]$EnableInsertMode=$false,
+        [Parameter(Mandatory = $false)]
+        [switch]$EnableInsertMode = $false,
 
-        [Parameter(Mandatory=$false)]
-        [switch]$DisableInsertMode=$false
+        [Parameter(Mandatory = $false)]
+        [switch]$DisableInsertMode = $false
     )
 
-    if ($PSBoundParameters.Count -eq 0)
-    {
+    if ($PSBoundParameters.Count -eq 0) {
         [ConsoleModeSettings]::EnableQuickEditMode()
         [ConsoleModeSettings]::EnableInsertMode()
         Write-Output "All settings have been enabled"
         return
     }
 
-    if ($EnableQuickEditMode)
-    {
+    if ($EnableQuickEditMode) {
         [ConsoleModeSettings]::EnableQuickEditMode()
         Write-Output "QuickEditMode has been enabled"
     }
 
-    if ($DisableQuickEditMode)
-    {
+    if ($DisableQuickEditMode) {
         [ConsoleModeSettings]::DisableQuickEditMode()
         Write-Output "QuickEditMode has been disabled"
     }
 
-    if ($EnableInsertMode)
-    {
+    if ($EnableInsertMode) {
         [ConsoleModeSettings]::EnableInsertMode()
         Write-Output "InsertMode has been enabled"
     }
 
-    if ($DisableInsertMode)
-    {
+    if ($DisableInsertMode) {
         [ConsoleModeSettings]::DisableInsertMode()
         Write-Output "InsertMode has been disabled"
     }
@@ -183,90 +178,103 @@ Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -No
 
 # Build out UI for user input
 Add-Type -AssemblyName PresentationFramework
-
-# Define the properties to select from the subscribed SKUs
-$SelectObjectPropertyList = @(
-    "SkuPartNumber"
-    "SkuId"
-    @{
-        n = "ActiveUnits"
-        e = { ($_.PrepaidUnits).Enabled }
-    }
-    "ConsumedUnits"
-)
-
-# Define the filter for the SKUs
-$WhereObjectFilter = {
-    ($_.SkuPartNumber -eq 'EXCHANGESTANDARD') -or
-    ($_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS') -or
-    ($_.SkuPartNumber -eq 'SPE_E3') -or
-    ($_.SkuPartNumber -eq 'SPB') -or
-    ($_.SkuPartNumber -eq 'ENTERPRISEPACK') -or
-    ($_.SkuPartNumber -eq "AAD_PREMIUM_P2")
-}
-
-# Retrieve the available licenses
-$selectLicense = Get-MgSubscribedSku |
-Select-Object $SelectObjectPropertyList |
-Where-Object -FilterScript $WhereObjectFilter |
-ForEach-Object {
-    [PSCustomObject]@{
-        Available = ($_.ActiveUnits - $_.ConsumedUnits)
-        SkuName   = switch -Regex ($_.SkuPartNumber) {
-            "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
-            "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
-            "SPE_E3" { "Microsoft 365 E3" }
-            "SPB" { "Microsoft 365 Business Premium" }
-            "ENTERPRISEPACK" { "Office 365 E3" }
-            "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
-        }
-    }
-} | Sort-Object SkuName
-
-# Format the license information for display
-$licenseInfo = "Available Licenses:`n"
-foreach ($license in $selectLicense) {
-    $licenseInfo += "$($license.SkuName): $($license.Available) available`n"  # Simple list format
-}
-
-# Show a pop-up message with available licenses before the input window
-[System.Windows.MessageBox]::Show("Please check the Microsoft 365 portal for available licenses.`n`n$licenseInfo", "License Check", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-
-# Function to validate display names
-function Test-DisplayName {
-    param (
-        [string]$DisplayName
-    )
-    return $DisplayName -match '^[A-Za-z]+ [A-Za-z]+$'  # Regex to check for "First Last"
-}
-
-# Function to validate and format mobile numbers
-function Format-MobileNumber {
-    param (
-        [string]$MobileNumber
-    )
-    # Remove all non-digit characters
-    $digits = -join ($MobileNumber -replace '\D', '')
-
-    # Check if we have 10 digits
-    if ($digits.Length -eq 10) {
-        return "($($digits.Substring(0, 3))) $($digits.Substring(3, 3))-$($digits.Substring(6, 4))"
-    }
-}
+Add-Type -AssemblyName PresentationCore
+Add-Type -AssemblyName WindowsBase
 
 # Function to create and show a custom WPF window
-function Show-CustomNewUserRequestWindow {
+function Show-NewUserRequestWindow {
+
+    # Function to validate display names
+    function Test-DisplayName {
+        param (
+            [string]$DisplayName
+        )
+        return $DisplayName -match '^[A-Za-z]+ [A-Za-z]+$'  # Regex to check for "First Last"
+    }
+
+    # Function to validate and format mobile numbers
+    function Format-MobileNumber {
+        param (
+            [string]$MobileNumber
+        )
+        # Remove all non-digit characters
+        $digits = -join ($MobileNumber -replace '\D', '')
+
+        # Check if we have 10 digits
+        if ($digits.Length -eq 10) {
+            return "($($digits.Substring(0, 3))) $($digits.Substring(3, 3))-$($digits.Substring(6, 4))"
+        }
+    }
+
+    # Get available licenses from tenant
+    $skus = Get-MgSubscribedSku | Select-Object SkuId, SkuPartNumber, ConsumedUnits, @{
+        Name = 'PrepaidUnits'; Expression = { $_.PrepaidUnits.Enabled }
+    }
+
+    # Create license display information
+    $licenseInfo = $skus | ForEach-Object {
+        $available = $_.PrepaidUnits - $_.ConsumedUnits
+        $SkuDisplayName = switch -Regex ($_.SkuPartNumber) {
+            "POWERAUTOMATE_ATTENDED_RPA" { "Power Automate Premium" ; break }
+            "PROJECT_MADEIRA_PREVIEW_IW_SKU" { "Dynamics 365 Business Central for IWs" ; break }
+            "PROJECT_PLAN3_DEPT" { "Project Plan 3 (for Department)" ; break }
+            "FLOW_FREE" { "Microsoft Power Automate Free" ; break }
+            "WINDOWS_STORE" { "Windows Store for Business" ; break }
+            "RMSBASIC" { "Rights Management Service Basic Content Protection" ; break }
+            "RIGHTSMANAGEMENT_ADHOC" { "Rights Management Adhoc" ; break }
+            "POWERAPPS_VIRAL" { "Microsoft Power Apps Plan 2 Trial" ; break }
+            "POWERAPPS_PER_USER" { "Power Apps Premium" ; break }
+            "POWERAPPS_DEV" { "Microsoft PowerApps for Developer" ; break }
+            "PHONESYSTEM_VIRTUALUSER" { "Microsoft Teams Phone Resource Account" ; break }
+            "MICROSOFT_BUSINESS_CENTER" { "Microsoft Business Center" ; break }
+            "MCOPSTNC" { "Communications Credits" ; break }
+            "MCOPSTN1" { "Skype for Business PSTN Domestic Calling" ; break }
+            "MEETING_ROOM" { "Microsoft Teams Rooms Standard" ; break }
+            "MCOMEETADV" { "Microsoft 365 Audio Conferencing" ; break }
+            "CCIBOTS_PRIVPREV_VIRAL" { "Power Virtual Agents Viral Trial" ; break }
+            "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" ; break }
+            "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" ; break }
+            "SPE_E3" { "Microsoft 365 E3" ; break }
+            "SPB" { "Microsoft 365 Business Premium" ; break }
+            "ENTERPRISEPACK" { "Office 365 E3" ; break }
+            "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" ; break }
+            "PROJECT_P1" { "Project Plan 1" ; break }
+            "PROJECTPROFESSIONAL" { "Project Plan 3" ; break }
+            "VISIOCLIENT" { "Visio Plan 2" ; break }
+            "Microsoft_Teams_Audio_Conferencing_select_dial_out" { "Microsoft Teams Audio Conferencing with dial-out to USA/CAN" ; break }
+            "POWER_BI_PRO" { "Power BI Pro" ; break }
+            "Microsoft_365_Copilot" { "Microsoft 365 Copilot" ; break }
+            "Microsoft_Teams_Premium" { "Microsoft Teams Premium" ; break }
+            "MCOEV" { "Microsoft Teams Phone Standard" ; break }
+            "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" ; break }
+            "POWER_BI_STANDARD" { "Power BI Standard" ; break }
+            "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" ; break }
+            default { $_.SkuPartNumber }
+        }
+
+        # If $SkuDisplayName is null or empty, use the original SkuPartNumber
+        if ([string]::IsNullOrEmpty($SkuDisplayName)) {
+            $SkuDisplayName = $_.SkuPartNumber
+        }
+
+        @{
+            DisplayName = "$($SkuDisplayName) (Available: $available)"
+            SkuId       = $_.SkuId
+            SortName    = $SkuDisplayName  # Add this for sorting
+        }
+    } | Sort-Object { $_.SortName }  # Sort by the display name without the "Available" count
+
     # Create a new WPF window
     $window = New-Object System.Windows.Window
     $window.Title = "New User Request"
     $window.Width = 500  # Set a wider fixed width for the window
-    $window.Height = 330  # Set the ideal height for the window
+    $window.Height = 560  # Set the ideal height for the window
     $window.WindowStartupLocation = 'CenterScreen'
 
     # Create a StackPanel to hold the controls
-    $stackPanel = New-Object System.Windows.Controls.StackPanel
-    $stackPanel.Margin = '3'  # Add margin around the stack panel
-    $window.Content = $stackPanel
+    $mainPanel = New-Object System.Windows.Controls.StackPanel
+    $mainPanel.Margin = '3'  # Add margin around the stack panel
+    $window.Content = $mainPanel
 
     # Create a StackPanel for the new user input and checkbox
     $newuserPanel = New-Object System.Windows.Controls.StackPanel
@@ -284,7 +292,7 @@ function Show-CustomNewUserRequestWindow {
     $newuserPanel.Children.Add($newUserTextBox)  # Add to new user panel
 
     # Add the new user panel to the stack panel
-    $stackPanel.Children.Add($newuserPanel)
+    $mainPanel.Children.Add($newuserPanel)
 
     # Create a StackPanel for the copy user input and checkbox
     $copyuserPanel = New-Object System.Windows.Controls.StackPanel
@@ -302,7 +310,7 @@ function Show-CustomNewUserRequestWindow {
     $copyuserPanel.Children.Add($userToCopyTextBox)  # Add to copy user panel
 
     # Add the copy user panel to the stack panel
-    $stackPanel.Children.Add($copyuserPanel)
+    $mainPanel.Children.Add($copyuserPanel)
 
     # Create a StackPanel for the mobile number input and checkbox
     $mobilePanel = New-Object System.Windows.Controls.StackPanel
@@ -326,25 +334,112 @@ function Show-CustomNewUserRequestWindow {
     $mobilePanel.Children.Add($bypassFormattingCheckBox)
 
     # Add the mobile panel to the stack panel
-    $stackPanel.Children.Add($mobilePanel)
+    $mainPanel.Children.Add($mobilePanel)
 
-    # Create a ComboBox for License SKU selection
-    $SkucomboBoxLabel = New-Object System.Windows.Controls.Label
-    $SkucomboBoxLabel.Content = "Select License SKU:"
-    $SkucomboBoxLabel.Margin = '0,0,0,4'  # Add margin below the label
-    $stackPanel.Children.Add($SkucomboBoxLabel)
+    # Modify the licenses section to create two separate controls
+    $requiredLicenses = @(
+        "Exchange Online (Plan 1)",
+        "Office 365 E3",
+        "Microsoft 365 Business Basic",
+        "Microsoft 365 E3",
+        "Microsoft 365 Business Premium"
+    )
 
-    $SkucomboBox = New-Object System.Windows.Controls.ComboBox
-    $SkucomboBox.Margin = '0,0,0,3'
-    $SkucomboBox.ItemsSource = @('Exchange Online (Plan 1)', 'Microsoft 365 Business Basic', 'Microsoft 365 E3', 'Microsoft 365 Business Premium', 'Office 365 E3')
-    $stackPanel.Children.Add($SkucomboBox)
+    $ignoredLicenses = @(
+        "Microsoft Teams Rooms Standard",
+        "Microsoft Teams Phone Standard",
+        "Power Automate Premium",
+        "Power Apps Premium",
+        "Power BI Pro",
+        "Power BI Standard",
+        "Microsoft 365 Lighthouse",
+        "Rights Management Service Basic Content Protection",
+        "Communications Credits",
+        "Rights Management Adhoc",
+        "Power Virtual Agents Viral Trial",
+        "Windows Store for Business",
+        "Skype for Business PSTN Domestic Calling",
+        "Microsoft Business Center",
+        "Microsoft Teams Phone Resource Account"
+        "Microsoft PowerApps for Developer",
+        "Microsoft Power Apps Plan 2 Trial",
+        "Microsoft Power Automate Free",
+        "Microsoft_Copilot_for_Finance_trial",
+        "STREAM",
+        "Project Plan 3 (for Department)",
+        "Dynamics 365 Business Central for IWs"
+    )
 
-    # Create a CheckBox for adding the EntraID P2
-    $AddEntraIDP2CheckBox = New-Object System.Windows.Controls.CheckBox
-    $AddEntraIDP2CheckBox.Content = "Add EntraID P2"
-    $AddEntraIDP2CheckBox.Margin = '0,0,0,3'  # Add margin below the checkbox
-    $AddEntraIDP2CheckBox.IsChecked = $true  # Set the checkbox to checked by default
-    $stackPanel.Children.Add($AddEntraIDP2CheckBox)
+    # Required License ComboBox Section
+    $requiredGroup = New-Object System.Windows.Controls.GroupBox
+    $requiredGroup.Header = "Required License (Select One)"
+    $requiredGroup.Margin = "10"
+
+    $requiredComboBox = New-Object System.Windows.Controls.ComboBox
+    $requiredComboBox.Margin = "5"
+
+    # Create a custom object for each required license
+    foreach ($license in $licenseInfo) {
+        foreach ($reqLicense in $requiredLicenses) {
+            if ($license.DisplayName -like "*$reqLicense*") {
+                $item = [PSCustomObject]@{
+                    DisplayName = $license.DisplayName
+                    SkuId       = $license.SkuId
+                }
+                $requiredComboBox.Items.Add($item)
+            }
+        }
+    }
+
+    # Set the DisplayMemberPath to show the DisplayName
+    $requiredComboBox.DisplayMemberPath = "DisplayName"
+    $requiredGroup.Content = $requiredComboBox
+    $mainPanel.Children.Add($requiredGroup)
+
+    # Ancillary Licenses Section
+    $ancillaryGroup = New-Object System.Windows.Controls.GroupBox
+    $ancillaryGroup.Header = "Ancillary Licenses"
+    $ancillaryGroup.Margin = "10"
+
+    # Create ScrollViewer for ancillary licenses
+    $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
+    $scrollViewer.VerticalScrollBarVisibility = "Auto"
+    $scrollViewer.MaxHeight = 200
+
+    $licensesStack = New-Object System.Windows.Controls.StackPanel
+    $scrollViewer.Content = $licensesStack
+    $ancillaryGroup.Content = $scrollViewer
+
+    $SkuCheckBoxes = @()
+    foreach ($license in $licenseInfo) {
+        # Skip licenses that are in the required licenses list
+        $isRequired = $false
+        foreach ($reqLicense in $requiredLicenses) {
+            if ($license.DisplayName -like "*$reqLicense*") {
+                $isRequired = $true
+                break
+            }
+        }
+        $isIgnored = $false
+        foreach ($ignoredLicense in $ignoredLicenses) {
+            if ($license.DisplayName -like "*$ignoredLicense*") {
+                $isIgnored = $true
+                break
+            }
+        }
+        if (-not $isRequired -and -not $isIgnored) {
+            $skucb = New-Object System.Windows.Controls.CheckBox
+            $skucb.Content = $license.DisplayName
+            $skucb.Tag = $license.SkuId
+            $skucb.Margin = "5,5,5,5"
+            if ($license.DisplayName -like "*Microsoft Entra ID P2*") {
+                $skucb.IsChecked = $true
+            }
+            $SkuCheckBoxes += $skucb
+            $licensesStack.Children.Add($skucb)
+        }
+    }
+    $mainPanel.Children.Add($ancillaryGroup)
 
     # Create and add OK and Cancel buttons
     $buttonPanel = New-Object System.Windows.Controls.StackPanel
@@ -386,13 +481,52 @@ function Show-CustomNewUserRequestWindow {
                 }
             }
 
-            # Validate License SKU selection
-            if (-not $SkucomboBox.SelectedItem) {
-                [System.Windows.MessageBox]::Show("Selecting a License SKU is mandatory. Please select an option.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            # Validate required license selection
+            if ($null -eq $requiredComboBox.SelectedItem) {
+                [System.Windows.MessageBox]::Show(
+                    "Please select a required license.",
+                    "Required License Missing",
+                    [System.Windows.MessageBoxButton]::OK,
+                    [System.Windows.MessageBoxImage]::Warning)
                 return
             }
 
-            # Set the DialogResult to true and close the window
+            # Get selected licenses (both required and ancillary)
+            $script:selectedLicenses = @()
+            $script:selectedLicenses += $requiredComboBox.SelectedItem.SkuId
+            $script:selectedLicenses += ($SkuCheckBoxes | Where-Object { $_.IsChecked } | ForEach-Object { $_.Tag })
+
+            # Check for available licenses
+            if ($requiredComboBox.SelectedItem.DisplayName -match "Available: (\d+)") {
+                $availableCount = [int]$Matches[1]
+                if ($availableCount -eq 0) {
+                    $licenseName = $requiredComboBox.SelectedItem.DisplayName -replace ' \(Available: \d+\)$', ''
+                    [System.Windows.MessageBox]::Show(
+                        "$licenseName has no licenses available.",
+                        "No Available Licenses",
+                        [System.Windows.MessageBoxButton]::OK,
+                        [System.Windows.MessageBoxImage]::Warning)
+                    return
+                }
+            }
+
+            # Check ancillary licenses availability
+            $selectedCheckboxes = $SkuCheckBoxes | Where-Object { $_.IsChecked }
+            foreach ($cb in $selectedCheckboxes) {
+                if ($cb.Content -match "Available: (\d+)") {
+                    $availableCount = [int]$Matches[1]
+                    if ($availableCount -eq 0) {
+                        $licenseName = $cb.Content -replace ' \(Available: \d+\)$', ''
+                        [System.Windows.MessageBox]::Show(
+                            "$licenseName has no licenses available.",
+                            "No Available Licenses",
+                            [System.Windows.MessageBoxButton]::OK,
+                            [System.Windows.MessageBoxImage]::Warning)
+                        return
+                    }
+                }
+            }
+
             $window.DialogResult = $true
             $window.Close()
         })
@@ -406,7 +540,7 @@ function Show-CustomNewUserRequestWindow {
         })
     $buttonPanel.Children.Add($cancelButton)
 
-    $stackPanel.Children.Add($buttonPanel)
+    $mainPanel.Children.Add($buttonPanel)
 
     # Show the window
     $result = $window.ShowDialog()
@@ -422,17 +556,23 @@ function Show-CustomNewUserRequestWindow {
         }
     }
 
-    if ($AddEntraIDP2CheckBox.IsChecked) {
-        $AddEntraIDP2 = 'Yes'
-    }
-
     if ($result -eq $true) {
         return @{
-            InputNewUser      = $newUserTextBox.Text
-            InputNewMobile    = $formattedMobile  # Use the formatted or unformatted mobile number
-            InputUserToCopy   = $userToCopyTextBox.Text
-            InputSku          = $SkucomboBox.SelectedItem
-            InputSkuEntraIDP2 = $AddEntraIDP2
+            InputNewUser           = $newUserTextBox.Text
+            InputNewMobile         = $formattedMobile
+            InputUserToCopy        = $userToCopyTextBox.Text
+            InputRequiredLicense   = @{
+                SkuId       = $requiredComboBox.SelectedItem.SkuId
+                DisplayName = $requiredComboBox.SelectedItem.DisplayName
+            }
+            InputAncillaryLicenses = ($SkuCheckBoxes |
+                Where-Object { $_.IsChecked } |
+                ForEach-Object {
+                    @{
+                        SkuId       = $_.Tag
+                        DisplayName = $_.Content
+                    }
+                })
         }
     } else {
         return $null
@@ -440,19 +580,15 @@ function Show-CustomNewUserRequestWindow {
 }
 
 # Call the custom input window function
-$result = Show-CustomNewUserRequestWindow
+$result = Show-NewUserRequestWindow
 
 # Setting variables from window function result
 $NewUser = $result.InputNewUser
 $Phone = $result.InputNewMobile
 $UserToCopy = $result.InputUserToCopy
 
-## Set Sku from Sku displayName
-if ($result.InputSku -eq 'Exchange Online (Plan 1)') { $Sku = "EXCHANGESTANDARD" }
-if ($result.InputSku -eq 'Microsoft 365 Business Basic') { $Sku = "O365_BUSINESS_ESSENTIALS" }
-if ($result.InputSku -eq 'Microsoft 365 E3') { $Sku = "SPE_E3" }
-if ($result.InputSku -eq 'Microsoft 365 Business Premium') { $Sku = "SPB" }
-if ($result.InputSku -eq 'Office 365 E3') { $Sku = "ENTERPRISEPACK" }
+$RequiredLicense = $result.InputRequiredLicense.SkuId
+$AncillaryLicenses = $result.InputAncillaryLicenses.SkuId
 
 $UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properties Title, Fax, wWWHomePage, physicalDeliveryOfficeName, Office, Manager, Description, Department, Company
 
@@ -465,79 +601,6 @@ if ($UserToCopyUPN.Count -gt 1) {
     Write-Output "Could not find user $($UserToCopy) in AD to copy from. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
-}
-
-## Sku availability check
-if ($Sku) {
-    try {
-        $SelectObjectPropertyList = @(
-            "SkuPartNumber"
-            "SkuId"
-            @{
-                n = "Available"
-                e = { (($_.PrepaidUnits).Enabled - $_.ConsumedUnits) }
-            }
-        )
-
-        $getLicCount = Get-MgSubscribedSku | Where-Object { ($_.SkuPartNumber -eq $Sku) } | Select-Object $SelectObjectPropertyList
-
-        if ($getLicCount.Available -gt 0) {
-            $getLic = $getLicCount
-        } else {
-            Write-Output "No available license for '$($result.InputSku)'. Please add additional licenses via the Microsoft Portal."
-            $Sku = $NULL
-        }
-    } catch {
-        Write-Output "License Sku could not be found. Or no Sku was selected."
-        $Sku = $NULL
-    }
-}
-
-## Check if no Sku was selected or if no Sku was found
-if (!$Sku) {
-
-    $SelectObjectPropertyList = @(
-        "SkuPartNumber"
-        "SkuId"
-        @{
-            n = "ActiveUnits"
-            e = { ($_.PrepaidUnits).Enabled }
-        }
-        "ConsumedUnits"
-    )
-
-    $WhereObjectFilter = {
-        ($_.SkuPartNumber -eq 'EXCHANGESTANDARD') -or
-        ($_.SkuPartNumber -eq 'O365_BUSINESS_ESSENTIALS') -or
-        ($_.SkuPartNumber -eq 'SPE_E3') -or
-        ($_.SkuPartNumber -eq 'SPB') -or
-        ($_.SkuPartNumber -eq 'ENTERPRISEPACK')
-    }
-
-    $selectLicense = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
-        ForEach-Object {
-        [PSCustomObject]@{
-            DisplayName   = switch -Regex ($_.SkuPartNumber) {
-                "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
-                "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
-                "SPE_E3" { "Microsoft 365 E3" }
-                "SPB" { "Microsoft 365 Business Premium" }
-                "ENTERPRISEPACK" { "Office 365 E3" }
-            }
-            SkuPartNumber = $_.SkuPartNumber
-            SkuId         = $_.SkuId
-            Available     = ($_.ActiveUnits - $_.ConsumedUnits)
-        }
-    } | Sort-Object DisplayName
-
-    $GridArguments = @{
-        OutputMode = 'Single'
-        Title      = 'Please select a license and click OK'
-    }
-
-    $selectLicenseTEMP = $selectLicense | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments
-    $getLic = $selectLicense | Where-Object { $_.DisplayName -in $selectLicenseTEMP.DisplayName }
-
 }
 
 ## Building out new user variables
@@ -669,57 +732,35 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     ## Assigns US as UsageLocation
     Update-MgUser -UserId $NewUserEmail -UsageLocation US
 
-    ## Assign primary license to new user
-    if ($getLic) {
+    Start-Sleep -Seconds 20
+
+    function Set-UserLicenses {
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$UserId,
+
+            [Parameter(Mandatory = $true)]
+            [string[]]$License
+        )
+
         try {
-            Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLic.SkuId } -RemoveLicenses @() -ErrorAction stop
-            Write-Output 'License added.'
-        } catch {
-            Write-Output 'License could not be added. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
-            $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-            exit
+            foreach ($sku in $License) {
+                # Assign license using the required Graph API format
+                Set-MgUserLicense -UserId $UserId -AddLicenses @{SkuId = $sku} -RemoveLicenses @() -ErrorAction Stop | Out-Null
+                Write-Host "Successfully assigned license $sku to user: $UserId"
+            }
+        }
+        catch {
+            Write-Error "An error occurred: $_"
         }
     }
 
-    ## Assign P2 license to new user
-    if ($result.InputSkuEntraIDP2 -eq 'Yes') {
+    Set-UserLicenses -UserId $NewUserEmail -License $RequiredLicense
 
-        $SelectObjectPropertyList = @(
-            "SkuPartNumber"
-            "SkuId"
-            @{
-                n = "ActiveUnits"
-                e = { ($_.PrepaidUnits).Enabled }
-            }
-            "ConsumedUnits"
-        )
+    Start-Sleep -Seconds 10
 
-        $WhereObjectFilter = {
-            ($_.SkuPartNumber -like 'AAD_PREMIUM_P2')
-        }
-
-        $getLicenseEntraIDP2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
-            ForEach-Object {
-            [PSCustomObject]@{
-                DisplayName   = switch -Regex ($_.SkuPartNumber) {
-                    "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
-                }
-                SkuPartNumber = $_.SkuPartNumber
-                SkuId         = $_.SkuId
-                Available     = ($_.ActiveUnits - $_.ConsumedUnits)
-            }
-        } | Sort-Object DisplayName
-
-        if ($getLicenseEntraIDP2 -ne 0) {
-            try {
-                Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $getLicenseEntraIDP2.SkuId } -RemoveLicenses @() -ErrorAction stop
-                Write-Output "$($_.SkuPartNumber) License added."
-            } catch {
-                Write-Output "$($_.SkuPartNumber) License could not be added."
-            }
-        } else {
-            Write-Output "$($_.SkuPartNumber) no avaible license. Please add license and add manually"
-        }
+    if ($null -ne $AncillaryLicenses) {
+        Set-UserLicenses -UserId $NewUserEmail -License $AncillaryLicenses
     }
 
     Write-Output 'Adding Office 365 Groups to new user.'
@@ -774,96 +815,6 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     }
 
     Send-MgUserMail -UserId $MsgFrom -BodyParameter $params
-
-    ## Add additional 365 licenses
-
-    $AddLic = Read-Host "Would you like to add additional licenses? (Y/N)"
-
-    if ($AddLic -ne 'y') { Write-Output 'You have selected not to add any additional licenses.' }
-
-    if ($AddLic -eq 'y') {
-
-        $SelectObjectPropertyList = @(
-            "SkuPartNumber"
-            "SkuId"
-            @{
-                n = "ActiveUnits"
-                e = { ($_.PrepaidUnits).Enabled }
-            }
-            "ConsumedUnits"
-        )
-
-        $WhereObjectFilter = {
-            ($_.SkuPartNumber -notlike 'EXCHANGESTANDARD') -and
-            ($_.SkuPartNumber -notlike 'O365_BUSINESS_ESSENTIALS') -and
-            ($_.SkuPartNumber -notlike 'SPE_E3') -and
-            ($_.SkuPartNumber -notlike 'SPB') -and
-            ($_.SkuPartNumber -notlike 'ENTERPRISEPACK') -and
-            ($_.SkuPartNumber -notlike 'PROJECT_MADEIRA_PREVIEW_IW_SKU') -and
-            ($_.SkuPartNumber -notlike 'POWERAUTOMATE_ATTENDED_RPA') -and
-            ($_.SkuPartNumber -notlike 'RMSBASIC') -and
-            ($_.SkuPartNumber -notlike 'MCOPSTNC') -and
-            ($_.SkuPartNumber -notlike 'CCIBOTS_PRIVPREV_VIRAL') -and
-            ($_.SkuPartNumber -notlike 'MCOPSTN1') -and
-            ($_.SkuPartNumber -notlike 'WINDOWS_STORE') -and
-            ($_.SkuPartNumber -notlike 'STREAM') -and
-            ($_.SkuPartNumber -notlike 'POWERAPPS_DEV') -and
-            ($_.SkuPartNumber -notlike 'RIGHTSMANAGEMENT_ADHOC') -and
-            ($_.SkuPartNumber -notlike 'MCOMEETADV') -and
-            ($_.SkuPartNumber -notlike 'MEETING_ROOM') -and
-            ($_.SkuPartNumber -notlike 'VISIO_PLAN1_DEPT') -and
-            ($_.SkuPartNumber -notlike 'FLOW_FREE') -and
-            ($_.SkuPartNumber -notlike 'MICROSOFT_BUSINESS_CENTER') -and
-            ($_.SkuPartNumber -notlike 'PHONESYSTEM_VIRTUALUSER') -and
-            ($_.SkuPartNumber -notlike 'Microsoft_Copilot_for_Finance_trial') -and
-            ($_.SkuPartNumber -notlike 'POWERAPPS_VIRAL') -and
-            ($_.SkuPartNumber -notlike 'Microsoft_Teams_Exploratory_Dept') -and
-            ($_.SkuPartNumber -notlike 'POWERAPPS_PER_USER') -and
-            ($_.SkuPartNumber -notlike 'Power BI Standard') -and
-            ($_.SkuPartNumber -notlike 'AAD_PREMIUM_P2')
-        }
-
-        $selectLicense2 = Get-MgSubscribedSku | Select-Object $SelectObjectPropertyList | Where-Object -FilterScript $WhereObjectFilter | `
-            ForEach-Object {
-            [PSCustomObject]@{
-                DisplayName   = switch -Regex ($_.SkuPartNumber) {
-                    "PROJECT_P1" { "Project Plan 1" }
-                    "PROJECTPROFESSIONAL" { "Project Plan 3" }
-                    "VISIOCLIENT" { "Visio Plan 2" }
-                    "Microsoft_Teams_Audio_Conferencing_select_dial_out" { "Microsoft Teams Audio Conferencing with dial-out to USA/CAN" }
-                    "POWER_BI_PRO" { "Power BI Pro" }
-                    "Microsoft_365_Copilot" { "Microsoft 365 Copilot" }
-                    "Microsoft_Teams_Premium" { "Microsoft Teams Premium" }
-                    "MCOEV" { "Microsoft Teams Phone Standard" }
-                    "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
-                    "POWER_BI_STANDARD" { "Power BI Standard" }
-                    "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
-                }
-                SkuPartNumber = $_.SkuPartNumber
-                SkuId         = $_.SkuId
-                Available     = ($_.ActiveUnits - $_.ConsumedUnits)
-            }
-        } | Sort-Object DisplayName
-
-        $GridArguments = @{
-            OutputMode = 'Multiple'
-            Title      = 'Please select licenses and click OK (Hold CTRL to select multiple licenses)'
-        }
-
-        $selectLicenseTEMP2 = $selectLicense2 | ForEach-Object { $_ | Select-Object -Property 'DisplayName', 'Available' } | Out-GridView @GridArguments
-        $getLic2 = $selectLicense2 | Where-Object { $_.DisplayName -in $selectLicenseTEMP2.DisplayName }
-    }
-
-    if ($GetLic2) {
-        $GetLic2 | ForEach-Object {
-            try {
-                Set-MgUserLicense -UserId $NewMgUser.Id -AddLicenses @{SkuId = $_.SkuId } -RemoveLicenses @() -ErrorAction stop
-                Write-Output "$($_.SkuPartNumber) License added."
-            } catch {
-                Write-Output "$($_.SkuPartNumber) License could not be added."
-            }
-        }
-    }
 
     #Disconnect from Exchange and Graph
     Disconnect-ExchangeOnline -Confirm:$false
