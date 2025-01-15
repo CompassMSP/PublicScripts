@@ -46,8 +46,6 @@
 # .\Invoke-MgNewUserRequest.ps1 -UserToCopy "Copy User" -NewUser "Chris Williams" -Phone "555-555-5555"
 #>
 
-#Import-Module adsync -UseWindowsPowerShell
-
 $QuickEditCodeSnippet = @"
 using System;
 using System.Runtime.InteropServices;
@@ -127,28 +125,28 @@ function Set-ConsoleProperties() {
     if ($PSBoundParameters.Count -eq 0) {
         [ConsoleModeSettings]::EnableQuickEditMode()
         [ConsoleModeSettings]::EnableInsertMode()
-        Write-Output "All settings have been enabled"
+        Write-Host "All settings have been enabled"
         return
     }
 
     if ($EnableQuickEditMode) {
         [ConsoleModeSettings]::EnableQuickEditMode()
-        Write-Output "QuickEditMode has been enabled"
+        Write-Host "QuickEditMode has been enabled"
     }
 
     if ($DisableQuickEditMode) {
         [ConsoleModeSettings]::DisableQuickEditMode()
-        Write-Output "QuickEditMode has been disabled"
+        Write-Host "QuickEditMode has been disabled"
     }
 
     if ($EnableInsertMode) {
         [ConsoleModeSettings]::EnableInsertMode()
-        Write-Output "InsertMode has been enabled"
+        Write-Host "InsertMode has been enabled"
     }
 
     if ($DisableInsertMode) {
         [ConsoleModeSettings]::DisableInsertMode()
-        Write-Output "InsertMode has been disabled"
+        Write-Host "InsertMode has been disabled"
     }
 }
 
@@ -159,7 +157,7 @@ $ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
 $Org = "compassmsp.onmicrosoft.com"
 $ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
 if ($NULL -eq $ExOCert) {
-    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -171,7 +169,7 @@ $GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
 $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
 $GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
 if ($NULL -eq $GraphCert) {
-    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -593,11 +591,11 @@ $UserToCopyUPN = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -Properti
 
 ## Check for duuplicate DisplayName in AD for selected UserToCopy
 if ($UserToCopyUPN.Count -gt 1) {
-    Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-Host "UserToCopy has multiple values. Please check AD for accounts with duplicate DisplayName attributes. Press any key to exit script." -ForegroundColor Red
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 } elseif ($NULL -eq $UserToCopyUPN) {
-    Write-Output "Could not find user $($UserToCopy) in AD to copy from. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-Host "Could not find user $($UserToCopy) in AD to copy from. Press any key to exit script." -ForegroundColor Red
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -611,14 +609,14 @@ $NewUserEmail = $($NewUserSamAccountName + $Domain).ToLower()
 
 $CheckNewUserUPN = $(try { Get-ADUser -Identity $NewUserSamAccountName } catch { $null })
 if ($null -ne $CheckNewUserUPN) {
-    Write-Host "SamAccountName exist for user $NewUser. Please check AD for accounts with duplicate SamAccountName attributes. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-Host "SamAccountName exist for user $NewUser. Please check AD for accounts with duplicate SamAccountName attributes. Press any key to exit script." -ForegroundColor Red
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
 $CheckNewUserEmail = $(try { Get-MgUser -UserId $NewUserEmail } catch { $null })
 if ($null -ne $CheckNewUserEmail) {
-    Write-Host "Account in 365 exist for user $NewUser. Please check 365 for accounts with duplicate SMTP Address. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-Host "Account in 365 exist for user $NewUser. Please check 365 for accounts with duplicate SMTP Address. Press any key to exit script." -ForegroundColor Red
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -640,7 +638,7 @@ Template User to Copy = $($UserToCopy)`n
 Continue? (Y/N)`n"
 
 if ($Confirmation -ne 'y') {
-    Write-Output 'User did not enter "Y". Press any key to exit script.'
+    Write-Host 'User did not enter "Y". Press any key to exit script.'
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -660,37 +658,40 @@ try {
         -Instance $UserToCopyUPN `
         -Enabled $True
 } catch {
-    Write-Host "New User creation was not successful. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-Host "New User creation was not successful. Press any key to exit script." -ForegroundColor Red
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
-Write-Output 'AD User has been created.'
+Write-Host 'AD User has been created.' -ForegroundColor Green
 
-Write-Output 'Adding AD Groups to new user.'
+Write-Host 'Adding AD Groups to new user.' -ForegroundColor Green
 
 $CopyFromUser = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -prop MemberOf
 $CopyToUser = Get-ADUser -Filter "DisplayName -eq '$($NewUser)'" -prop MemberOf
 $CopyFromUser.MemberOf | Where-Object { $CopyToUser.MemberOf -notcontains $_ } | Add-ADGroupMember -Members $CopyToUser
 
-Write-Output 'Starting AD Sync'
+Write-Host 'Starting AD Sync' -ForegroundColor Green
 
-Import-Module -UseWindowsPowerShell -Name ADSync
+try {
+    Import-Module -UseWindowsPowerShell -Name ADSync
+    Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
+} catch {
+    powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+}
 
-Start-ADSyncSyncCycle -PolicyType Delta
+Write-Host "Waiting 30 seconds for AD Connect sync process." -ForegroundColor Green
 
-#powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+Start-Sleep -Seconds 30
 
-#Write-Output 'Waiting 90 seconds for AD Connect sync process.'
-
-#Start-Sleep -Seconds 90
-
+<# Event log loop for AD Connect Sync - Find a better way to do this?
 $syncStartTime = Get-Date
 do {
-    Write-Host "AD Connect Sync in progress...please wait" -ForegroundColor Yellow
+    Write-Host "AD Connect Sync in progress...please wait" -ForegroundColor Green
     $ADSyncResult = Get-EventLog application -After $syncStartTime | Where-Object { $_.EventID -eq "904" } | Where-Object { $_.Message -like "Authenticate-MSAL: successfully acquired an access token. TenantId=02e68a77-717b-48c1-881a-acc8f67c291a*" }
     Start-Sleep -Seconds 10
 } while (!$ADSyncResult)
+#>
 
 ## Check if AD User has synced to Azure loop
 $Stoploop = $false
@@ -699,29 +700,29 @@ $Stoploop = $false
 do {
     try {
         $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
-        Write-Output "User $NewUser has synced to Azure. Script will now continue."
+        Write-Host "User $NewUser has synced to Azure. Script will now continue." -ForegroundColor Green
         $Stoploop = $true
         $ADSyncCompleteYesorExit = 'yes'
     } catch {
         if ($Retrycount -gt 3) {
-            Write-Host "Could not sync AD User to 365 after 3 retries."
+            Write-Host "Could not sync AD User to 365 after 3 retries." -ForegroundColor Red
             $Stoploop = $true
         } else {
-            Write-Host "Could not sync AD User to 365 retrying in 60 seconds..."
-            Start-Sleep -Seconds 60
+            Write-Host "Could not sync AD User to 365 retrying in 30 seconds..." -ForegroundColor Red
+            Start-Sleep -Seconds 30
             $Retrycount = $Retrycount + 1
         }
     }
 } while ($Stoploop -eq $false)
 
 if (!$MgUser) {
-    $ADSyncCompleteYesorExit = Read-Host -Prompt 'AD Sync has not completed within allotted time frame. Please wait for AD sync. To resume type yes or exit'
+    $ADSyncCompleteYesorExit = Read-Host -Prompt 'AD Sync has not completed within allotted time frame. Please wait for AD sync. To resume type yes or exit' -ForegroundColor Red
 } while ("yes", "exit" -notcontains $ADSyncCompleteYesorExit ) {
-    $ADSyncCompleteYesorExit = Read-Host "Please enter your response (yes/exit)"
+    $ADSyncCompleteYesorExit = Read-Host "Please enter your response (yes/exit)" -ForegroundColor Green
 }
 
 if ($ADSyncCompleteYesorExit -eq 'exit') {
-    Write-Output 'You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
+    Write-Host 'You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.' -ForegroundColor Red
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -734,14 +735,14 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         try {
             $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
         } catch {
-            Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
+            Write-Host 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.' -ForegroundColor Red
             $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
             exit
         }
     }
-    Write-Output 'Script now will resume'
+    Write-Host 'Script now will resume' -ForegroundColor Green
 
-    Write-Output 'Setting Usage Location for new user'
+    Write-Host 'Setting Usage Location for new user' -ForegroundColor Green
 
     ## Assigns US as UsageLocation
     Update-MgUser -UserId $MgUser.Id -UsageLocation US
@@ -759,10 +760,10 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             foreach ($sku in $License) {
                 # Assign license using the required Graph API format
                 Set-MgUserLicense -UserId $UserId -AddLicenses @{SkuId = $sku } -RemoveLicenses @() -ErrorAction Stop | Out-Null
-                Write-Host "Successfully assigned license $sku to user: $UserId"
+                Write-Host "Successfully assigned license $sku to user: $UserId" -ForegroundColor Green
             }
         } catch {
-            Write-Error "An error occurred: $_"
+            Write-Error "An error occurred: $_" -ForegroundColor Red
         }
     }
 
@@ -779,13 +780,13 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     $extAttr15 = $NewUserExchGuid + '@compassmsp.com?anonymous&ep=plink'
 
     if ($extAttr15 -eq '@compassmsp.com?anonymous&ep=plink') {
-        Write-Host "$NewUserSamAccountName BookWithMeId missing ExchangeGuidId. Please add the attribute in AD manually."
-        } else { Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15 = "$extAttr15" } }
+        Write-Host "$NewUserSamAccountName BookWithMeId missing ExchangeGuidId. Please add the attribute in AD manually." -ForegroundColor Red
+    } else { Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15 = "$extAttr15" } }
 
     ## Provision New Users OneDrive
     Get-MgUserDefaultDrive -UserId $MgUser.Id
 
-    Write-Output 'Adding Office 365 Groups to new user.'
+    Write-Host 'Adding Office 365 Groups to new user.' -ForegroundColor Green
 
     ## Copy groups to new user from old user
     $All365Groups = Get-MgUserMemberOf -UserId $MgUserCopy.Id | `
@@ -803,9 +804,9 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $MgUserCopy.Id).Count
     $NewUserGroupCount = (Get-MgUserMemberOf -UserId $MgUser.Id).Count
 
-    Write-Output "User $($NewUser) should now be created unless any errors occurred during the process."
-    Write-Output "Copy User group count: $($CopyUserGroupCount)"
-    Write-Output "New User group count: $($NewUserGroupCount)"
+    Write-Host "User $($NewUser) should now be created unless any errors occurred during the process."
+    Write-Host "Copy User group count: $($CopyUserGroupCount)"
+    Write-Host "New User group count: $($NewUserGroupCount)"
 
     ## Sends email to SecurePath Team (soc@compassmsp.com) with the new user information.
     $MsgFrom = 'noreply@compassmsp.com'
