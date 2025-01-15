@@ -740,7 +740,6 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
             exit
         }
     }
-    Write-Host 'Script now will resume' -ForegroundColor Green
 
     Write-Host 'Setting Usage Location for new user' -ForegroundColor Green
 
