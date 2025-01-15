@@ -27,6 +27,7 @@
 # 01-03-2025                    2.7         Added added check for duplicate SMTP Address
 # 01-10-2025                    2.8         Add function to disable QuickEdit and InsertMode to resolve script issues
 # 01-13-2025                    2.9         Rework custom WPF window
+# 01-14-2025                    3.0         BookWithMeId validation and AD Sync loop changes
 #********************************************************************************
 #
 # Run from the Primary Domain Controller with AD Connect installed
@@ -674,11 +675,22 @@ $CopyFromUser.MemberOf | Where-Object { $CopyToUser.MemberOf -notcontains $_ } |
 
 Write-Output 'Starting AD Sync'
 
-powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+Import-Module -UseWindowsPowerShell -Name ADSync
 
-Write-Output 'Waiting 90 seconds for AD Connect sync process.'
+Start-ADSyncSyncCycle -PolicyType Delta
 
-Start-Sleep -Seconds 90
+#powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+
+#Write-Output 'Waiting 90 seconds for AD Connect sync process.'
+
+#Start-Sleep -Seconds 90
+
+$syncStartTime = Get-Date
+do {
+    Write-Host "AD Connect Sync in progress...please wait" -ForegroundColor Yellow
+    $ADSyncResult = Get-EventLog application -After $syncStartTime | Where-Object { $_.EventID -eq "904" } | Where-Object { $_.Message -like "Authenticate-MSAL: successfully acquired an access token. TenantId=02e68a77-717b-48c1-881a-acc8f67c291a*" }
+    Start-Sleep -Seconds 10
+} while (!$ADSyncResult)
 
 ## Check if AD User has synced to Azure loop
 $Stoploop = $false
@@ -686,7 +698,7 @@ $Stoploop = $false
 
 do {
     try {
-        $NewMgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
+        $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
         Write-Output "User $NewUser has synced to Azure. Script will now continue."
         $Stoploop = $true
         $ADSyncCompleteYesorExit = 'yes'
@@ -702,7 +714,7 @@ do {
     }
 } while ($Stoploop -eq $false)
 
-if (!$NewMgUser) {
+if (!$MgUser) {
     $ADSyncCompleteYesorExit = Read-Host -Prompt 'AD Sync has not completed within allotted time frame. Please wait for AD sync. To resume type yes or exit'
 } while ("yes", "exit" -notcontains $ADSyncCompleteYesorExit ) {
     $ADSyncCompleteYesorExit = Read-Host "Please enter your response (yes/exit)"
@@ -717,22 +729,22 @@ if ($ADSyncCompleteYesorExit -eq 'exit') {
 if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     $MgUserCopy = Get-MgUser -UserId $UserToCopyUPN.UserPrincipalName
-    $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
 
-    if (!$NewMgUser) {
-        Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
-        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-        exit
+    if (!$MgUser) {
+        try {
+            $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
+        } catch {
+            Write-Output 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.'
+            $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+            exit
+        }
     }
-
     Write-Output 'Script now will resume'
 
     Write-Output 'Setting Usage Location for new user'
 
     ## Assigns US as UsageLocation
     Update-MgUser -UserId $MgUser.Id -UsageLocation US
-
-    Start-Sleep -Seconds 20
 
     function Set-UserLicenses {
         param(
@@ -746,22 +758,32 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
         try {
             foreach ($sku in $License) {
                 # Assign license using the required Graph API format
-                Set-MgUserLicense -UserId $UserId -AddLicenses @{SkuId = $sku} -RemoveLicenses @() -ErrorAction Stop | Out-Null
+                Set-MgUserLicense -UserId $UserId -AddLicenses @{SkuId = $sku } -RemoveLicenses @() -ErrorAction Stop | Out-Null
                 Write-Host "Successfully assigned license $sku to user: $UserId"
             }
-        }
-        catch {
+        } catch {
             Write-Error "An error occurred: $_"
         }
     }
 
-    Set-UserLicenses -UserId $NewUserEmail -License $RequiredLicense
+    Set-UserLicenses -UserId $MgUser.Id -License $RequiredLicense
 
-    Start-Sleep -Seconds 10
+    Start-Sleep -Seconds 30
 
     if ($null -ne $AncillaryLicenses) {
-        Set-UserLicenses -UserId $NewUserEmail -License $AncillaryLicenses
+        Set-UserLicenses -UserId $MgUser.Id -License $AncillaryLicenses
     }
+
+    ## Add BookWithMeId to the extensionAttribute15 property of the new user.
+    $NewUserExchGuid = (Get-Mailbox -Identity $NewUserEmail).ExchangeGuid.Guid -replace "-" -replace ""
+    $extAttr15 = $NewUserExchGuid + '@compassmsp.com?anonymous&ep=plink'
+
+    if ($extAttr15 -eq '@compassmsp.com?anonymous&ep=plink') {
+        Write-Host "$NewUserSamAccountName BookWithMeId missing ExchangeGuidId. Please add the attribute in AD manually."
+        } else { Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15 = "$extAttr15" } }
+
+    ## Provision New Users OneDrive
+    Get-MgUserDefaultDrive -UserId $MgUser.Id
 
     Write-Output 'Adding Office 365 Groups to new user.'
 
@@ -784,15 +806,6 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     Write-Output "User $($NewUser) should now be created unless any errors occurred during the process."
     Write-Output "Copy User group count: $($CopyUserGroupCount)"
     Write-Output "New User group count: $($NewUserGroupCount)"
-
-    ## Add BookWithMeId to the extensionAttribute15 property of the new user.
-    $NewUserExchGuid = (Get-Mailbox -Identity $NewUserEmail).ExchangeGuid.Guid -replace "-" -replace ""
-    $extAttr15 = $NewUserExchGuid + '@compassmsp.com?anonymous&ep=plink'
-
-    Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15 = "$extAttr15" }
-
-    ## Provision New Users OneDrive
-    Get-MgUserDefaultDrive -UserId $MgUser.Id
 
     ## Sends email to SecurePath Team (soc@compassmsp.com) with the new user information.
     $MsgFrom = 'noreply@compassmsp.com'
