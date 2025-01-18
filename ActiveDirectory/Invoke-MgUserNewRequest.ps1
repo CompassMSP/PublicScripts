@@ -1,49 +1,59 @@
 #requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync -RunAsAdministrator
 
-<#Author       : Chris Williams
-# Creation Date: 03-02-2022
-# Usage        : Copies user template and creates new user with groups and licenses
+<#
+.SYNOPSIS
+    Creates a new user based on a template user in Active Directory and Microsoft 365.
 
-#********************************************************************************
-# Date                     Version      Changes
-#--------------------------------------------------------------------------------
-# 03-02-2022                    1.0         Initial Version
-# 03-04-2022                    1.1         Add Checks For Duplicate Attributes
-# 03-06-2022                    1.2         Add Check Loop for AD Sync
-# 06-27-2022                    1.3         Change Group Lookup and Member Add
-# 09-29-2022                    1.4         Add fax attributes copy
-# 10-07-2022                    1.5         Add check for duplicate SamAccountName attributes
-# 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
-# 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
-# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function
-# 03-08-2024                    1.9         Cleaned up licenses select display output
-# 05-08-2024                    2.0         Add input box for Variables
-# 05-21-2024                    2.1         Added stop for if UserToCopy cannot be found
-# 10-15-2024                    2.2         Remove AppRoleAssignment for KnowBe4 SCIM App
-# 10-21-2024                    2.3         Add MeetWithMeId and AD User properties
-# 10-22-2024                    2.4         Add KB4 offboarding email delivery to SecurePath
-# 11-08-2024                    2.5         Added better UI boxes for variables
-# 11-11-2024                    2.6         Added added checkbox for EntraID P2 license
-# 01-03-2025                    2.7         Added added check for duplicate SMTP Address
-# 01-10-2025                    2.8         Add function to disable QuickEdit and InsertMode to resolve script issues
-# 01-13-2025                    2.9         Rework custom WPF window
-# 01-14-2025                    3.0         BookWithMeId validation and AD Sync loop changes
-#********************************************************************************
-#
-# Run from the Primary Domain Controller with AD Connect installed
-#
-# The following modules must be installed
-# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, PnP.PowerShell
-#
-# Azure licenses Sku - Selected Sku must have free licenses available. This MUST be set in the portal before running the script
-#
-# Exchange Online = EXCHANGESTANDARD
-# Microsoft 365 Business Basic = O365_BUSINESS_ESSENTIALS
-# Microsoft 365 E3 = SPE_E3
-# Microsoft 365 Business Premium = SPB
-# Office 365 E3 = ENTERPRISEPACK
-#
-# .\Invoke-MgNewUserRequest.ps1 -UserToCopy "Copy User" -NewUser "Chris Williams" -Phone "555-555-5555"
+.DESCRIPTION
+    This script creates a new user account by copying attributes and group memberships
+    from an existing template user. It handles both on-premises AD and Microsoft 365 setup.
+
+    IMPORTANT: This script must be run from the Primary Domain Controller with AD Connect installed.
+
+.PARAMETER NewUser
+    The display name of the new user in "FirstName LastName" format.
+
+.PARAMETER UserToCopy
+    The display name of the template user to copy from in "FirstName LastName" format.
+
+.PARAMETER Phone
+    The mobile phone number for the new user in "(XXX) XXX-XXXX" format.
+
+.EXAMPLE
+    .\Invoke-MgNewUserRequest.ps1 -UserToCopy "John Smith" -NewUser "Jane Doe" -Phone "(555) 555-5555"
+
+.NOTES
+    Author: Chris Williams
+    Created: 2022-03-02
+    Last Modified: 2025-01-17
+
+    Version History:
+    ------------------------------------------------------------------------------
+    Version    Date         Changes
+    -------    ----------  ---------------------------------------------------
+    3.1        2025-01-17  Added status messaging system with improved error handling and progress tracking
+    3.0        2025-01-14  BookWithMeId validation and AD Sync loop changes
+    2.9        2025-01-13  Rework custom WPF window
+    2.8        2025-01-10  Add function to disable QuickEdit and InsertMode
+    2.7        2025-01-03  Added check for duplicate SMTP Address
+    2.6        2024-11-11  Added checkbox for EntraID P2 license
+    2.5        2024-11-08  Added better UI boxes for variables
+    2.4        2024-10-22  Add KB4 offboarding email delivery to SecurePath
+    2.3        2024-10-21  Add MeetWithMeId and AD User properties
+    2.2        2024-10-15  Remove AppRoleAssignment for KnowBe4 SCIM App
+    2.1        2024-05-21  Added stop for if UserToCopy cannot be found
+    2.0        2024-05-08  Add input box for Variables
+    1.9        2024-03-08  Cleaned up licenses select display output
+    1.8        2024-02-19  Changes to Get-MgUserMemberOf function
+    1.7        2024-02-14  Fix issues with copy groups function and code cleanup
+    1.6        2024-02-12  Add AppRoleAssignment for KnowBe4 SCIM App
+    1.5        2022-10-07  Add check for duplicate SamAccountName attributes
+    1.4        2022-09-29  Add fax attributes copy
+    1.3        2022-06-27  Change Group Lookup and Member Add
+    1.2        2022-03-06  Add Check Loop for AD Sync
+    1.1        2022-03-04  Add Checks For Duplicate Attributes
+    1.0        2022-03-02  Initial Version
+    ------------------------------------------------------------------------------
 #>
 
 $QuickEditCodeSnippet = @"
@@ -125,55 +135,92 @@ function Set-ConsoleProperties() {
     if ($PSBoundParameters.Count -eq 0) {
         [ConsoleModeSettings]::EnableQuickEditMode()
         [ConsoleModeSettings]::EnableInsertMode()
-        Write-Host "All settings have been enabled"
+        Write-StatusMessage "All console settings have been enabled"
         return
     }
 
     if ($EnableQuickEditMode) {
         [ConsoleModeSettings]::EnableQuickEditMode()
-        Write-Host "QuickEditMode has been enabled"
+        Write-StatusMessage "QuickEditMode has been enabled"
     }
 
     if ($DisableQuickEditMode) {
         [ConsoleModeSettings]::DisableQuickEditMode()
-        Write-Host "QuickEditMode has been disabled"
+        Write-StatusMessage "QuickEditMode has been disabled"
     }
 
     if ($EnableInsertMode) {
         [ConsoleModeSettings]::EnableInsertMode()
-        Write-Host "InsertMode has been enabled"
+        Write-StatusMessage "InsertMode has been enabled"
     }
 
     if ($DisableInsertMode) {
         [ConsoleModeSettings]::DisableInsertMode()
-        Write-Host "InsertMode has been disabled"
+        Write-StatusMessage "InsertMode has been disabled"
     }
 }
 
 Set-ConsoleProperties -DisableQuickEditMode -DisableInsertMode
+
+#Add these functions at the beginning after the QuickEdit code
+
+function Write-StatusMessage {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Status = "INFO",
+
+        [Parameter(Mandatory=$false)]
+        [ConsoleColor]$Color = "White"
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $statusPadded = $Status.PadRight(7)
+    Write-Host "[$timestamp] [$statusPadded] $Message" -ForegroundColor $Color
+}
+
+function Write-SuccessMessage {
+    param([string]$Message)
+    Write-StatusMessage -Message $Message -Status "OK" -Color Green
+}
+
+function Write-ErrorMessage {
+    param([string]$Message)
+    Write-StatusMessage -Message $Message -Status "ERROR" -Color Red
+}
+
+function Write-WarningMessage {
+    param([string]$Message)
+    Write-StatusMessage -Message $Message -Status "WARN" -Color Yellow
+}
 
 #Connect-ExchangeOnline
 $ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
 $Org = "compassmsp.onmicrosoft.com"
 $ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
 if ($NULL -eq $ExOCert) {
-    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red
+    Write-ErrorMessage "No valid ExO PowerShell certificates found in the LocalMachine\My store."
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
+Write-StatusMessage "Connecting to Exchange Online..."
 Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+Write-SuccessMessage "Connected to Exchange Online"
 
 #Connect-Graph
-Write-Host "Logging into Azure services."
+Write-StatusMessage "Connecting to Microsoft Graph..."
 $GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
 $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
 $GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
 if ($NULL -eq $GraphCert) {
-    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red
+    Write-ErrorMessage "No valid Graph PowerShell certificates found in the LocalMachine\My store."
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+Write-SuccessMessage "Connected to Microsoft Graph"
 
 # Build out UI for user input
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
@@ -638,12 +685,13 @@ Template User to Copy = $($UserToCopy)`n
 Continue? (Y/N)`n"
 
 if ($Confirmation -ne 'y') {
-    Write-Host 'User did not enter "Y". Press any key to exit script.'
+    Write-WarningMessage 'User cancelled operation'
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
 try {
+    Write-StatusMessage "Creating new AD user: $NewUser"
     New-ADUser -Name $NewUser `
         -SamAccountName $NewUserSamAccountName `
         -UserPrincipalName $NewUserEmail `
@@ -657,21 +705,28 @@ try {
         -Path $($UserToCopyUPN.DistinguishedName.split(",", 2)[1]) `
         -Instance $UserToCopyUPN `
         -Enabled $True
+    Write-SuccessMessage "AD User created successfully"
 } catch {
-    Write-Host "New User creation was not successful. Press any key to exit script." -ForegroundColor Red
+    Write-ErrorMessage "Failed to create AD User: $_"
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
-Write-Host 'AD User has been created.' -ForegroundColor Green
-
-Write-Host 'Adding AD Groups to new user.' -ForegroundColor Green
-
+Write-StatusMessage "Adding AD Groups to new user"
 $CopyFromUser = Get-ADUser -Filter "DisplayName -eq '$($UserToCopy)'" -prop MemberOf
 $CopyToUser = Get-ADUser -Filter "DisplayName -eq '$($NewUser)'" -prop MemberOf
-$CopyFromUser.MemberOf | Where-Object { $CopyToUser.MemberOf -notcontains $_ } | Add-ADGroupMember -Members $CopyToUser
+$groupCount = 0
+$CopyFromUser.MemberOf | Where-Object { $CopyToUser.MemberOf -notcontains $_ } | ForEach-Object {
+    try {
+        Add-ADGroupMember -Identity $_ -Members $CopyToUser
+        $groupCount++
+    } catch {
+        Write-WarningMessage "Failed to add user to group $_"
+    }
+}
+Write-SuccessMessage "Added user to $groupCount AD groups"
 
-Write-Host 'Starting AD Sync' -ForegroundColor Green
+Write-StatusMessage "Starting AD Sync"
 
 try {
     Import-Module -UseWindowsPowerShell -Name ADSync
@@ -680,18 +735,14 @@ try {
     powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
 }
 
-Write-Host "Waiting 30 seconds for AD Connect sync process." -ForegroundColor Green
-
-Start-Sleep -Seconds 30
-
-<# Event log loop for AD Connect Sync - Find a better way to do this?
-$syncStartTime = Get-Date
-do {
-    Write-Host "AD Connect Sync in progress...please wait" -ForegroundColor Green
-    $ADSyncResult = Get-EventLog application -After $syncStartTime | Where-Object { $_.EventID -eq "904" } | Where-Object { $_.Message -like "Authenticate-MSAL: successfully acquired an access token. TenantId=02e68a77-717b-48c1-881a-acc8f67c291a*" }
-    Start-Sleep -Seconds 10
-} while (!$ADSyncResult)
-#>
+Write-StatusMessage "Waiting for AD Connect sync..."
+$progress = 0
+1..30 | ForEach-Object {
+    Write-Progress -Activity "Waiting for AD Connect Sync" -Status "$($progress)% Complete" -PercentComplete $progress
+    Start-Sleep -Seconds 1
+    $progress += (100/30)
+}
+Write-Progress -Activity "Waiting for AD Connect Sync" -Completed
 
 ## Check if AD User has synced to Azure loop
 $Stoploop = $false
@@ -699,16 +750,16 @@ $Stoploop = $false
 
 do {
     try {
-        $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
-        Write-Host "User $NewUser has synced to Azure. Script will now continue." -ForegroundColor Green
+        $MgUser = Get-MgUser -UserId $NewUserEmail -Property Id, Mail, displayName, Department | Select-Object Id, Mail, displayName, Department -ErrorAction Stop
+        Write-SuccessMessage "User $NewUser has synced to Azure"
         $Stoploop = $true
         $ADSyncCompleteYesorExit = 'yes'
     } catch {
         if ($Retrycount -gt 3) {
-            Write-Host "Could not sync AD User to 365 after 3 retries." -ForegroundColor Red
+            Write-ErrorMessage "Could not sync AD User to 365 after 3 retries"
             $Stoploop = $true
         } else {
-            Write-Host "Could not sync AD User to 365 retrying in 30 seconds..." -ForegroundColor Red
+            Write-WarningMessage "Could not sync AD User to 365 retrying in 30 seconds..."
             Start-Sleep -Seconds 30
             $Retrycount = $Retrycount + 1
         }
@@ -716,13 +767,13 @@ do {
 } while ($Stoploop -eq $false)
 
 if (!$MgUser) {
-    $ADSyncCompleteYesorExit = Read-Host -Prompt 'AD Sync has not completed within allotted time frame. Please wait for AD sync. To resume type yes or exit' -ForegroundColor Red
+    $ADSyncCompleteYesorExit = Read-Host -Prompt 'AD Sync has not completed within allotted time frame. Please wait for AD sync. To resume type yes or exit'
 } while ("yes", "exit" -notcontains $ADSyncCompleteYesorExit ) {
-    $ADSyncCompleteYesorExit = Read-Host "Please enter your response (yes/exit)" -ForegroundColor Green
+    $ADSyncCompleteYesorExit = Read-Host "Please enter your response (yes/exit)"
 }
 
 if ($ADSyncCompleteYesorExit -eq 'exit') {
-    Write-Host 'You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.' -ForegroundColor Red
+    Write-ErrorMessage 'You will need to set the license and add Office 365 groups via the portal'
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -733,18 +784,17 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     if (!$MgUser) {
         try {
-            $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
+            $MgUser = Get-MgUser -UserId $NewUserEmail -Property Id, Mail, displayName, Department | Select-Object Id, Mail, displayName, Department -ErrorAction Stop
         } catch {
-            Write-Host 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.' -ForegroundColor Red
+            Write-ErrorMessage 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal'
             $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
             exit
         }
     }
 
-    Write-Host 'Setting Usage Location for new user' -ForegroundColor Green
-
-    ## Assigns US as UsageLocation
+    Write-StatusMessage 'Setting Usage Location for new user'
     Update-MgUser -UserId $MgUser.Id -UsageLocation US
+    Write-SuccessMessage 'Usage Location set to US'
 
     function Set-UserLicenses {
         param(
@@ -757,12 +807,12 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
         try {
             foreach ($sku in $License) {
-                # Assign license using the required Graph API format
+                Write-StatusMessage "Assigning license $sku to user: $UserId"
                 Set-MgUserLicense -UserId $UserId -AddLicenses @{SkuId = $sku } -RemoveLicenses @() -ErrorAction Stop | Out-Null
-                Write-Host "Successfully assigned license $sku to user: $UserId" -ForegroundColor Green
+                Write-SuccessMessage "Successfully assigned license $sku"
             }
         } catch {
-            Write-Error "An error occurred: $_" -ForegroundColor Red
+            Write-ErrorMessage "Failed to assign license: $_"
         }
     }
 
@@ -775,38 +825,141 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     }
 
     ## Add BookWithMeId to the extensionAttribute15 property of the new user.
-    $NewUserExchGuid = (Get-Mailbox -Identity $NewUserEmail).ExchangeGuid.Guid -replace "-" -replace ""
-    $extAttr15 = $NewUserExchGuid + '@compassmsp.com?anonymous&ep=plink'
+    Write-StatusMessage "Setting up BookWithMeId attribute"
+    try {
+        $NewUserExchGuid = (Get-Mailbox -Identity $NewUserEmail).ExchangeGuid.Guid -replace "-" -replace ""
+        $extAttr15 = $NewUserExchGuid + '@compassmsp.com?anonymous&ep=plink'
 
-    if ($extAttr15 -eq '@compassmsp.com?anonymous&ep=plink') {
-        Write-Host "$NewUserSamAccountName BookWithMeId missing ExchangeGuidId. Please add the attribute in AD manually." -ForegroundColor Red
-    } else { Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15 = "$extAttr15" } }
+        if ($extAttr15 -eq '@compassmsp.com?anonymous&ep=plink') {
+            Write-ErrorMessage "$NewUserSamAccountName BookWithMeId missing ExchangeGuidId. Please add the attribute in AD manually."
+        } else {
+            Set-ADUser -Identity $NewUserSamAccountName -Add @{extensionAttribute15 = "$extAttr15" }
+            Write-SuccessMessage "BookWithMeId attribute set successfully"
+        }
+    } catch {
+        Write-ErrorMessage "Failed to set BookWithMeId attribute: $_"
+    }
 
     ## Provision New Users OneDrive
     Get-MgUserDefaultDrive -UserId $MgUser.Id
 
-    Write-Host 'Adding Office 365 Groups to new user.' -ForegroundColor Green
+    Write-StatusMessage 'Adding Office 365 Groups to new user.'
 
     ## Copy groups to new user from old user
     $All365Groups = Get-MgUserMemberOf -UserId $MgUserCopy.Id | `
         Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
         Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
 
+    $groupProgress = 0
+    $totalGroups = $All365Groups.Count
+
     Foreach ($365Group in $All365Groups) {
+        $groupProgress++
+        Write-Progress -Activity "Adding Office 365 Groups" -Status "Processing group $($365Group.DisplayName)" `
+            -PercentComplete (($groupProgress / $totalGroups) * 100)
         try {
             New-MgGroupMember -GroupId $365Group.Id -DirectoryObjectId $MgUser.Id -ErrorAction Stop
+            Write-StatusMessage "Added to 365 group: $($365Group.DisplayName)"
         } catch {
             Add-DistributionGroupMember -Identity $365Group.DisplayName -Member $NewUserEmail -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction 'SilentlyContinue'
+            Write-StatusMessage "Added to Distribution group: $($365Group.DisplayName)"
         }
     }
 
     $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $MgUserCopy.Id).Count
     $NewUserGroupCount = (Get-MgUserMemberOf -UserId $MgUser.Id).Count
 
-    Write-Host "User $($NewUser) should now be created unless any errors occurred during the process."
-    Write-Host "Copy User group count: $($CopyUserGroupCount)"
-    Write-Host "New User group count: $($NewUserGroupCount)"
+    function Add-UserToZoom {
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory = $true)]
+            [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+            $MgUser
+        )
 
+        try {
+            Write-StatusMessage "Setting up Zoom for user: $($MgUser.DisplayName)"
+
+            # Determine Zoom role based on department
+            if ($MgUser.Department -eq 'Reactive') {
+                $zoom_app_role_name = "Basic"
+            } else {
+                $zoom_app_role_name = "Licensed"
+            }
+
+            $zoom_app_name = "Zoom Workplace Phones"
+
+            try {
+                Write-StatusMessage "Getting Zoom service principal"
+                $zoom_ServicePrincipal = Get-MgServicePrincipal -Filter "displayName eq '$zoom_app_name'"
+                if (-not $zoom_ServicePrincipal) {
+                    Write-ErrorMessage "Zoom Service Principal not found. Skipping Zoom setup."
+                    return
+                }
+
+                $zoom_synchronizationJob = Get-MgServicePrincipalSynchronizationJob -ServicePrincipalId $zoom_ServicePrincipal.Id
+                $zoom_synchronizationJobRuleId = (Get-MgServicePrincipalSynchronizationJobSchema -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_synchronizationJob.Id).SynchronizationRules.Id
+                Write-SuccessMessage "Retrieved Zoom app details"
+            }
+            catch {
+                Write-ErrorMessage "Failed to get Zoom app details: $_"
+                throw
+            }
+
+            try {
+                Write-StatusMessage "Assigning user to Zoom app with role: $zoom_app_role_name"
+                $params = @{
+                    "PrincipalId" = $MgUser.Id
+                    "ResourceId"  = $zoom_ServicePrincipal.Id
+                    "AppRoleId"   = ($zoom_ServicePrincipal.AppRoles | Where-Object { $_.DisplayName -eq $zoom_app_role_name }).Id
+                }
+
+                New-MgUserAppRoleAssignment -UserId $MgUser.Id -BodyParameter $params |
+                    Format-List Id, AppRoleId, CreationTime, PrincipalDisplayName, PrincipalId, PrincipalType, ResourceDisplayName, ResourceId
+
+                Write-SuccessMessage "User assigned to Zoom app"
+                Write-StatusMessage "Waiting 30 seconds before syncing..."
+                Start-Sleep -Seconds 30
+            }
+            catch {
+                Write-ErrorMessage "Failed to assign user to Zoom app: $_"
+                throw
+            }
+
+            try {
+                Write-StatusMessage "Initiating Zoom sync"
+                $params = @{
+                    parameters = @(
+                        @{
+                            subjects = @(
+                                @{
+                                    objectId       = "$($MgUser.Id)"
+                                    objectTypeName = "User"
+                                }
+                            )
+                            ruleId   = $zoom_synchronizationJobRuleId
+                        }
+                    )
+                }
+
+                New-MgServicePrincipalSynchronizationJobOnDemand -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_synchronizationJob.Id -BodyParameter $params
+                Write-SuccessMessage "Zoom sync initiated successfully"
+            }
+            catch {
+                Write-ErrorMessage "Failed to sync user to Zoom: $_"
+                throw
+            }
+        }
+        catch {
+            Write-ErrorMessage "Failed to process Zoom app assignment: $_"
+            throw
+        }
+    }
+
+    # After creating the new user
+    Add-UserToZoom -MgUser $MgUser
+
+    Write-StatusMessage "Sending notification email to SecurePath team"
     ## Sends email to SecurePath Team (soc@compassmsp.com) with the new user information.
     $MsgFrom = 'noreply@compassmsp.com'
 
@@ -829,9 +982,23 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
     }
 
     Send-MgUserMail -UserId $MsgFrom -BodyParameter $params
+    Write-SuccessMessage "Notification email sent"
 
-    #Disconnect from Exchange and Graph
+    Write-StatusMessage "Disconnecting from services"
     Disconnect-ExchangeOnline -Confirm:$false
     Disconnect-Graph
+    Write-SuccessMessage "Disconnected from all services"
+
+    # At the end, show a summary
+    Write-StatusMessage "=== New User Creation Summary ===" -Color Cyan
+    Write-StatusMessage "User: $NewUser" -Color Cyan
+    Write-StatusMessage "Email: $NewUserEmail" -Color Cyan
+    Write-StatusMessage "Password: $Password" -Color Cyan
+    Write-StatusMessage "Template User Groups: $CopyUserGroupCount" -Color Cyan
+    Write-StatusMessage "New User Groups: $NewUserGroupCount" -Color Cyan
+    if ($CopyUserGroupCount -ne $NewUserGroupCount) {
+        Write-WarningMessage "Group count mismatch - please verify group assignments"
+    }
+    Write-StatusMessage "Process completed" -Color Cyan
 
 }
