@@ -1,36 +1,50 @@
 #requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync -RunAsAdministrator
 
-<#Author       : Chris Williams
-# Creation Date: 12-20-2021
-# Usage        : This script handles most of the Office 365/AD tasks during user termination.
+<#
+.SYNOPSIS
+    Handles Office 365/AD tasks during user termination.
 
-#********************************************************************************
-# Date                        Version       Changes
-#------------------------------------------------------------------------
-# 12-20-2021                    1.0         Initial Version
-# 03-15-2022                    1.1         Added exports of groups and licenses
-# 06-27-2022                    1.2         Fixes for Remove-MgGroupMemberByRef and Revoke-MgUserSign
-# 06-28-2022                    1.3         Add removal of manager from disabled user and optimization changes
-# 07-06-2022                    1.4         Improved readability and export for user groups
-# 08-02-2023                    1.5         Added OneDrive access grant
-# 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
-# 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
-# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function
-# 03-08-2024                    1.9         Cleaned up licenses select display output
-# 05-08-2024                    2.0         Add input box for Variables
-# 05-09-2024                    2.1         Remove user from directory roles
-# 05-13-2024                    2.2         Fixed AppRoleAssignment and added Term User to accept SAM or UPN
-# 05-15-2024                    2.3         Set OneDrive as Readonly
-# 10-15-2024                    2.4         Remove AppRoleAssignment for KnowBe4 SCIM App
-# 10-22-2024                    2.5         Add KB4 offboarding email delivery to SecurePath
-# 11-08-2024                    2.6         Added better UI boxes for variables
-# 01-10-2025                    2.7         Add function to disable QuickEdit and InsertMode to resolve script issues
-#********************************************************************************
-# Run from the Primary Domain Controller with AD Connect installed
-#
-#
-# The following modules must be installed
-# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, PnP.PowerShell
+.DESCRIPTION
+    This script automates the termination process by handling both Active Directory
+    and Microsoft 365 tasks including group removal, license removal, and mailbox management.
+
+    IMPORTANT: This script must be run from the Primary Domain Controller with AD Connect installed.
+
+.PARAMETER User
+    The email address of the user to terminate.
+
+.EXAMPLE
+    .\Invoke-MgTerminateUser.ps1 -User "john.smith@domain.com"
+
+.NOTES
+    Author: Chris Williams
+    Created: 2021-12-20
+    Last Modified: 2025-01-17
+
+    Version History:
+    ------------------------------------------------------------------------------
+    Version    Date         Changes
+    -------    ----------  ---------------------------------------------------
+    2.8        2025-01-17  Added status messaging system with improved error handling and progress tracking
+    2.7        2025-01-10  Add function to disable QuickEdit and InsertMode
+    2.6        2024-11-08  Added better UI boxes for variables
+    2.5        2024-10-22  Add KB4 offboarding email delivery to SecurePath
+    2.4        2024-10-15  Remove AppRoleAssignment for KnowBe4 SCIM App
+    2.3        2024-05-15  Set OneDrive as Readonly
+    2.2        2024-05-13  Fixed AppRoleAssignment and added Term User to accept SAM or UPN
+    2.1        2024-05-09  Remove user from directory roles
+    2.0        2024-05-08  Add input box for Variables
+    1.9        2024-03-08  Cleaned up licenses select display output
+    1.8        2024-02-19  Changes to Get-MgUserMemberOf function
+    1.7        2024-02-14  Fix issues with copy groups function and code cleanup
+    1.6        2024-02-12  Add AppRoleAssignment for KnowBe4 SCIM App
+    1.5        2023-08-02  Added OneDrive access grant
+    1.4        2022-07-06  Improved readability and export for user groups
+    1.3        2022-06-28  Add removal of manager from disabled user and optimization changes
+    1.2        2022-06-27  Fixes for Remove-MgGroupMemberByRef and Revoke-MgUserSign
+    1.1        2022-03-15  Added exports of groups and licenses
+    1.0        2021-12-20  Initial Version
+    ------------------------------------------------------------------------------
 #>
 
 #Import-Module adsync -UseWindowsPowerShell
@@ -149,6 +163,39 @@ Set-ConsoleProperties -DisableQuickEditMode -DisableInsertMode
 
 Add-Type -AssemblyName PresentationFramework
 
+# Add status message functions near the start
+function Write-StatusMessage {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Status = "INFO",
+
+        [Parameter(Mandatory=$false)]
+        [ConsoleColor]$Color = "White"
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $statusPadded = $Status.PadRight(7)
+    Write-Host "[$timestamp] [$statusPadded] $Message" -ForegroundColor $Color
+}
+
+function Write-SuccessMessage {
+    param([string]$Message)
+    Write-StatusMessage -Message $Message -Status "OK" -Color Green
+}
+
+function Write-ErrorMessage {
+    param([string]$Message)
+    Write-StatusMessage -Message $Message -Status "ERROR" -Color Red
+}
+
+function Write-WarningMessage {
+    param([string]$Message)
+    Write-StatusMessage -Message $Message -Status "WARN" -Color Yellow
+}
+
 # Function to validate email addresses
 function Test-EmailAddress {
     param (
@@ -217,30 +264,30 @@ function Show-CustomTerminationWindow {
     $okButton.Content = "OK"
     $okButton.Margin = '0,0,10,0'
     $okButton.Add_Click({
-            # Validate user termination input
-            if (-not $txtUserToTerm.Text) {
-                [System.Windows.MessageBox]::Show("User to Terminate is a mandatory field. Please enter a email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+        # Validate user termination input
+        if (-not $txtUserToTerm.Text) {
+            [System.Windows.MessageBox]::Show("User to Terminate is a mandatory field. Please enter a email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            return
+        }
+
+        # Validate optional email inputs
+        $emailInputs = @{
+            "Grant OneDrive Access To (Email):"      = $txtOneDriveAccess.Text
+            "Grant Mailbox Full Control To (Email):" = $txtMailboxControl.Text
+            "Forward Mailbox To (Email):"            = $txtForwardMailbox.Text
+        }
+
+        foreach ($input in $emailInputs.GetEnumerator()) {
+            if ($input.Value -and -not (Test-EmailAddress -Email $input.Value)) {
+                [System.Windows.MessageBox]::Show("Invalid email format for: $($input.Key). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
                 return
             }
+        }
 
-            # Validate optional email inputs
-            $emailInputs = @{
-                "Grant OneDrive Access To (Email):"      = $txtOneDriveAccess.Text
-                "Grant Mailbox Full Control To (Email):" = $txtMailboxControl.Text
-                "Forward Mailbox To (Email):"            = $txtForwardMailbox.Text
-            }
-
-            foreach ($input in $emailInputs.GetEnumerator()) {
-                if ($input.Value -and -not (Test-EmailAddress -Email $input.Value)) {
-                    [System.Windows.MessageBox]::Show("Invalid email format for: $($input.Key). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                    return
-                }
-            }
-
-            # Set the DialogResult to true and close the window
-            $window.DialogResult = $true
-            $window.Close()
-        })
+        # Set the DialogResult to true and close the window
+        $window.DialogResult = $true
+        $window.Close()
+    })
     $buttonPanel.Children.Add($okButton)
 
     $cancelButton = New-Object System.Windows.Controls.Button
@@ -270,6 +317,10 @@ function Show-CustomTerminationWindow {
 
 # Call the custom input window function
 $result = Show-CustomTerminationWindow
+if ($null -eq $result) {
+    Write-StatusMessage "Operation cancelled by user"
+    exit
+}
 
 $User = $result.InputUserToTerm
 $GrantUserFullControl = $result.InputUserFullControl
@@ -283,22 +334,22 @@ if (!$result.InputUserOneDriveAccess) { $SPOAccessConfirmation = 'n' } else { $S
 $Localpath = 'C:\Temp'
 
 if ((Test-Path $Localpath) -eq $false) {
-    Write-Host "Creating temp directory for user group export"
+    Write-StatusMessage "Creating temp directory for user group export"
     New-Item -Path $Localpath -ItemType Directory
 }
 
 #region pre-check
-Write-Host "Attempting to find $($user) in Active Directory"
+Write-StatusMessage "Attempting to find $($user) in Active Directory"
 
 try {
     $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$($User)'" -Properties MemberOf -ErrorAction Stop
 } catch {
-    Write-Host "Could not find user $($User) in Active Directory" -ForegroundColor Red -BackgroundColor Black
+    Write-ErrorMessage "Could not find user $($User) in Active Directory"
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
 
-Write-Host "Attempting to find Disabled users OU"
+Write-StatusMessage "Attempting to find Disabled users OU"
 
 $DisabledOUs = @(Get-ADOrganizationalUnit -Filter 'Name -like "*disabled*"')
 
@@ -312,8 +363,9 @@ if ($DisabledOUs.count -gt 0) {
             $DestinationOU = $OU.DistinguishedName
         }
     }
+    Write-SuccessMessage "Found disabled users OU: $DestinationOU"
 } else {
-    Write-Host "Could not find disabled OU in Active Directory" -ForegroundColor Red -BackgroundColor Black
+    Write-ErrorMessage "Could not find disabled OU in Active Directory"
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -324,14 +376,16 @@ $ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
 $Org = "compassmsp.onmicrosoft.com"
 $ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
 if ($NULL -eq $ExOCert) {
-    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-ErrorMessage "No valid ExO PowerShell certificates found in the LocalMachine\My store"
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
+Write-StatusMessage "Connecting to Exchange Online..."
 Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+Write-SuccessMessage "Connected to Exchange Online"
 
 #Connect-Graph
-Write-Host "Logging into Azure services."
+Write-StatusMessage "Connecting to Microsoft Graph..."
 $GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
 $tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
 $GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
@@ -403,6 +457,14 @@ $SetADUserParams = @{
 
 Set-ADUser @SetADUserParams
 
+# Before removing from AD groups
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$backupPath = Join-Path $Localpath "AD_Groups_Backup_${User}_${timestamp}.csv"
+$UserFromAD.MemberOf | ForEach-Object {
+    Get-ADGroup $_ | Select-Object Name, DistinguishedName
+} | Export-Csv -Path $backupPath -NoTypeInformation
+Write-StatusMessage "AD group memberships backed up to: $backupPath"
+
 #remove user from all AD groups
 Foreach ($group in $UserFromAD.MemberOf) {
     Remove-ADGroupMember -Identity $group -Members $UserFromAD.SamAccountName -Confirm:$false
@@ -413,7 +475,7 @@ $UserFromAD | Move-ADObject -TargetPath $DestinationOU
 #endregion ActiveDirectory
 
 #region Azure
-Write-Host "Performing Azure Steps"
+Write-StatusMessage "Performing Azure Steps"
 
 #Revoke all sessions
 Revoke-MgUserSignInSession -UserId $UserFromAD.UserPrincipalName -ErrorAction SilentlyContinue
@@ -447,34 +509,32 @@ if ($UserAccessConfirmation -eq 'y') {
         $GetAccessUser = Get-Mailbox $GrantUserFullControl -ErrorAction Stop
         $GetAccessUserCheck = 'yes'
     } catch {
-        Write-Host "User mailbox $GrantUserFullControl not found. Skipping access rights setup" -ForegroundColor Red -BackgroundColor Black
+        Write-ErrorMessage "User mailbox $GrantUserFullControl not found. Skipping access rights setup"
         $GetAccessUserCheck = 'no'
     }
 
 } Else {
-    Write-Host "Skipping access rights setup"
+    Write-StatusMessage "Skipping access rights setup"
 }
 
 if ($GetAccessUserCheck -eq 'yes') {
-    Write-Host "Adding Full Access permissions for $($GetAccessUser.PrimarySmtpAddress) to $($UserFromAD.UserPrincipalName)"
+    Write-StatusMessage "Adding Full Access permissions for $($GetAccessUser.PrimarySmtpAddress) to $($UserFromAD.UserPrincipalName)"
     Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $GrantUserFullControl -AccessRights FullAccess -InheritanceType All -AutoMapping $true
 }
 
 # Set Mailbox forwarding address
 
 if ($UserFwdConfirmation -eq 'y') {
-
     try {
         $GetFWDUser = Get-Mailbox $SetUserMailFWD -ErrorAction Stop
         $GetFWDUserCheck = 'yes'
-        Write-Host "Applying forward from $($UserFromAD.UserPrincipalName) to $($GetFWDUser.PrimarySmtpAddress)"
+        Write-StatusMessage "Applying forward from $($UserFromAD.UserPrincipalName) to $($GetFWDUser.PrimarySmtpAddress)"
     } catch {
-        Write-Host "User mailbox $SetUserMailFWD not found. Skipping mailbox forward" -ForegroundColor Red -BackgroundColor Black
+        Write-ErrorMessage "User mailbox $SetUserMailFWD not found. Skipping mailbox forward"
         $GetFWDUserCheck = 'no'
     }
-
 } Else {
-    Write-Host "Skipping mailbox forwarding"
+    Write-StatusMessage "Skipping mailbox forwarding"
 }
 
 if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $SetUserMailFWD -DeliverToMailboxAndForward $False }
@@ -485,7 +545,9 @@ $AllDirectoryRoles = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD
     Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
 
 #Remove user from directory roles
-if (!$AllDirectoryRoles) { Write-Host "Skipping removal of directory roles as user is not assigned." } else {
+if (!$AllDirectoryRoles) {
+    Write-StatusMessage "Skipping removal of directory roles as user is not assigned."
+} else {
     Foreach ($DirectoryRole in $AllDirectoryRoles) {
         Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $DirectoryRole.Id -DirectoryObjectId $MgUser.Id
     }
@@ -497,7 +559,7 @@ $AllAzureGroups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.Us
 
 $AllAzureGroups | Export-Csv c:\temp\terminated_users_exports\$($user)_Groups_Id.csv -NoTypeInformation
 
-Write-Host "Export User Groups Completed. Path: C:\temp\terminated_users_exports\$($user)_Groups_Id.csv"
+Write-SuccessMessage "Export User Groups Completed. Path: C:\temp\terminated_users_exports\$($user)_Groups_Id.csv"
 
 #Remove user from groups
 Foreach ($365Group in $AllAzureGroups) {
@@ -511,10 +573,10 @@ Foreach ($365Group in $AllAzureGroups) {
 #Export user licenses
 Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\terminated_users_exports\$($user)_License_Id.csv -NoTypeInformation
 
-Write-Host "Export User Licenses Completed. Path: C:\temp\terminated_users_exports\$($user)_License_Id.csv"
+Write-SuccessMessage "Export User Licenses Completed. Path: C:\temp\terminated_users_exports\$($user)_License_Id.csv"
 
 #Remove Licenses
-Write-Host "Starting removal of user licenses."
+Write-StatusMessage "Starting removal of user licenses."
 
 Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Where-Object `
 { ($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
@@ -522,7 +584,7 @@ Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Where-Object `
 
 Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId }
 
-Write-Host "Removal of user licenses completed."
+Write-SuccessMessage "Removal of user licenses completed."
 
 ## Sends email to SecurePath Team (soc@compassmsp.com) with the offboarding user information.
 $MsgFrom = 'noreply@compassmsp.com'
@@ -547,6 +609,17 @@ $Emailparams = @{
 
 Send-MgUserMail -UserId $MsgFrom -BodyParameter $Emailparams
 
+## Remove user from Zoom SCIM App
+
+$ZoomSSO = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
+
+if ($ZoomSSO) {
+    Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $ZoomSSO.Id -UserId $MgUser.Id
+    Write-SuccessMessage "User has been removed from Zoom Workplace Phones"
+} else {
+    Write-StatusMessage "User is not assigned to Zoom Workplace Phones"
+}
+
 #Disconnect from Exchange and Graph
 Disconnect-ExchangeOnline -Confirm:$false
 Disconnect-Graph
@@ -556,7 +629,7 @@ $PnPAppId = "24e3c6ad-9658-4a0d-b85f-82d67d148449"
 $Org = "compassmsp.onmicrosoft.com"
 $PnPCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=PnP PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
 if ($NULL -eq $PnPCert) {
-    Write-Host "No valid PnP PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    Write-ErrorMessage "No valid PnP PowerShell certificates found in the LocalMachine\My store"
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
     exit
 }
@@ -568,24 +641,23 @@ Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly
 
 # Set OneDrive grant access
 if ($SPOAccessConfirmation -eq 'y') {
-
     try {
         $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop
         $GetUserOneDriveAccessCheck = 'yes'
-        Write-Host "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)"
+        Write-StatusMessage "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)"
     } catch {
-        Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
+        Write-ErrorMessage "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant"
         $GetUserOneDriveAccessCheck = 'no'
     }
-
 } Else {
-    Write-Host "Skipping OneDrive access grant"
+    Write-StatusMessage "Skipping OneDrive access grant"
 }
 
 if ($GetUserOneDriveAccessCheck -eq 'yes') {
     Set-PnPTenantSite -Url $UserOneDriveURL -Owners $GrantUserOneDriveAccess
-    $UserOneDriveURL
-    Read-Host 'Please copy the OneDrive URL. Press any key to continue'
+    Write-StatusMessage "OneDrive URL: $UserOneDriveURL"
+    Write-Host "`nPlease copy the OneDrive URL above if needed." -ForegroundColor Yellow
+    Read-Host "Press Enter to continue"
 }
 
 Disconnect-PnPOnline
@@ -593,6 +665,22 @@ Disconnect-PnPOnline
 #endregion Office365
 
 #Start AD Sync
-powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+Write-StatusMessage "Starting AD sync cycle..."
+try {
+    powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+    Write-SuccessMessage "AD sync cycle started successfully"
+} catch {
+    Write-ErrorMessage "Failed to start AD sync cycle: $($_.Exception.Message)"
+}
 
-Write-Host "User $($User) should now be disabled unless any errors occurred during the process."
+Write-StatusMessage "`nSummary of Actions:"
+Write-StatusMessage "----------------------------------------"
+Write-StatusMessage "User disabled: $($UserFromAD.UserPrincipalName)"
+Write-StatusMessage "Moved to OU: $DestinationOU"
+if ($GetAccessUserCheck -eq 'yes') { Write-StatusMessage "Mailbox access granted to: $GrantUserFullControl" }
+if ($GetFWDUserCheck -eq 'yes') { Write-StatusMessage "Mail forwarded to: $SetUserMailFWD" }
+if ($GetUserOneDriveAccessCheck -eq 'yes') { Write-StatusMessage "OneDrive access granted to: $GrantUserOneDriveAccess" }
+Write-StatusMessage "Exports saved to: $Localpath"
+Write-StatusMessage "----------------------------------------`n"
+
+Write-SuccessMessage "User $($User) should now be disabled unless any errors occurred during the process."
