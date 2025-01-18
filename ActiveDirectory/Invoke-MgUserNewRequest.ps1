@@ -699,7 +699,7 @@ $Stoploop = $false
 
 do {
     try {
-        $MgUser = Get-MgUser -UserId $NewUserEmail -Property Id, Mail, displayName, Department | Select-Object Id, Mail, displayName, Department -ErrorAction Stop
+        $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
         Write-Host "User $NewUser has synced to Azure. Script will now continue." -ForegroundColor Green
         $Stoploop = $true
         $ADSyncCompleteYesorExit = 'yes'
@@ -733,7 +733,7 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     if (!$MgUser) {
         try {
-            $MgUser = Get-MgUser -UserId $NewUserEmail -Property Id, Mail, displayName, Department | Select-Object Id, Mail, displayName, Department -ErrorAction Stop
+            $MgUser = Get-MgUser -UserId $NewUserEmail -ErrorAction Stop
         } catch {
             Write-Host 'Script cannot find new user. You will need to set the license and add Office 365 groups via the portal. Press any key to exit script.' -ForegroundColor Red
             $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
@@ -802,96 +802,6 @@ if ($ADSyncCompleteYesorExit -eq 'yes') {
 
     $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $MgUserCopy.Id).Count
     $NewUserGroupCount = (Get-MgUserMemberOf -UserId $MgUser.Id).Count
-
-    function Add-UserToZoom {
-        [CmdletBinding()]
-        param (
-            [Parameter(Mandatory = $true)]
-            [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
-            $MgUser
-        )
-
-        try {
-            # Determine Zoom role based on department
-            if ($MgUser.Department -eq 'Reactive') {
-                $zoom_app_role_name = "Basic"
-            } else {
-                $zoom_app_role_name = "Licensed"
-            }
-
-            $zoom_app_name = "Zoom Workplace Phones"
-
-            # Get Zoom app and sync details
-            try {
-                $zoom_ServicePrincipal = Get-MgServicePrincipal -Filter "displayName eq '$zoom_app_name'"
-                if (-not $zoom_ServicePrincipal) {
-                    Write-Host "Zoom Service Principal not found. Skipping Zoom setup." -ForegroundColor Red
-                    return
-                }
-
-                $zoom_synchronizationJob = Get-MgServicePrincipalSynchronizationJob -ServicePrincipalId $zoom_ServicePrincipal.Id
-                $zoom_synchronizationJobRuleId = (Get-MgServicePrincipalSynchronizationJobSchema -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_synchronizationJob.Id).SynchronizationRules.Id
-                Write-Host "Successfully retrieved Zoom app details and sync information" -ForegroundColor Green
-            }
-            catch {
-                Write-Error "Failed to get Zoom app details: $_"
-                throw
-            }
-
-            # Assign user to Zoom app
-            try {
-                $params = @{
-                    "PrincipalId" = $MgUser.Id
-                    "ResourceId"  = $zoom_ServicePrincipal.Id
-                    "AppRoleId"   = ($zoom_ServicePrincipal.AppRoles | Where-Object { $_.DisplayName -eq $zoom_app_role_name }).Id
-                }
-
-                New-MgUserAppRoleAssignment -UserId $MgUser.Id -BodyParameter $params |
-                    Format-List Id, AppRoleId, CreationTime, PrincipalDisplayName, PrincipalId, PrincipalType, ResourceDisplayName, ResourceId
-
-                Write-Host "Successfully assigned user to Zoom app with role: $zoom_app_role_name" -ForegroundColor Green
-                Write-Host "Waiting 30 seconds before syncing..." -ForegroundColor Yellow
-                Start-Sleep -Seconds 30
-            }
-            catch {
-                Write-Error "Failed to assign user to Zoom app: $_"
-                throw
-            }
-
-            # Sync user to Zoom
-            try {
-                $params = @{
-                    parameters = @(
-                        @{
-                            subjects = @(
-                                @{
-                                    objectId       = "$($MgUser.Id)"
-                                    objectTypeName = "User"
-                                }
-                            )
-                            ruleId   = $zoom_synchronizationJobRuleId
-                        }
-                    )
-                }
-
-                New-MgServicePrincipalSynchronizationJobOnDemand -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_synchronizationJob.Id -BodyParameter $params
-                Write-Host "Successfully initiated Zoom sync for user" -ForegroundColor Green
-            }
-            catch {
-                Write-Error "Failed to sync user to Zoom: $_" -ForegroundColor Red
-                throw
-            }
-
-            Write-Host "All Zoom operations completed successfully!" -ForegroundColor Green
-        }
-        catch {
-            Write-Error "Failed to process Zoom app assignment: $_" -ForegroundColor Red
-            throw
-        }
-    }
-
-    # After creating the new user
-    Add-UserToZoom -MgUser $MgUser
 
     Write-Host "User $($NewUser) should now be created unless any errors occurred during the process."
     Write-Host "Copy User group count: $($CopyUserGroupCount)"

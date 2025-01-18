@@ -35,63 +35,7 @@
 
 #Import-Module adsync -UseWindowsPowerShell
 
-enum ExitCode {
-    Success = 0
-    Cancelled = 1
-    ConfigError = 2
-    ConnectionError = 3
-    UserNotFound = 4
-    PermissionError = 5
-    DuplicateUser = 6
-    GeneralError = 99
-}
-
-function Exit-Script {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-
-        [Parameter(Mandatory = $true)]
-        [ExitCode]$ExitCode,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$SkipDisconnect
-    )
-
-    # Handle messaging based on exit code
-    switch ($ExitCode) {
-        ([ExitCode]::Success) { Write-SuccessMessage $Message }
-        ([ExitCode]::Cancelled) { Write-StatusMessage $Message }
-        default { Write-ErrorMessage $Message }
-    }
-
-    # Cleanup connections if not skipped
-    if (-not $SkipDisconnect) {
-        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
-        Disconnect-MgGraph -ErrorAction SilentlyContinue
-        Disconnect-PnPOnline -ErrorAction SilentlyContinue
-    }
-
-    exit $ExitCode
-}
-
-function Set-ConsoleProperties() {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $false)]
-        [switch]$EnableQuickEditMode = $false,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$DisableQuickEditMode = $false,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$EnableInsertMode = $false,
-
-        [Parameter(Mandatory = $false)]
-        [switch]$DisableInsertMode = $false
-    )
-
-    $QuickEditCodeSnippet = @"
+$QuickEditCodeSnippet=@"
 using System;
 using System.Runtime.InteropServices;
 
@@ -149,64 +93,61 @@ public static class ConsoleModeSettings
 
 "@
 
-    Add-Type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
+Add-Type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
 
-    if ($PSBoundParameters.Count -eq 0) {
+function Set-ConsoleProperties()
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [switch]$EnableQuickEditMode=$false,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$DisableQuickEditMode=$false,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$EnableInsertMode=$false,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$DisableInsertMode=$false
+    )
+
+    if ($PSBoundParameters.Count -eq 0)
+    {
         [ConsoleModeSettings]::EnableQuickEditMode()
         [ConsoleModeSettings]::EnableInsertMode()
+        Write-Output "All settings have been enabled"
         return
     }
 
-    if ($EnableQuickEditMode) {
+    if ($EnableQuickEditMode)
+    {
         [ConsoleModeSettings]::EnableQuickEditMode()
+        Write-Output "QuickEditMode has been enabled"
     }
 
-    if ($DisableQuickEditMode) {
+    if ($DisableQuickEditMode)
+    {
         [ConsoleModeSettings]::DisableQuickEditMode()
+        Write-Output "QuickEditMode has been disabled"
     }
 
-    if ($EnableInsertMode) {
+    if ($EnableInsertMode)
+    {
         [ConsoleModeSettings]::EnableInsertMode()
+        Write-Output "InsertMode has been enabled"
     }
 
-    if ($DisableInsertMode) {
+    if ($DisableInsertMode)
+    {
         [ConsoleModeSettings]::DisableInsertMode()
+        Write-Output "InsertMode has been disabled"
     }
 }
 
 Set-ConsoleProperties -DisableQuickEditMode -DisableInsertMode
 
-function Write-StatusMessage {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-
-        [Parameter(Mandatory = $false)]
-        [string]$Status = "INFO",
-
-        [Parameter(Mandatory = $false)]
-        [ConsoleColor]$Color = "White"
-    )
-
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $statusPadded = $Status.PadRight(7)
-    Write-Host "[$timestamp] [$statusPadded] $Message" -ForegroundColor $Color
-}
-
-function Write-SuccessMessage {
-    param([string]$Message)
-    Write-StatusMessage -Message $Message -Status "OK" -Color Green
-}
-
-function Write-ErrorMessage {
-    param([string]$Message)
-    Write-StatusMessage -Message $Message -Status "ERROR" -Color Red
-}
-
-function Write-WarningMessage {
-    param([string]$Message)
-    Write-StatusMessage -Message $Message -Status "WARN" -Color Yellow
-}
+Add-Type -AssemblyName PresentationFramework
 
 # Function to validate email addresses
 function Test-EmailAddress {
@@ -218,9 +159,6 @@ function Test-EmailAddress {
 
 # Function to create and show a custom WPF window for user termination
 function Show-CustomTerminationWindow {
-
-    Add-Type -AssemblyName PresentationFramework
-
     # Create a new WPF window
     $window = New-Object System.Windows.Window
     $window.Title = "User Termination Request"
@@ -342,6 +280,13 @@ if (!$result.InputUserFullControl) { $UserAccessConfirmation = 'n' } else { $Use
 if (!$result.InputUserFWD) { $UserFwdConfirmation = 'n' } else { $UserFwdConfirmation = 'y' }
 if (!$result.InputUserOneDriveAccess) { $SPOAccessConfirmation = 'n' } else { $SPOAccessConfirmation = 'y' }
 
+$Localpath = 'C:\Temp'
+
+if ((Test-Path $Localpath) -eq $false) {
+    Write-Host "Creating temp directory for user group export"
+    New-Item -Path $Localpath -ItemType Directory
+}
+
 #region pre-check
 Write-Host "Attempting to find $($user) in Active Directory"
 
@@ -374,119 +319,28 @@ if ($DisabledOUs.count -gt 0) {
 }
 #endregion pre-check
 
-function Get-ScriptConfig {
-    param(
-        [Parameter(Mandatory = $false)]
-        [string]$ConfigPath = "C:\ProgramData\CompassScripts\config.json"
-    )
-
-    # Check for local config first
-    if (Test-Path $ConfigPath) {
-        try {
-            $config = Get-Content $ConfigPath | ConvertFrom-Json
-            # Validation code here...
-            return $config
-        } catch {
-            Write-ErrorMessage "Error reading config file: $($_.Exception.Message)"
-        }
-    } else {
-        # If no config exists, create template with prompt
-        Write-StatusMessage "No configuration file found. Creating template at $ConfigPath"
-
-        # Ensure directory exists
-        $configDir = Split-Path $ConfigPath -Parent
-        if (-not (Test-Path $configDir)) {
-            New-Item -Path $configDir -ItemType Directory -Force | Out-Null
-        }
-
-        # Prompt for required values
-        $config = @{
-            ExchangeOnline = @{
-                AppId        = Read-Host "Enter Exchange Online AppId"
-                Organization = Read-Host "Enter Organization (e.g., company.onmicrosoft.com)"
-            }
-            Graph          = @{
-                AppId    = Read-Host "Enter Graph AppId"
-                TenantId = Read-Host "Enter TenantId"
-            }
-            Paths          = @{
-                LogPath    = "C:\Temp\UserTermination.log"
-                ExportPath = "C:\Temp\terminated_users_exports"
-            }
-            Email          = @{
-                NotificationFrom  = Read-Host "Enter notification from address"
-                SecurityTeamEmail = Read-Host "Enter security team email"
-            }
-        }
-
-        # Save config
-        $config | ConvertTo-Json | Set-Content $ConfigPath
-
-        return $config
-    }
+#Connect-ExchangeOnline
+$ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
+$Org = "compassmsp.onmicrosoft.com"
+$ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $ExOCert) {
+    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
 }
+Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
 
-# Load configuration
-$config = Get-ScriptConfig
-
-# Replace hardcoded values with config values
-$ExOAppId = $config.ExchangeOnline.AppId
-$Org = $config.ExchangeOnline.Organization
-$GraphAppId = $config.Graph.AppId
-$tenantID = $config.Graph.TenantId
-#$ExOCertCn = $Config.ExchangeOnline.CertificateSubject
-#$GraphCertCn = $Config.Graph.CertificateSubject
-$ExOCertCn = 'CN=ExO PowerShell'
-$GraphCertCn = 'CN=Graph PowerShell'
-
-function Connect-RequiredServices {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$ExOAppId,
-        [Parameter(Mandatory)]
-        [string]$GraphAppId,
-        [Parameter(Mandatory)]
-        [string]$TenantId,
-        [Parameter(Mandatory)]
-        [string]$Organization
-    )
-
-    # Connect to Exchange Online
-    $ExOCert = Get-ChildItem Cert:\LocalMachine\My |
-        Where-Object { ($_.Subject -like "*$($ExOCertCn)*") -and
-                      ($_.NotAfter -gt $([DateTime]::Now)) }
-
-    if ($null -eq $ExOCert) {
-        Exit-Script -Message "No valid ExO PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
-    }
-
-    Write-StatusMessage "Connecting to Exchange Online..."
-
-    Connect-ExchangeOnline -AppId $ExOAppId -Organization $Organization -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
-    Write-SuccessMessage "Connected to Exchange Online"
-
-    # Connect to Microsoft Graph
-    Write-StatusMessage "Connecting to Microsoft Graph..."
-    $GraphCert = Get-ChildItem Cert:\LocalMachine\My |
-        Where-Object { ($_.Subject -like "*$($GraphCertCn)*") -and
-                      ($_.NotAfter -gt $([DateTime]::Now)) }
-
-    if ($null -eq $GraphCert) {
-        Exit-Script -Message "No valid Graph PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
-    }
-
-    Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+#Connect-Graph
+Write-Host "Logging into Azure services."
+$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
+$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
+$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
+if ($NULL -eq $GraphCert) {
+    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    exit
 }
-
-Connect-RequiredServices -ExOAppId $ExOAppId -GraphAppId $GraphAppId -TenantId $TenantId -Organization $Org
-
-$Localpath = $config.Paths.ExportPath
-
-if ((Test-Path $Localpath) -eq $false) {
-    Write-StatusMessage "Creating temp directory for user group export"
-    New-Item -Path $Localpath -ItemType Directory
-}
+Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
 
 Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure"
 
