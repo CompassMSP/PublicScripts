@@ -1,609 +1,2138 @@
 #requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync -RunAsAdministrator
 
-<#Author       : Chris Williams
-# Creation Date: 12-20-2021
-# Usage        : This script handles most of the Office 365/AD tasks during user termination.
+<#
+.SYNOPSIS
+    Handles Office 365/AD tasks during user termination.
 
-#********************************************************************************
-# Date                        Version       Changes
-#------------------------------------------------------------------------
-# 12-20-2021                    1.0         Initial Version
-# 03-15-2022                    1.1         Added exports of groups and licenses
-# 06-27-2022                    1.2         Fixes for Remove-MgGroupMemberByRef and Revoke-MgUserSign
-# 06-28-2022                    1.3         Add removal of manager from disabled user and optimization changes
-# 07-06-2022                    1.4         Improved readability and export for user groups
-# 08-02-2023                    1.5         Added OneDrive access grant
-# 02-12-2024                    1.6         Add AppRoleAssignment for KnowBe4 SCIM App
-# 02-14-2024                    1.7         Fix issues with copy groups function and code cleanup
-# 02-19-2024                    1.8         Changes to Get-MgUserMemberOf function
-# 03-08-2024                    1.9         Cleaned up licenses select display output
-# 05-08-2024                    2.0         Add input box for Variables
-# 05-09-2024                    2.1         Remove user from directory roles
-# 05-13-2024                    2.2         Fixed AppRoleAssignment and added Term User to accept SAM or UPN
-# 05-15-2024                    2.3         Set OneDrive as Readonly
-# 10-15-2024                    2.4         Remove AppRoleAssignment for KnowBe4 SCIM App
-# 10-22-2024                    2.5         Add KB4 offboarding email delivery to SecurePath
-# 11-08-2024                    2.6         Added better UI boxes for variables
-# 01-10-2025                    2.7         Add function to disable QuickEdit and InsertMode to resolve script issues
-#********************************************************************************
-# Run from the Primary Domain Controller with AD Connect installed
-#
-#
-# The following modules must be installed
-# Install-Module ExchangeOnlineManagement, Microsoft.Graph.Users, Microsoft.Graph.Groups, Microsoft.Graph.Identity.DirectoryManagement, PnP.PowerShell
+.DESCRIPTION
+    This script automates the termination process by handling both Active Directory
+    and Microsoft 365 tasks including group removal, license removal, and mailbox management.
+
+    The script will display a GUI window to collect:
+    - User to terminate (email)
+    - Mailbox access delegation
+    - Email forwarding settings
+    - OneDrive access delegation
+    - OneDrive read-only setting
+
+    IMPORTANT: This script must be run from the Primary Domain Controller with AD Connect installed.
+
+    NOTE: Sensitive information (app IDs, certificates, etc.) is stored in a secure configuration file managed by Get-ScriptConfig.
+    The config file should be placed at: C:\ProgramData\CompassScripts\config.json
+
+.EXAMPLE
+    .\Invoke-MgUserTermination.ps1
+
+    This will launch the GUI window to collect the required information.
+
+.NOTES
+    Author: Chris Williams
+    Created: 2021-12-20
+    Last Modified: 2025-01-20
+
+    Version History:
+    ------------------------------------------------------------------------------
+    Version    Date         Changes
+    -------    ----------  ---------------------------------------------------
+    3.0.0        2025-01-20  Major Rework:
+                          - Complete script reorganization and optimization
+                          - Optimized UI spacing and element alignment
+                          - Enhanced form layout for improved readability
+                          - Added secure configuration management via Get-ScriptConfig
+                          - Enhanced error handling and logging system
+                          - Added progress tracking and status messaging
+                          - Added Zoom phone onboarding
+
+    2.1.0        2024-11-25  Feature Update:
+                          - Reworked GUI interface
+                          - Added QuickEdit and InsertMode management
+                          - Removed KnowBe4 SCIM integration per SecurePath Team
+                          - Added Email Forwarding functionality - KnowBe4 Notification
+
+    2.0.0        2024-07-15  Major Feature Update:
+                          - Added GUI input system
+                          - Enhanced UI for variable collection
+                          - Added KB4 offboarding integration
+                          - Added OneDrive read-only functionality
+                          - Updated KnowBe4 SCIM integration
+                          - Added directory role management
+
+    1.2.0        2023-02-12  Feature Updates:
+                          - Enhanced license management
+                          - Improved group handling
+                          - Added KnowBe4 integration
+                          - Enhanced group function cleanup
+                          - Added OneDrive access management
+
+    1.1.0        2022-06-27  Enhancement Update:
+                          - Added group and license exports
+                          - Improved user management functions
+                          - Enhanced manager removal process
+                          - Fixed group member removal
+                          - Added sign-in revocation
+
+    1.0.0        2021-12-20  Initial Release:
+                          - Basic termination functionality
+                          - AD user management
+                          - Group removal
+                          - License removal
+    ------------------------------------------------------------------------------
 #>
 
-#Import-Module adsync -UseWindowsPowerShell
+# Initialize loading animation
+Clear-Host
+$loadingChars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+$i = 0
+$loadingJob = Start-Job -ScriptBlock { while ($true) { Start-Sleep -Milliseconds 100 } }
 
-$QuickEditCodeSnippet=@"
-using System;
-using System.Runtime.InteropServices;
+try {
+    Write-Host "`n  Initializing User Termination Script..." -ForegroundColor Cyan
 
-public static class ConsoleModeSettings
-{
-    const uint ENABLE_QUICK_EDIT = 0x0040;
-    const uint ENABLE_INSERT_MODE = 0x0020;
-
-    const int STD_INPUT_HANDLE = -10;
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    static extern IntPtr GetStdHandle(int nStdHandle);
-
-    [DllImport("kernel32.dll")]
-    static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
-
-    [DllImport("kernel32.dll")]
-    static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
-
-    public static void EnableQuickEditMode()
-    {
-        SetConsoleFlag(ENABLE_QUICK_EDIT, true);
+    Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Loading core components..." -NoNewline -ForegroundColor Yellow
+    $ErrorActionPreference = 'Stop'
+    # Only show verbose output if -Verbose is specified
+    if (-not $PSBoundParameters['Verbose']) {
+        $VerbosePreference = 'SilentlyContinue'
     }
+    $startTime = Get-Date
+    Write-Host "`r  [✓] Core components loaded" -ForegroundColor Green
 
-    public static void DisableQuickEditMode()
-    {
-        SetConsoleFlag(ENABLE_QUICK_EDIT, false);
-    }
+    Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
+    $progressSteps = @(
+        @{ Number = 0; Name = "Initialization"; Description = "Loading configuration and connecting services" }
+        @{ Number = 1; Name = "User Input"; Description = "Gathering termination details" }
+        @{ Number = 2; Name = "AD Tasks"; Description = "Disabling user in Active Directory" }
+        @{ Number = 3; Name = "Session Cleanup"; Description = "Removing user sessions and devices" }
+        @{ Number = 4; Name = "Mailbox Setup"; Description = "Converting to shared mailbox" }
+        @{ Number = 5; Name = "Directory Roles"; Description = "Removing from directory roles" }
+        @{ Number = 6; Name = "Group Removal"; Description = "Removing from groups" }
+        @{ Number = 7; Name = "License Removal"; Description = "Removing licenses" }
+        @{ Number = 8; Name = "Notifications"; Description = "Sending notifications" }
+        @{ Number = 9; Name = "Zoom Removal"; Description = "Removing from Zoom" }
+        @{ Number = 10; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
+        @{ Number = 11; Name = "Final Steps"; Description = "Running AD sync and finalizing" }
+    )
+    Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
-    public static void EnableInsertMode()
-    {
-        SetConsoleFlag(ENABLE_INSERT_MODE, true);
-    }
+    Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Loading functions..." -NoNewline -ForegroundColor Yellow
+    $script:errorCount = 0
+    $script:totalSteps = $progressSteps.Count  # Make it script-scoped and move it before the function
 
-    public static void DisableInsertMode()
-    {
-        SetConsoleFlag(ENABLE_INSERT_MODE, false);
-    }
+    function Write-ProgressStep {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$StepName,
 
-    private static void SetConsoleFlag(uint modeFlag, bool enable)
-    {
-        IntPtr consoleHandle = GetStdHandle(STD_INPUT_HANDLE);
-        uint consoleMode;
-        if (GetConsoleMode(consoleHandle, out consoleMode))
-        {
-            if (enable)
-                consoleMode |= modeFlag;
-            else
-                consoleMode &= ~modeFlag;
+            [Parameter(Mandatory)]
+            [string]$Status
+        )
 
-            SetConsoleMode(consoleHandle, consoleMode);
+        # Get the step number from the progress steps array
+        $stepNumber = ($progressSteps | Where-Object { $_.Name -eq $StepName }).Number
+
+        # Guard against division by zero or missing step number
+        if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
+            Write-StatusMessage -Message "Step $StepName - $Status" -Type INFO
+            Write-Progress -Activity "User Termination" -Status $Status
+        } else {
+            Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $Status" -Type INFO
+            Write-Progress -Activity "User Termination" -Status $Status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
         }
     }
-}
 
-"@
+    function Set-ConsoleProperties {
+        [CmdletBinding()]
+        param (
+            [Parameter()]
+            [ValidateSet('Enable', 'Disable')]
+            [string]$QuickEditMode = 'Enable',
 
-Add-Type -TypeDefinition $QuickEditCodeSnippet -Language CSharp
+            [Parameter()]
+            [ValidateSet('Enable', 'Disable')]
+            [string]$InsertMode = 'Enable'
+        )
 
-function Set-ConsoleProperties()
-{
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory=$false)]
-        [switch]$EnableQuickEditMode=$false,
+        $signature = @'
+        using System;
+        using System.Runtime.InteropServices;
 
-        [Parameter(Mandatory=$false)]
-        [switch]$DisableQuickEditMode=$false,
+        public static class ConsoleMode {
+            private const uint ENABLE_QUICK_EDIT = 0x0040;
+            private const uint ENABLE_INSERT_MODE = 0x0020;
+            private const int STD_INPUT_HANDLE = -10;
 
-        [Parameter(Mandatory=$false)]
-        [switch]$EnableInsertMode=$false,
+            [DllImport("kernel32.dll", SetLastError = true)]
+            private static extern IntPtr GetStdHandle(int nStdHandle);
 
-        [Parameter(Mandatory=$false)]
-        [switch]$DisableInsertMode=$false
-    )
+            [DllImport("kernel32.dll")]
+            private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
 
-    if ($PSBoundParameters.Count -eq 0)
-    {
-        [ConsoleModeSettings]::EnableQuickEditMode()
-        [ConsoleModeSettings]::EnableInsertMode()
-        Write-Output "All settings have been enabled"
-        return
-    }
+            [DllImport("kernel32.dll")]
+            private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
 
-    if ($EnableQuickEditMode)
-    {
-        [ConsoleModeSettings]::EnableQuickEditMode()
-        Write-Output "QuickEditMode has been enabled"
-    }
+            public static void SetMode(bool enableQuickEdit, bool enableInsert) {
+                IntPtr handle = GetStdHandle(STD_INPUT_HANDLE);
+                uint mode;
 
-    if ($DisableQuickEditMode)
-    {
-        [ConsoleModeSettings]::DisableQuickEditMode()
-        Write-Output "QuickEditMode has been disabled"
-    }
+                if (!GetConsoleMode(handle, out mode)) {
+                    throw new Exception("Failed to get console mode");
+                }
 
-    if ($EnableInsertMode)
-    {
-        [ConsoleModeSettings]::EnableInsertMode()
-        Write-Output "InsertMode has been enabled"
-    }
+                mode = enableQuickEdit ? mode | ENABLE_QUICK_EDIT : mode & ~ENABLE_QUICK_EDIT;
+                mode = enableInsert ? mode | ENABLE_INSERT_MODE : mode & ~ENABLE_INSERT_MODE;
 
-    if ($DisableInsertMode)
-    {
-        [ConsoleModeSettings]::DisableInsertMode()
-        Write-Output "InsertMode has been disabled"
-    }
-}
+                if (!SetConsoleMode(handle, mode)) {
+                    throw new Exception("Failed to set console mode");
+                }
+            }
+        }
+'@
 
-Set-ConsoleProperties -DisableQuickEditMode -DisableInsertMode
-
-Add-Type -AssemblyName PresentationFramework
-
-# Function to validate email addresses
-function Test-EmailAddress {
-    param (
-        [string]$Email
-    )
-    return $Email -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'  # Basic email regex
-}
-
-# Function to create and show a custom WPF window for user termination
-function Show-CustomTerminationWindow {
-    # Create a new WPF window
-    $window = New-Object System.Windows.Window
-    $window.Title = "User Termination Request"
-    $window.Width = 500
-    $window.Height = 310
-    $window.WindowStartupLocation = 'CenterScreen'
-
-    # Create a StackPanel to hold the controls
-    $stackPanel = New-Object System.Windows.Controls.StackPanel
-    $stackPanel.Margin = '10'
-    $window.Content = $stackPanel
-
-    # Create label and textbox for User to Terminate
-    $lblUserToTerm = New-Object System.Windows.Controls.Label
-    $lblUserToTerm.Content = "User to Terminate (Email):"
-    $stackPanel.Children.Add($lblUserToTerm)
-
-    $txtUserToTerm = New-Object System.Windows.Controls.TextBox
-    $txtUserToTerm.Margin = '0,0,0,4'
-    $stackPanel.Children.Add($txtUserToTerm)
-
-    # Create label and textbox for OneDrive Access
-    $lblOneDriveAccess = New-Object System.Windows.Controls.Label
-    $lblOneDriveAccess.Content = "Grant OneDrive Access To (Email):"
-    $stackPanel.Children.Add($lblOneDriveAccess)
-
-    $txtOneDriveAccess = New-Object System.Windows.Controls.TextBox
-    $txtOneDriveAccess.Margin = '0,0,0,4'
-    $stackPanel.Children.Add($txtOneDriveAccess)
-
-    # Create label and textbox for Mailbox Full Control
-    $lblMailboxControl = New-Object System.Windows.Controls.Label
-    $lblMailboxControl.Content = "Grant Mailbox Full Control To (Email):"
-    $stackPanel.Children.Add($lblMailboxControl)
-
-    $txtMailboxControl = New-Object System.Windows.Controls.TextBox
-    $txtMailboxControl.Margin = '0,0,0,4'
-    $stackPanel.Children.Add($txtMailboxControl)
-
-    # Create label and textbox for Forward Mailbox
-    $lblForwardMailbox = New-Object System.Windows.Controls.Label
-    $lblForwardMailbox.Content = "Forward Mailbox To (Email):"
-    $stackPanel.Children.Add($lblForwardMailbox)
-
-    $txtForwardMailbox = New-Object System.Windows.Controls.TextBox
-    $txtForwardMailbox.Margin = '0,0,0,4'
-    $stackPanel.Children.Add($txtForwardMailbox)
-
-    # Create and add OK and Cancel buttons
-    $buttonPanel = New-Object System.Windows.Controls.StackPanel
-    $buttonPanel.Orientation = 'Horizontal'
-    $buttonPanel.HorizontalAlignment = 'Right'
-    $buttonPanel.Margin = '0,10,0,0'
-
-    $okButton = New-Object System.Windows.Controls.Button
-    $okButton.Content = "OK"
-    $okButton.Margin = '0,0,10,0'
-    $okButton.Add_Click({
-            # Validate user termination input
-            if (-not $txtUserToTerm.Text) {
-                [System.Windows.MessageBox]::Show("User to Terminate is a mandatory field. Please enter a email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                return
+        try {
+            # Add the type if it doesn't exist
+            if (-not ('ConsoleMode' -as [type])) {
+                Add-Type -TypeDefinition $signature -Language CSharp
             }
 
-            # Validate optional email inputs
-            $emailInputs = @{
-                "Grant OneDrive Access To (Email):"      = $txtOneDriveAccess.Text
-                "Grant Mailbox Full Control To (Email):" = $txtMailboxControl.Text
-                "Forward Mailbox To (Email):"            = $txtForwardMailbox.Text
+            # Convert parameters to boolean values
+            $quickEdit = $QuickEditMode -eq 'Enable'
+            $insert = $InsertMode -eq 'Enable'
+
+            # Set the console modes
+            [ConsoleMode]::SetMode($quickEdit, $insert)
+
+            Write-Verbose "Console properties updated successfully: QuickEdit=$QuickEditMode, Insert=$InsertMode"
+        } catch {
+            Write-Error "Failed to set console properties: $($_.Exception.Message)"
+        }
+    }
+
+    # Disable console quick edit
+    Set-ConsoleProperties -QuickEditMode Disable -InsertMode Disable
+
+    function Write-StatusMessage {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$Message,
+
+            [Parameter(Mandatory = $false)]
+            [ValidateSet('INFO', 'OK', 'SUCCESS', 'ERROR', 'WARN', 'SUMMARY')]
+            [string]$Type = 'INFO'
+        )
+
+        $config = @{
+            'INFO'    = @{ Status = 'INFO'; Color = 'White' }
+            'OK'      = @{ Status = 'OK'; Color = 'Green' }
+            'SUCCESS' = @{ Status = 'SUCCESS'; Color = 'Green' }
+            'ERROR'   = @{ Status = 'ERROR'; Color = 'Red' }
+            'WARN'    = @{ Status = 'WARN'; Color = 'Yellow' }
+            'SUMMARY' = @{ Status = ''; Color = 'Cyan' }
+        }
+
+        if ($Type -eq 'SUMMARY') {
+            Write-Host $Message -ForegroundColor $config[$Type].Color
+        } else {
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $statusPadded = $config[$Type].Status.PadRight(7)
+            Write-Host "[$timestamp] [$statusPadded] $Message" -ForegroundColor $config[$Type].Color
+        }
+
+        if ($Type -eq 'ERROR') {
+            $script:errorCount++
+            if ($Message -match 'config') { $script:errorTypes.Configuration++ }
+            # ... etc
+        }
+    }
+
+    function Exit-Script {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory = $true)]
+            [string]$Message,
+
+            [Parameter(Mandatory = $false)]
+            [ValidateSet(
+                'Success',
+                'Cancelled',
+                'ConfigError',
+                'ConnectionError',
+                'UserNotFound',
+                'PermissionError',
+                'DuplicateUser',
+                'GeneralError'
+            )]
+            [string]$ExitCode = 'GeneralError'
+        )
+
+        try {
+            # Map exit codes to error types for tracking
+            $errorTypeMap = @{
+                'ConfigError'     = 'Configuration'
+                'ConnectionError' = 'Connection'
+                'PermissionError' = 'Permission'
+                'UserNotFound'    = 'Validation'
+                'GeneralError'    = 'General'
             }
 
-            foreach ($input in $emailInputs.GetEnumerator()) {
-                if ($input.Value -and -not (Test-EmailAddress -Email $input.Value)) {
-                    [System.Windows.MessageBox]::Show("Invalid email format for: $($input.Key). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                    return
+            # Map exit codes to numeric values
+            $exitCodes = @{
+                'Success'         = 0
+                'Cancelled'       = 1
+                'ConfigError'     = 2
+                'ConnectionError' = 3
+                'UserNotFound'    = 4
+                'PermissionError' = 5
+                'DuplicateUser'   = 6
+                'GeneralError'    = 99
+            }
+
+            # Map exit codes to message types
+            $messageTypes = @{
+                'Success'         = 'OK'
+                'Cancelled'       = 'WARN'
+                'ConfigError'     = 'ERROR'
+                'ConnectionError' = 'ERROR'
+                'UserNotFound'    = 'ERROR'
+                'PermissionError' = 'ERROR'
+                'DuplicateUser'   = 'ERROR'
+                'GeneralError'    = 'ERROR'
+            }
+
+            # Track error type if it's not a success or cancellation
+            if ($ExitCode -notin @('Success', 'Cancelled') -and $errorTypeMap.ContainsKey($ExitCode)) {
+                Add-ErrorType -ErrorType $errorTypeMap[$ExitCode]
+            }
+
+            # Attempt to disconnect from services
+            Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
+            try {
+                Connect-ServiceEndpoints -Disconnect
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disconnect services during exit" -ErrorLevel Warning
+                Add-ErrorType -ErrorType Connection
+            }
+
+            # Display final error summary if there were errors
+            if ($script:errorCount -gt 0) {
+                Write-StatusMessage -Message (Get-ErrorSummary) -Type SUMMARY
+            }
+
+            # Log the exit message
+            Write-StatusMessage -Message $Message -Type $messageTypes[$ExitCode]
+            Write-Log -Message "Script exiting with code $($exitCodes[$ExitCode]): $Message" -Level $messageTypes[$ExitCode]
+
+            # Return the appropriate exit code
+            exit $exitCodes[$ExitCode]
+        }
+        catch {
+            # Catch-all for any unexpected errors during exit
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error during script exit"
+            Add-ErrorType -ErrorType General
+            exit 99
+        }
+    }
+
+    function Get-ScriptConfig {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory = $false)]
+            [string]$ConfigPath = "C:\ProgramData\CompassScripts\config.json"
+        )
+
+        # Add comment-based help here
+        <#
+        .SYNOPSIS
+            Gets or creates configuration for Compass scripts.
+        .DESCRIPTION
+            Loads configuration from JSON file or creates new config with user prompts.
+        .PARAMETER ConfigPath
+            Path to the configuration file. Defaults to C:\ProgramData\CompassScripts\config.json
+        .EXAMPLE
+            $config = Get-ScriptConfig
+            Loads or creates default configuration
+        #>
+
+        try {
+            # Check for local config first
+            Write-StatusMessage -Message "Checking for local configuration file..." -Type INFO
+
+            if (Test-Path $ConfigPath) {
+                $config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+                Write-StatusMessage -Message "Loaded configuration from $ConfigPath" -Type OK
+                return $config
+            }
+
+            # If no config exists, create template with prompt
+            Write-StatusMessage "No configuration file found. Creating template at $ConfigPath"
+
+            # Ensure directory exists
+            $configDir = Split-Path $ConfigPath -Parent
+            if (-not (Test-Path $configDir)) {
+                New-Item -Path $configDir -ItemType Directory -Force | Out-Null
+            }
+
+            # Prompt for required values
+            $config = @{
+                ExchangeOnline = @{
+                    AppId              = Read-Host "Enter Exchange Online AppId"
+                    Organization       = Read-Host "Enter Organization (e.g., company.onmicrosoft.com)"
+                    CertificateSubject = Read-Host "Enter Exchange Online certificate subject (e.g., CN=ExO PowerShell)"
+                }
+                Graph          = @{
+                    AppId              = Read-Host "Enter Graph AppId"
+                    TenantId           = Read-Host "Enter TenantId"
+                    CertificateSubject = Read-Host "Enter Graph certificate subject (e.g., CN=Graph PowerShell)"
+                }
+                PnPSharePoint  = @{
+                    AppId              = Read-Host "Enter PnP SharePoint AppId"
+                    Url                = Read-Host "Enter SharePoint Online URL"
+                    CertificateSubject = Read-Host "Enter PnP certificate subject (e.g., CN=PnP PowerShell)"
+                }
+                Paths          = @{
+                    NewUserLogPath = "C:\Temp\NewUserCreation.log"
+                    LogPath        = "C:\Temp\UserTermination.log"
+                    ExportPath     = "C:\Temp\terminated_users_exports"
+                }
+                Email          = @{
+                    NotificationFrom  = Read-Host "Enter notification from address"
+                    SecurityTeamEmail = Read-Host "Enter security team email"
                 }
             }
 
-            # Set the DialogResult to true and close the window
-            $window.DialogResult = $true
-            $window.Close()
-        })
-    $buttonPanel.Children.Add($okButton)
+            # Save config
+            $config | ConvertTo-Json | Set-Content $ConfigPath
 
-    $cancelButton = New-Object System.Windows.Controls.Button
-    $cancelButton.Content = "Cancel"
-    $cancelButton.Add_Click({
-            $window.DialogResult = $false
-            $window.Close()
-        })
-    $buttonPanel.Children.Add($cancelButton)
-
-    $stackPanel.Children.Add($buttonPanel)
-
-    # Show the window
-    $result = $window.ShowDialog()
-
-    if ($result -eq $true) {
-        return @{
-            InputUserToTerm         = $txtUserToTerm.Text
-            InputUserFullControl    = $txtMailboxControl.Text
-            InputUserFWD            = $txtForwardMailbox.Text
-            InputUserOneDriveAccess = $txtOneDriveAccess.Text
-        }
-    } else {
-        return $null
-    }
-}
-
-# Call the custom input window function
-$result = Show-CustomTerminationWindow
-
-$User = $result.InputUserToTerm
-$GrantUserFullControl = $result.InputUserFullControl
-$SetUserMailFWD = $result.InputUserFWD
-$GrantUserOneDriveAccess = $result.InputUserOneDriveAccess
-
-if (!$result.InputUserFullControl) { $UserAccessConfirmation = 'n' } else { $UserAccessConfirmation = 'y' }
-if (!$result.InputUserFWD) { $UserFwdConfirmation = 'n' } else { $UserFwdConfirmation = 'y' }
-if (!$result.InputUserOneDriveAccess) { $SPOAccessConfirmation = 'n' } else { $SPOAccessConfirmation = 'y' }
-
-$Localpath = 'C:\Temp'
-
-if ((Test-Path $Localpath) -eq $false) {
-    Write-Host "Creating temp directory for user group export"
-    New-Item -Path $Localpath -ItemType Directory
-}
-
-#region pre-check
-Write-Host "Attempting to find $($user) in Active Directory"
-
-try {
-    $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$($User)'" -Properties MemberOf -ErrorAction Stop
-} catch {
-    Write-Host "Could not find user $($User) in Active Directory" -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-
-Write-Host "Attempting to find Disabled users OU"
-
-$DisabledOUs = @(Get-ADOrganizationalUnit -Filter 'Name -like "*disabled*"')
-
-if ($DisabledOUs.count -gt 0) {
-    #set the destination OU to the first one found, but try to find a better one(user specific)
-    $DestinationOU = $DisabledOUs[0].DistinguishedName
-
-    #try to find user specific OU
-    foreach ($OU in $DisabledOUs) {
-        if ($OU.DistinguishedName -like '*user*') {
-            $DestinationOU = $OU.DistinguishedName
+            return $config
+        } catch {
+            Write-StatusMessage -Message "Critical error in configuration: $_" -Type ERROR
+            throw
         }
     }
-} else {
-    Write-Host "Could not find disabled OU in Active Directory" -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-#endregion pre-check
 
-#Connect-ExchangeOnline
-$ExOAppId = "baa3f5d9-3bb4-44d8-b10a-7564207ddccd"
-$Org = "compassmsp.onmicrosoft.com"
-$ExOCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=ExO PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-if ($NULL -eq $ExOCert) {
-    Write-Host "No valid ExO PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-Connect-ExchangeOnline -AppId $ExOAppId -Organization $Org -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+    function Write-Log {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$Message,
+            [Parameter()]
+            [ValidateSet('INFO', 'OK', 'SUCCESS', 'ERROR', 'WARN', 'SUMMARY')]
+            [string]$Level = 'INFO',
+            [Parameter()]
+            [string]$LogPath = $config.Paths.NewUserLogPath
+        )
 
-#Connect-Graph
-Write-Host "Logging into Azure services."
-$GraphAppId = "432beb65-bc40-4b40-9366-1c5a768ee717"
-$tenantID = "02e68a77-717b-48c1-881a-acc8f67c291a"
-$GraphCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=Graph PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-if ($NULL -eq $GraphCert) {
-    Write-Host "No valid Graph PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+        try {
+            # Create log directory if it doesn't exist
+            $logDir = Split-Path -Path $LogPath -Parent
+            if (-not (Test-Path -Path $logDir)) {
+                New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+            }
 
-Write-Host "Attempting to find $($UserFromAD.UserPrincipalName) in Azure"
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $logMessage = "[$timestamp] [$Level] $Message"
 
-try {
-    $365Mailbox = Get-Mailbox -Identity $UserFromAD.UserPrincipalName -ErrorAction Stop
-    $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName -ErrorAction Stop
-} catch {
-    Write-Host "Could not find user $($UserFromAD.UserPrincipalName) in Azure" -ForegroundColor Red -BackgroundColor Black
-    Disconnect-ExchangeOnline -Confirm:$false
-    Disconnect-MgGraph
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
+            # Write to log file
+            Add-Content -Path $LogPath -Value $logMessage
 
-$Confirmation = Read-Host -Prompt "The user below will be disabled:`n
+            # Also write to status message
+            Write-StatusMessage -Message $Message -Type $Level
+
+            # Track errors
+            if ($Level -eq 'ERROR') {
+                $script:errorCount++
+            }
+        } catch {
+            Write-StatusMessage -Message "Failed to write to log: $_" -Type ERROR
+        }
+    }
+
+    # Function to create and show a custom WPF window for user termination
+    function Show-CustomTerminationWindow {
+        # Build out UI for user input
+        Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+
+        # Function to validate email addresses
+        function Test-EmailAddress {
+            param (
+                [string]$Email
+            )
+            return $Email -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'  # Basic email regex
+        }
+
+        # Create a new WPF window
+        $window = New-Object System.Windows.Window
+        $window.Title = "User Termination Request"
+        $window.Width = 500
+        $window.Height = 530  # Slightly increased for better spacing
+        $window.WindowStartupLocation = 'CenterScreen'
+        $window.Background = '#F0F0F0'  # Light gray background
+
+        # Create ScrollViewer as main container
+        $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
+        $scrollViewer.VerticalScrollBarVisibility = "Auto"
+
+        # Create main StackPanel
+        $mainPanel = New-Object System.Windows.Controls.StackPanel
+        $mainPanel.Margin = '10'
+        $scrollViewer.Content = $mainPanel
+        $window.Content = $scrollViewer
+
+        # Add header/description
+        $headerPanel = New-Object System.Windows.Controls.Border
+        $headerPanel.Background = '#E1E1E1'
+        $headerPanel.Padding = '10'
+        $headerPanel.Margin = '0,0,0,15'
+        $headerPanel.BorderBrush = '#CCCCCC'
+        $headerPanel.BorderThickness = '1'
+
+        $headerText = New-Object System.Windows.Controls.TextBlock
+        $headerText.Text = "User Termination Request`nPlease fill in all required fields marked with *"
+        $headerText.TextWrapping = 'Wrap'
+        $headerPanel.Child = $headerText
+        $mainPanel.Children.Add($headerPanel)
+
+        # Create user termination group
+        $termGroup = New-Object System.Windows.Controls.GroupBox
+        $termGroup.Header = "User Information"
+        $termGroup.Margin = '0,0,0,10'
+
+        $termStack = New-Object System.Windows.Controls.StackPanel
+        $termStack.Margin = '5'
+
+        # User to terminate
+        $lblUserToTerm = New-Object System.Windows.Controls.Label
+        $lblUserToTerm.Content = "User to Terminate (Email) *"
+        $termStack.Children.Add($lblUserToTerm)
+
+        $txtUserToTerm = New-Object System.Windows.Controls.TextBox
+        $txtUserToTerm.Margin = '0,0,0,10'
+        $txtUserToTerm.Padding = '5,3,5,3'
+        $txtUserToTerm.Tag = "Enter user's email address"
+        $txtUserToTerm.Text = $txtUserToTerm.Tag
+        $txtUserToTerm.Foreground = 'Gray'
+        $txtUserToTerm.ToolTip = "Enter the email address of the user to be terminated"
+
+        # Add placeholder and validation behavior
+        $txtUserToTerm.Add_GotFocus({
+                if ($this.Text -eq $this.Tag) {
+                    $this.Text = ""
+                    $this.Foreground = 'Black'
+                }
+            })
+
+        $txtUserToTerm.Add_LostFocus({
+                if ([string]::IsNullOrWhiteSpace($this.Text)) {
+                    $this.Text = $this.Tag
+                    $this.Foreground = 'Gray'
+                }
+                if ($this.Text -ne $this.Tag -and -not (Test-EmailAddress -Email $this.Text)) {
+                    $this.BorderBrush = 'Red'
+                    $this.BorderThickness = 2
+                } else {
+                    $this.BorderBrush = $null
+                    $this.BorderThickness = 1
+                }
+            })
+
+        $termStack.Children.Add($txtUserToTerm)
+        $termGroup.Content = $termStack
+        $mainPanel.Children.Add($termGroup)
+
+        # Create access delegation group
+        $delegateGroup = New-Object System.Windows.Controls.GroupBox
+        $delegateGroup.Header = "Access Delegation"
+        $delegateGroup.Margin = '0,0,0,10'
+
+        $delegateStack = New-Object System.Windows.Controls.StackPanel
+        $delegateStack.Margin = '5'
+
+        # OneDrive Access
+        $lblOneDriveAccess = New-Object System.Windows.Controls.Label
+        $lblOneDriveAccess.Content = "Grant OneDrive Access To (Email):"
+        $delegateStack.Children.Add($lblOneDriveAccess)
+
+        $txtOneDriveAccess = New-Object System.Windows.Controls.TextBox
+        $txtOneDriveAccess.Margin = '0,0,0,10'
+        $txtOneDriveAccess.Padding = '5,3,5,3'
+        $txtOneDriveAccess.Tag = "Enter delegate's email address"
+        $txtOneDriveAccess.Text = $txtOneDriveAccess.Tag
+        $txtOneDriveAccess.Foreground = 'Gray'
+        $txtOneDriveAccess.ToolTip = "Enter the email of the person who should receive OneDrive access"
+
+        # Add placeholder and validation behavior
+        $txtOneDriveAccess.Add_GotFocus({
+                if ($this.Text -eq $this.Tag) {
+                    $this.Text = ""
+                    $this.Foreground = 'Black'
+                }
+            })
+
+        $txtOneDriveAccess.Add_LostFocus({
+                if ([string]::IsNullOrWhiteSpace($this.Text)) {
+                    $this.Text = $this.Tag
+                    $this.Foreground = 'Gray'
+                }
+                if ($this.Text -ne $this.Tag -and -not (Test-EmailAddress -Email $this.Text)) {
+                    $this.BorderBrush = 'Red'
+                    $this.BorderThickness = 2
+                } else {
+                    $this.BorderBrush = $null
+                    $this.BorderThickness = 1
+                }
+            })
+
+        $delegateStack.Children.Add($txtOneDriveAccess)
+
+        # Mailbox Control
+        $lblMailboxControl = New-Object System.Windows.Controls.Label
+        $lblMailboxControl.Content = "Grant Mailbox Full Control To (Email):"
+        $delegateStack.Children.Add($lblMailboxControl)
+
+        $txtMailboxControl = New-Object System.Windows.Controls.TextBox
+        $txtMailboxControl.Margin = '0,0,0,10'
+        $txtMailboxControl.Padding = '5,3,5,3'
+        $txtMailboxControl.Tag = "Enter delegate's email address"
+        $txtMailboxControl.Text = $txtMailboxControl.Tag
+        $txtMailboxControl.Foreground = 'Gray'
+        $txtMailboxControl.ToolTip = "Enter the email of the person who should receive mailbox access"
+
+        # Add same placeholder and validation behavior
+        $txtMailboxControl.Add_GotFocus({
+                if ($this.Text -eq $this.Tag) {
+                    $this.Text = ""
+                    $this.Foreground = 'Black'
+                }
+            })
+
+        $txtMailboxControl.Add_LostFocus({
+                if ([string]::IsNullOrWhiteSpace($this.Text)) {
+                    $this.Text = $this.Tag
+                    $this.Foreground = 'Gray'
+                }
+                if ($this.Text -ne $this.Tag -and -not (Test-EmailAddress -Email $this.Text)) {
+                    $this.BorderBrush = 'Red'
+                    $this.BorderThickness = 2
+                } else {
+                    $this.BorderBrush = $null
+                    $this.BorderThickness = 1
+                }
+            })
+
+        $delegateStack.Children.Add($txtMailboxControl)
+
+        # Forward Mailbox
+        $lblForwardMailbox = New-Object System.Windows.Controls.Label
+        $lblForwardMailbox.Content = "Forward Mailbox To (Email):"
+        $delegateStack.Children.Add($lblForwardMailbox)
+
+        $txtForwardMailbox = New-Object System.Windows.Controls.TextBox
+        $txtForwardMailbox.Margin = '0,0,0,10'
+        $txtForwardMailbox.Padding = '5,3,5,3'
+        $txtForwardMailbox.Tag = "Enter forward-to email address"
+        $txtForwardMailbox.Text = $txtForwardMailbox.Tag
+        $txtForwardMailbox.Foreground = 'Gray'
+        $txtForwardMailbox.ToolTip = "Enter the email address where future emails should be forwarded"
+
+        # Add same placeholder and validation behavior
+        $txtForwardMailbox.Add_GotFocus({
+                if ($this.Text -eq $this.Tag) {
+                    $this.Text = ""
+                    $this.Foreground = 'Black'
+                }
+            })
+
+        $txtForwardMailbox.Add_LostFocus({
+                if ([string]::IsNullOrWhiteSpace($this.Text)) {
+                    $this.Text = $this.Tag
+                    $this.Foreground = 'Gray'
+                }
+                if ($this.Text -ne $this.Tag -and -not (Test-EmailAddress -Email $this.Text)) {
+                    $this.BorderBrush = 'Red'
+                    $this.BorderThickness = 2
+                } else {
+                    $this.BorderBrush = $null
+                    $this.BorderThickness = 1
+                }
+            })
+
+        $delegateStack.Children.Add($txtForwardMailbox)
+
+        # OneDrive Read-Only option
+        $oneDrivePanel = New-Object System.Windows.Controls.DockPanel
+        $oneDrivePanel.Margin = '0,0,0,5'
+
+        $lblOneDriveReadOnly = New-Object System.Windows.Controls.Label
+        $lblOneDriveReadOnly.Content = "Set OneDrive as Read-Only:"
+        $lblOneDriveReadOnly.VerticalAlignment = 'Center'
+
+        $chkOneDriveReadOnly = New-Object System.Windows.Controls.CheckBox
+        $chkOneDriveReadOnly.VerticalAlignment = 'Center'
+        $chkOneDriveReadOnly.Margin = '10,0,0,0'
+        $chkOneDriveReadOnly.ToolTip = "Check to make the OneDrive content read-only"
+
+        $oneDrivePanel.Children.Add($lblOneDriveReadOnly)
+        $oneDrivePanel.Children.Add($chkOneDriveReadOnly)
+        $delegateStack.Children.Add($oneDrivePanel)
+
+        $delegateGroup.Content = $delegateStack
+        $mainPanel.Children.Add($delegateGroup)
+
+        # Create and add OK and Cancel buttons
+        $buttonPanel = New-Object System.Windows.Controls.StackPanel
+        $buttonPanel.Orientation = 'Horizontal'
+        $buttonPanel.HorizontalAlignment = 'Right'
+        $buttonPanel.Margin = '0,10,0,0'
+
+        $okButton = New-Object System.Windows.Controls.Button
+        $okButton.Content = "OK"
+        $okButton.Width = 100
+        $okButton.Height = 30
+        $okButton.Margin = '0,0,10,0'
+        $okButton.Add_Click({
+                # Validate user termination input
+                if (-not $txtUserToTerm.Text) {
+                    [System.Windows.MessageBox]::Show("User to Terminate is a mandatory field. Please enter a email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                    return
+                }
+
+                # Validate optional email inputs
+                $emailInputs = @{
+                    "Grant OneDrive Access To (Email):"      = $txtOneDriveAccess.Text
+                    "Grant Mailbox Full Control To (Email):" = $txtMailboxControl.Text
+                    "Forward Mailbox To (Email):"            = $txtForwardMailbox.Text
+                }
+
+                foreach ($input in $emailInputs.GetEnumerator()) {
+                    if ($input.Value -and -not (Test-EmailAddress -Email $input.Value)) {
+                        [System.Windows.MessageBox]::Show("Invalid email format for: $($input.Key). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                        return
+                    }
+                }
+
+                # Set the DialogResult to true and close the window
+                $window.DialogResult = $true
+                $window.Close()
+            })
+        $buttonPanel.Children.Add($okButton)
+
+        $cancelButton = New-Object System.Windows.Controls.Button
+        $cancelButton.Content = "Cancel"
+        $cancelButton.Width = 100
+        $cancelButton.Height = 30
+        $cancelButton.Add_Click({
+                $window.DialogResult = $false
+                $window.Close()
+            })
+        $buttonPanel.Children.Add($cancelButton)
+
+        $mainPanel.Children.Add($buttonPanel)
+
+        # Show the window and return results
+        $result = $window.ShowDialog()
+
+        if ($result -eq $true) {
+            return @{
+                InputUser               = $txtUserToTerm.Text
+                InputUserFullControl    = if ($txtMailboxControl.Text -eq $txtMailboxControl.Tag) { "" } else { $txtMailboxControl.Text }
+                InputUserFWD            = if ($txtForwardMailbox.Text -eq $txtForwardMailbox.Tag) { "" } else { $txtForwardMailbox.Text }
+                InputUserOneDriveAccess = if ($txtOneDriveAccess.Text -eq $txtOneDriveAccess.Tag) { "" } else { $txtOneDriveAccess.Text }
+                SetOneDriveReadOnly     = $chkOneDriveReadOnly.IsChecked
+            }
+        } else {
+            return $null
+        }
+    }
+
+    function Connect-ServiceEndpoints {
+        <#
+    .SYNOPSIS
+        Manages connections to Microsoft 365 service endpoints.
+
+    .DESCRIPTION
+        Handles both connection and disconnection to Exchange Online, Microsoft Graph,
+        and SharePoint Online services. Can connect/disconnect to all services or
+        specific services as needed.
+
+    .PARAMETER ExchangeOnline
+        Switch to specify Exchange Online service operations.
+
+    .PARAMETER Graph
+        Switch to specify Microsoft Graph service operations.
+
+    .PARAMETER SharePoint
+        Switch to specify SharePoint Online service operations.
+
+    .PARAMETER Disconnect
+        Switch to disconnect instead of connect. If used without other switches,
+        disconnects from all services.
+
+    .EXAMPLE
+        Connect-ServiceEndpoints
+        Connects to all services using default configuration.
+
+    .EXAMPLE
+        Connect-ServiceEndpoints -ExchangeOnline -Graph
+        Connects only to Exchange Online and Microsoft Graph services.
+
+    .EXAMPLE
+        Connect-ServiceEndpoints -Disconnect
+        Disconnects from all connected services.
+
+    .EXAMPLE
+        Connect-ServiceEndpoints -Disconnect -SharePoint
+        Disconnects only from SharePoint Online.
+
+    .EXAMPLE
+        Connect-ServiceEndpoints -ExchangeOnline
+        Connects only to Exchange Online service.
+
+    .NOTES
+        Requires appropriate certificates and permissions configured in config.json.
+        Uses global configuration variables for connection parameters.
+    #>
+
+        [CmdletBinding()]
+        param(
+            [Parameter()]
+            [switch]$ExchangeOnline,
+
+            [Parameter()]
+            [switch]$Graph,
+
+            [Parameter()]
+            [switch]$SharePoint,
+
+            [Parameter()]
+            [switch]$Disconnect
+        )
+
+        # Validate parameters for requested services
+        if ($ExchangeOnline -or (-not ($ExchangeOnline -or $Graph -or $SharePoint))) {
+            $requiredExOParams = @('ExOAppId', 'Organization', 'ExOCertSubject')
+            $missingExOParams = $requiredExOParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
+
+            if ($missingExOParams) {
+                throw "Exchange Online connection requires the following parameters: $($missingExOParams -join ', ')"
+            }
+
+            Write-StatusMessage -Message "Connecting to Exchange Online..." -Type 'INFO'
+            $ExOCert = Get-ChildItem Cert:\LocalMachine\My |
+            Where-Object { ($_.Subject -like "*$($ExOCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+
+            if ($null -eq $ExOCert) {
+                Exit-Script -Message "No valid ExO PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
+            }
+
+            Connect-ExchangeOnline -AppId $ExOAppId -Organization $Organization -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+            Write-StatusMessage -Message "Connected to Exchange Online" -Type 'OK'
+        }
+
+        # Validate and connect to Microsoft Graph if requested
+        if ($Graph -or (-not ($ExchangeOnline -or $Graph -or $SharePoint))) {
+            $requiredGraphParams = @('GraphAppId', 'TenantId', 'GraphCertSubject')
+            $missingGraphParams = $requiredGraphParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
+
+            if ($missingGraphParams) {
+                throw "Graph connection requires the following parameters: $($missingGraphParams -join ', ')"
+            }
+
+            Write-StatusMessage -Message "Connecting to Microsoft Graph..." -Type 'INFO'
+            $GraphCert = Get-ChildItem Cert:\LocalMachine\My |
+            Where-Object { ($_.Subject -like "*$($GraphCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+
+            if ($null -eq $GraphCert) {
+                Exit-Script -Message "No valid Graph PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
+            }
+
+            Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+            Write-StatusMessage -Message "Connected to Microsoft Graph" -Type 'OK'
+        }
+
+        # Validate and connect to SharePoint Online if requested
+        if ($SharePoint) {
+            $requiredPnPParams = @('PnPAppId', 'PnPUrl', 'Organization', 'PnPCertSubject')
+            $missingPnPParams = $requiredPnPParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
+
+            if ($missingPnPParams) {
+                throw "SharePoint connection requires the following parameters: $($missingPnPParams -join ', ')"
+            }
+
+            Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type 'INFO'
+            $PnPCert = Get-ChildItem Cert:\LocalMachine\My |
+            Where-Object { ($_.Subject -like "*$($PnPCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+
+            if ($null -eq $PnPCert) {
+                Exit-Script -Message "No valid PnP PowerShell certificates found in the LocalMachine\My store." -ExitCode ConfigError
+            }
+
+            Connect-PnPOnline -Url $PnPUrl -ClientId $PnPAppId -Tenant $Organization -Thumbprint $($PnPCert.Thumbprint)
+            Write-StatusMessage -Message "Connected to SharePoint Online" -Type 'OK'
+        }
+    }
+
+    function Send-GraphMailMessage {
+        <#
+        .SYNOPSIS
+            Sends an email message using Microsoft Graph API.
+
+        .DESCRIPTION
+            This function sends an email message using Microsoft Graph API with support for HTML content,
+            CC recipients, and file attachments.
+
+        .PARAMETER Subject
+            The subject line of the email.
+
+        .PARAMETER Content
+            The body content of the email.
+
+        .PARAMETER FromAddress
+            The sender's email address. Defaults to value in $config.Email.NotificationFrom.
+
+        .PARAMETER ToAddress
+            The recipient's email address. Defaults to value in $config.Email.SecurityTeamEmail.
+
+        .PARAMETER CcAddress
+            Optional array of CC recipient email addresses.
+
+        .PARAMETER ContentType
+            The type of content in the email body. Must be either 'HTML' or 'Text'. Defaults to 'HTML'.
+
+        .PARAMETER AttachmentPath
+            Optional path to a file to attach to the email.
+
+        .PARAMETER AttachmentName
+            Optional custom name for the attached file. If not specified, uses the original filename.
+
+        .EXAMPLE
+            Send-GraphMailMessage -Subject "Test Email" -Content "Hello World"
+            Sends a simple HTML email with default sender and recipient.
+
+        .EXAMPLE
+            Send-GraphMailMessage `
+                -Subject "Device Setup Complete: $ENV:COMPUTERNAME" ` `
+                -Content "<h1>Report Ready</h1><p>The monthly report is attached.</p>" `
+                -ToAddress "user@domain.com" `
+                -AttachmentPath "C:\Reports\monthly.pdf"
+            Sends an HTML email with an attachment.
+
+        .EXAMPLE
+            Send-GraphMailMessage `
+                -Subject "Team Update" `
+                -Content "Weekly update attached" `
+                -ToAddress "manager@domain.com" `
+                -CcAddress @("team1@domain.com", "team2@domain.com") `
+                -ContentType "Text" `
+                -AttachmentPath "C:\Updates\weekly.docx"
+            Sends a plain text email with CC recipients and an attachment.
+
+        .EXAMPLE
+            Send-GraphMailMessage `
+                -Subject "Device Setup Complete: $ENV:COMPUTERNAME" `
+                -Content "The device $ENV:COMPUTERNAME has completed configuration" `
+                -ToAddress "cwooden@compassmsp.com" `
+                -CcAddress "cwilliams@compassmsp.com" `
+                -AttachmentPath "C:\Logs\setup.log" `
+                -AttachmentName "SetupLog.txt"
+            Example usage with attachment
+
+        .NOTES
+            Requires Microsoft.Graph PowerShell module and appropriate permissions.
+            Uses Write-StatusMessage function for logging.
+        #>
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$Subject,
+
+            [Parameter(Mandatory)]
+            [string]$Content,
+
+            [Parameter()]
+            [string]$FromAddress,
+
+            [Parameter()]
+            [string]$ToAddress,
+
+            [Parameter()]
+            [string[]]$CcAddress,
+
+            [Parameter()]
+            [ValidateSet('HTML', 'Text')]
+            [string]$ContentType = 'HTML',
+
+            [Parameter()]
+            [string]$AttachmentPath,
+
+            [Parameter()]
+            [string]$AttachmentName
+        )
+
+        try {
+            $messageParams = @{
+                subject      = $Subject
+                body         = @{
+                    contentType = $ContentType
+                    content     = $Content
+                }
+                toRecipients = @(
+                    @{
+                        emailAddress = @{
+                            address = $ToAddress
+                        }
+                    }
+                )
+            }
+
+            # Add CC recipients if specified
+            if ($CcAddress) {
+                $messageParams['ccRecipients'] = @(
+                    $CcAddress | ForEach-Object {
+                        @{
+                            emailAddress = @{
+                                address = $_
+                            }
+                        }
+                    }
+                )
+            }
+
+            # Add attachment if specified
+            if ($AttachmentPath) {
+                $attachmentContent = Get-Content -Path $AttachmentPath -Raw -Encoding Byte
+                $attachmentBase64 = [System.Convert]::ToBase64String($attachmentContent)
+
+                $messageParams['attachments'] = @(
+                    @{
+                        '@odata.type' = '#microsoft.graph.fileAttachment'
+                        name          = $AttachmentName ?? (Split-Path $AttachmentPath -Leaf)
+                        contentType   = 'text/plain'
+                        contentBytes  = $attachmentBase64
+                    }
+                )
+            }
+
+            $params = @{
+                message         = $messageParams
+                saveToSentItems = "false"
+            }
+
+            Send-MgUserMail -UserId $FromAddress -BodyParameter $params -ErrorAction Stop
+            Write-StatusMessage -Message "Email notification sent successfully" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to send email notification: $_" -Type ERROR
+        }
+    }
+
+    function Get-TerminationPrerequisites {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$User
+        )
+
+        try {
+            # Find user in AD with more flexible search
+            Write-StatusMessage -Message "Attempting to find $User in Active Directory" -Type 'INFO'
+
+            # Try exact UPN match first
+            $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
+
+            # If no exact UPN match, try email match
+            if (-not $UserFromAD) {
+                $UserFromAD = Get-ADUser -Filter "mail -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
+            }
+
+            # If still no match, try partial matches
+            if (-not $UserFromAD) {
+                $partialMatches = Get-ADUser -Filter "userPrincipalName -like '*$User*' -or mail -like '*$User*' -or displayName -like '*$User*'" `
+                    -Properties MemberOf, UserPrincipalName, Mail, DisplayName
+
+                if ($partialMatches) {
+                    if ($partialMatches.Count -gt 1) {
+                        Write-StatusMessage -Message "Multiple matching users found:" -Type 'WARN'
+                        $index = 0
+                        $partialMatches | ForEach-Object {
+                            Write-Host "`n[$index] DisplayName: $($_.DisplayName)"
+                            Write-Host "    UPN: $($_.UserPrincipalName)"
+                            Write-Host "    Email: $($_.Mail)"
+                            $index++
+                        }
+
+                        do {
+                            $selection = Read-Host "`nEnter the number of the correct user or 'exit' to cancel"
+                            if ($selection -eq 'exit') {
+                                Exit-Script -Message "User cancelled the operation" -ExitCode Cancelled
+                            }
+                        } while ($selection -notmatch '^\d+$' -or [int]$selection -ge $partialMatches.Count)
+
+                        $UserFromAD = Get-ADUser -Identity $partialMatches[$selection].DistinguishedName -Properties MemberOf
+                    } else {
+                        $UserFromAD = Get-ADUser -Identity $partialMatches[0].DistinguishedName -Properties MemberOf
+                    }
+                }
+            }
+
+            if (-not $UserFromAD) {
+                Exit-Script -Message "Could not find user $User in Active Directory" -ExitCode UserNotFound
+            }
+
+            # Find Disabled Users OU
+            Write-StatusMessage -Message "Attempting to find Disabled users OU" -Type 'INFO'
+            $DisabledOUs = @(Get-ADOrganizationalUnit -Filter 'Name -like "*disabled*"')
+
+            if ($DisabledOUs.count -gt 0) {
+                # Set the destination OU to the first one found
+                $DestinationOU = $DisabledOUs[0].DistinguishedName
+
+                # Try to find user specific OU
+                foreach ($OU in $DisabledOUs) {
+                    if ($OU.DistinguishedName -like '*user*') {
+                        $DestinationOU = $OU.DistinguishedName
+                    }
+                }
+            } else {
+                Exit-Script -Message "Could not find disabled OU in Active Directory" -ExitCode GeneralError
+            }
+
+            # Find user in Azure/Exchange
+            Write-StatusMessage -Message "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" -Type 'INFO'
+            try {
+                $365Mailbox = Get-Mailbox -Identity $UserFromAD.UserPrincipalName -ErrorAction Stop
+                $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName -ErrorAction Stop
+            } catch {
+                Exit-Script -Message "Could not find user in Exchange/Azure: $_" -ExitCode UserNotFound
+            }
+
+            # Get user confirmation
+            $confirmMessage = @"
+The user below will be disabled:
 Display Name = $($UserFromAD.Name)
 UserPrincipalName = $($UserFromAD.UserPrincipalName)
 Mailbox name =  $($365Mailbox.DisplayName)
 Azure name = $($MgUser.DisplayName)
-Destination OU = $($DestinationOU)`n
-(Y/N)`n"
+Destination OU = $($DestinationOU)
 
-if ($Confirmation -ne 'y') {
-    Write-Host 'User did not enter "Y"' -ForegroundColor Red -BackgroundColor Black
-    Disconnect-ExchangeOnline -Confirm:$false
-    Disconnect-MgGraph
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
+Continue? (Y/N)
+"@
+            $Confirmation = Read-Host -Prompt $confirmMessage
 
-#region ActiveDirectory
+            if ($Confirmation -ne 'y') {
+                Exit-Script -Message "User termination cancelled by user. Did not enter 'Y'" -ExitCode Cancelled
+            }
 
-#Modify the AD user account
-Write-Host "Performing Active Directory Steps"
+            # Return all the collected information
+            return @{
+                UserFromAD    = $UserFromAD
+                DestinationOU = $DestinationOU
+                Mailbox       = $365Mailbox
+                MgUser        = $MgUser
+            }
 
-$SetADUserParams = @{
-    Identity    = $UserFromAD.SamAccountName
-    Description = "Disabled on $(Get-Date -Format 'FileDate')"
-    Enabled     = $False
-    Replace     = @{msExchHideFromAddressLists = $true }
-    Clear       = @(
-        'company',
-        'Title',
-        'physicalDeliveryOfficeName',
-        'Department',
-        'facsimileTelephoneNumber',
-        'mobile',
-        'telephoneNumber',
-        'l', # l is for Location because Microsoft AD attributes are stupid
-        'Manager',
-        'extensionAttribute1',
-        'extensionAttribute2',
-        'extensionAttribute3',
-        'extensionAttribute4',
-        'extensionAttribute5',
-        'extensionAttribute6',
-        'extensionAttribute15'
-    )
-}
-
-Set-ADUser @SetADUserParams
-
-#remove user from all AD groups
-Foreach ($group in $UserFromAD.MemberOf) {
-    Remove-ADGroupMember -Identity $group -Members $UserFromAD.SamAccountName -Confirm:$false
-}
-
-#Move user to disabled OU
-$UserFromAD | Move-ADObject -TargetPath $DestinationOU
-#endregion ActiveDirectory
-
-#region Azure
-Write-Host "Performing Azure Steps"
-
-#Revoke all sessions
-Revoke-MgUserSignInSession -UserId $UserFromAD.UserPrincipalName -ErrorAction SilentlyContinue
-
-#Remove Mobile Device
-Get-MobileDevice -Mailbox $UserFromAD.UserPrincipalName | ForEach-Object { Remove-MobileDevice $_.DeviceID -Confirm:$false -ErrorAction SilentlyContinue }
-
-#Disable AzureAD registered devices
-$termUserDeviceId = Get-MgUserRegisteredDevice -UserId $UserFromAD.UserPrincipalName
-
-$termUserDeviceId | ForEach-Object {
-    $MgDeviceparams = @{
-        AccountEnabled = $false
-    }
-    Update-MgDevice -DeviceId $_.Id -BodyParameter $MgDeviceparams
-}
-
-$termUserDeviceId | ForEach-Object { Get-MgDevice -DeviceId $_.Id | Select-Object Id, DisplayName, ApproximateLastSignInDateTime, AccountEnabled }
-
-# Disabled mailbox forwarding
-$365Mailbox | Set-Mailbox -ForwardingAddress $null -ForwardingSmtpAddress $null
-
-# Change mailbox to shared
-$365Mailbox | Set-Mailbox -Type Shared
-
-# Grant User FullAccess to Mailbox
-
-if ($UserAccessConfirmation -eq 'y') {
-
-    try {
-        $GetAccessUser = Get-Mailbox $GrantUserFullControl -ErrorAction Stop
-        $GetAccessUserCheck = 'yes'
-    } catch {
-        Write-Host "User mailbox $GrantUserFullControl not found. Skipping access rights setup" -ForegroundColor Red -BackgroundColor Black
-        $GetAccessUserCheck = 'no'
-    }
-
-} Else {
-    Write-Host "Skipping access rights setup"
-}
-
-if ($GetAccessUserCheck -eq 'yes') {
-    Write-Host "Adding Full Access permissions for $($GetAccessUser.PrimarySmtpAddress) to $($UserFromAD.UserPrincipalName)"
-    Add-MailboxPermission -Identity $UserFromAD.UserPrincipalName -User $GrantUserFullControl -AccessRights FullAccess -InheritanceType All -AutoMapping $true
-}
-
-# Set Mailbox forwarding address
-
-if ($UserFwdConfirmation -eq 'y') {
-
-    try {
-        $GetFWDUser = Get-Mailbox $SetUserMailFWD -ErrorAction Stop
-        $GetFWDUserCheck = 'yes'
-        Write-Host "Applying forward from $($UserFromAD.UserPrincipalName) to $($GetFWDUser.PrimarySmtpAddress)"
-    } catch {
-        Write-Host "User mailbox $SetUserMailFWD not found. Skipping mailbox forward" -ForegroundColor Red -BackgroundColor Black
-        $GetFWDUserCheck = 'no'
-    }
-
-} Else {
-    Write-Host "Skipping mailbox forwarding"
-}
-
-if ($GetFWDUserCheck -eq 'yes') { Set-Mailbox $UserFromAD.UserPrincipalName -ForwardingAddress $SetUserMailFWD -DeliverToMailboxAndForward $False }
-
-#Find user directory roles
-$AllDirectoryRoles = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.UserPrincipalName).Id | `
-    Where-Object { $_.AdditionalProperties['@odata.type'] -eq '#microsoft.graph.directoryRole' } | `
-    Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
-
-#Remove user from directory roles
-if (!$AllDirectoryRoles) { Write-Host "Skipping removal of directory roles as user is not assigned." } else {
-    Foreach ($DirectoryRole in $AllDirectoryRoles) {
-        Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $DirectoryRole.Id -DirectoryObjectId $MgUser.Id
-    }
-}
-#Find Azure only groups
-$AllAzureGroups = Get-MgUserMemberOf -UserId $(Get-MgUser -UserId $UserFromAD.UserPrincipalName).Id | `
-    Where-Object { $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and $_.AdditionalProperties.membershipRule -eq $NULL -and $_.onPremisesSyncEnabled -ne 'False' } | `
-    Select-Object Id, @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }, @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
-
-$AllAzureGroups | Export-Csv c:\temp\terminated_users_exports\$($user)_Groups_Id.csv -NoTypeInformation
-
-Write-Host "Export User Groups Completed. Path: C:\temp\terminated_users_exports\$($user)_Groups_Id.csv"
-
-#Remove user from groups
-Foreach ($365Group in $AllAzureGroups) {
-    try {
-        Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $MgUser.Id -ErrorAction Stop
-    } catch {
-        Remove-DistributionGroupMember -Identity $365Group.Id -Member $UserFromAD.UserPrincipalName -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction SilentlyContinue
-    }
-}
-
-#Export user licenses
-Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Select-Object SkuPartNumber, SkuId, Id | Export-Csv c:\temp\terminated_users_exports\$($user)_License_Id.csv -NoTypeInformation
-
-Write-Host "Export User Licenses Completed. Path: C:\temp\terminated_users_exports\$($user)_License_Id.csv"
-
-#Remove Licenses
-Write-Host "Starting removal of user licenses."
-
-Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | Where-Object `
-{ ($_.SkuPartNumber -ne "O365_BUSINESS_ESSENTIALS" -and $_.SkuPartNumber -ne "SPE_E3" -and $_.SkuPartNumber -ne "SPB" -and $_.SkuPartNumber -ne "EXCHANGESTANDARD") } `
-| ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId -ErrorAction Stop }
-
-Get-MgUserLicenseDetail -UserId $UserFromAD.UserPrincipalName | ForEach-Object { Set-MgUserLicense -UserId $UserFromAD.UserPrincipalName -AddLicenses @() -RemoveLicenses $_.SkuId }
-
-Write-Host "Removal of user licenses completed."
-
-## Sends email to SecurePath Team (soc@compassmsp.com) with the offboarding user information.
-$MsgFrom = 'noreply@compassmsp.com'
-
-$Emailparams = @{
-    message         = @{
-        subject      = "KB4 – Remove User"
-        body         = @{
-            contentType = "HTML"
-            content     = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)"
+        } catch {
+            Exit-Script -Message "Failed to validate termination prerequisites: $_" -ExitCode UserNotFound
         }
-        toRecipients = @(
-            @{
-                emailAddress = @{
-                    address = "soc@compassmsp.com"
+    }
+
+    function Disable-ADUser {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [Microsoft.ActiveDirectory.Management.ADUser]
+            $UserFromAD,
+
+            [Parameter(Mandatory)]
+            [string]$DestinationOU
+        )
+
+        try {
+            Write-StatusMessage -Message "Performing Active Directory Steps" -Type INFO
+
+            # Modify the AD user account
+            try {
+                $SetADUserParams = @{
+                    Identity    = $UserFromAD.SamAccountName
+                    Description = "Disabled on $(Get-Date -Format 'FileDate')"
+                    Enabled     = $False
+                    Replace     = @{msExchHideFromAddressLists = $true }
+                    Clear      = @(
+                        'company',
+                        'Title',
+                        'physicalDeliveryOfficeName',
+                        'Department',
+                        'facsimileTelephoneNumber',
+                        'mobile',
+                        'telephoneNumber',
+                        'l', # l is for Location because Microsoft AD attributes are stupid
+                        'Manager',
+                        'extensionAttribute1',
+                        'extensionAttribute2',
+                        'extensionAttribute3',
+                        'extensionAttribute4',
+                        'extensionAttribute5',
+                        'extensionAttribute6',
+                        'extensionAttribute15'
+                    )
+                }
+
+                Set-ADUser @SetADUserParams -ErrorAction Stop
+                Write-StatusMessage -Message "User account disabled and attributes cleared" -Type OK
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disable user account"
+                Add-ErrorType -ErrorType General
+                throw
+            }
+
+            # Remove user from all AD groups
+            foreach ($group in $UserFromAD.MemberOf) {
+                Write-StatusMessage -Message "Removing user from group: $($group)" -Type INFO
+                try {
+                    Remove-ADGroupMember -Identity $group -Members $UserFromAD.SamAccountName -Confirm:$false -ErrorAction Stop
+                    Write-StatusMessage -Message "Successfully removed from group: $($group)" -Type OK
+                }
+                catch {
+                    Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove from AD group: $group"
+                    Add-ErrorType -ErrorType Group
                 }
             }
+            Write-StatusMessage -Message "User removed from all AD groups" -Type OK
+
+            # Move user to disabled OU
+            Write-StatusMessage -Message "Moving user to Disabled OU" -Type INFO
+            try {
+                $UserFromAD | Move-ADObject -TargetPath $DestinationOU -ErrorAction Stop
+                Write-StatusMessage -Message "Successfully moved user to disabled OU" -Type OK
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to move user to disabled OU"
+                Add-ErrorType -ErrorType General
+                throw
+            }
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Disable-ADUser"
+            Add-ErrorType -ErrorType General
+            throw
+        }
+    }
+
+    function Remove-UserSessions {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$UserPrincipalName
         )
+
+        try {
+            # Revoke all sessions
+            Write-StatusMessage -Message "Revoking all user signed in sessions" -Type INFO
+            try {
+                Revoke-MgUserSignInSession -UserId $UserPrincipalName -ErrorAction Stop
+                Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to revoke user sessions"
+                Add-ErrorType -ErrorType Permission
+            }
+
+            # Remove Mobile Devices
+            Write-StatusMessage -Message "Removing all mobile devices" -Type INFO
+            try {
+                $mobileDevices = Get-MobileDevice -Mailbox $UserPrincipalName -ErrorAction Stop
+                foreach ($mobileDevice in $mobileDevices) {
+                    Write-StatusMessage -Message "Removing mobile device: $($mobileDevice.Id)" -Type INFO
+                    try {
+                        Remove-MobileDevice -DeviceID $mobileDevice.Id -Confirm:$false -ErrorAction Stop
+                        Write-StatusMessage -Message "Successfully removed mobile device: $($mobileDevice.Id)" -Type OK
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove mobile device $($mobileDevice.Id)"
+                        Add-ErrorType -ErrorType General
+                    }
+                }
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get mobile devices"
+                Add-ErrorType -ErrorType General
+            }
+
+            # Disable Azure AD devices
+            try {
+                $termUserDevices = Get-MgUserRegisteredDevice -UserId $UserPrincipalName -ErrorAction Stop
+                foreach ($termUserDevice in $termUserDevices) {
+                    Write-StatusMessage -Message "Disabling registered device: $($termUserDevice.Id)" -Type INFO
+                    try {
+                        Update-MgDevice -DeviceId $termUserDevice.Id -BodyParameter @{ AccountEnabled = $false } -ErrorAction Stop
+                        Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.Id)" -Type OK
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disable device $($termUserDevice.Id)"
+                        Add-ErrorType -ErrorType General
+                    }
+                }
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get registered devices"
+                Add-ErrorType -ErrorType General
+            }
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserSessions"
+            Add-ErrorType -ErrorType General
+            throw
+        }
     }
-    saveToSentItems = "false"
-}
 
-Send-MgUserMail -UserId $MsgFrom -BodyParameter $Emailparams
+    function Set-TerminatedMailbox {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            $Mailbox,
 
-## Remove user from Zoom SCIM App
+            [Parameter()]
+            [string]$ForwardingAddress,
 
-$ZoomSSO = Get-MgUserAppRoleAssignment -UserId $MgUser.Id | Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
+            [Parameter()]
+            [string]$GrantAccessTo
+        )
 
-if ($ZoomSSO) {
-	Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $ZoomSSO.Id -UserId $MgUser.Id
-	Write-Host "User has been removed from Zoom Workplace Phones"
-} else {
-	Write-Host "User is not assigned to Zoom Workplace Phones"
-}
+        try {
+            # Disable mailbox forwarding
+            Write-StatusMessage -Message "Disabling existing mailbox forwarding" -Type INFO
+            try {
+                Set-Mailbox -Identity $Mailbox.Identity -ForwardingAddress $null -ForwardingSmtpAddress $null -ErrorAction Stop
+                Write-StatusMessage -Message "Successfully disabled existing forwarding" -Type OK
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disable existing mailbox forwarding"
+                Add-ErrorType -ErrorType Mailbox
+            }
 
-#Disconnect from Exchange and Graph
-Disconnect-ExchangeOnline -Confirm:$false
-Disconnect-Graph
+            # Change mailbox to shared
+            Write-StatusMessage -Message "Converting to shared mailbox" -Type INFO
+            try {
+                Set-Mailbox -Identity $Mailbox.Identity -Type Shared -ErrorAction Stop
+                Write-StatusMessage -Message "Successfully converted to shared mailbox" -Type OK
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to convert to shared mailbox"
+                Add-ErrorType -ErrorType Mailbox
+            }
 
-## Connect to PnP PowerShell
-$PnPAppId = "24e3c6ad-9658-4a0d-b85f-82d67d148449"
-$Org = "compassmsp.onmicrosoft.com"
-$PnPCert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { ($_.Subject -like '*CN=PnP PowerShell*') -and ($_.NotAfter -gt $([DateTime]::Now)) }
-if ($NULL -eq $PnPCert) {
-    Write-Host "No valid PnP PowerShell certificates found in the LocalMachine\My store. Press any key to exit script." -ForegroundColor Red -BackgroundColor Black
+            # Set forwarding if specified
+            if ($ForwardingAddress) {
+                try {
+                    $forwardUser = Get-Mailbox $ForwardingAddress -ErrorAction Stop
+                    Write-StatusMessage -Message "Setting up forwarding to $($forwardUser.PrimarySmtpAddress)" -Type INFO
+
+                    $mailboxParams = @{
+                        Identity                   = $Mailbox.Identity
+                        ForwardingAddress         = $ForwardingAddress
+                        DeliverToMailboxAndForward = $False
+                        ErrorAction               = 'Stop'
+                    }
+
+                    Set-Mailbox @mailboxParams
+                    Write-StatusMessage -Message "Successfully set up mail forwarding" -Type OK
+                }
+                catch {
+                    Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to set up mail forwarding"
+                    Add-ErrorType -ErrorType Mailbox
+                }
+            }
+
+            # Grant access if specified
+            if ($GrantAccessTo) {
+                try {
+                    $accessUser = Get-Mailbox $GrantAccessTo -ErrorAction Stop
+                    Write-StatusMessage -Message "Granting full access to $($accessUser.PrimarySmtpAddress)" -Type INFO
+
+                    $mailboxPermissionParams = @{
+                        Identity        = $Mailbox.Identity
+                        User           = $GrantAccessTo
+                        AccessRights   = 'FullAccess'
+                        InheritanceType = 'All'
+                        AutoMapping     = $true
+                        ErrorAction    = 'Stop'
+                    }
+
+                    Add-MailboxPermission @mailboxPermissionParams
+                    Write-StatusMessage -Message "Successfully granted full access permissions" -Type OK
+                }
+                catch {
+                    Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to grant mailbox permissions"
+                    Add-ErrorType -ErrorType Permission
+                }
+            }
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Set-TerminatedMailbox"
+            Add-ErrorType -ErrorType Mailbox
+            throw
+        }
+    }
+
+    function Remove-UserFromGroups {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$userId,
+
+            [Parameter()]
+            [string]$ExportPath
+        )
+
+        try {
+            # Define filter parameters
+            $filterParams = @{
+                FilterScript = {
+                    $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and
+                    $null -eq $_.AdditionalProperties.membershipRule -and
+                    $_.onPremisesSyncEnabled -ne 'True'
+                }
+            }
+
+            # Define select parameters
+            $selectParams = @{
+                Property = @(
+                    'Id'
+                    @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }
+                    @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
+                    @{n = 'groupType'; e = { $_.AdditionalProperties.groupTypes } }
+                    @{n = 'securityEnabled'; e = { $_.AdditionalProperties.securityEnabled } }
+                )
+            }
+
+            Write-StatusMessage -Message "Finding Azure groups" -Type INFO
+
+            try {
+                $All365Groups = Get-MgUserMemberOf -UserId $userId -ErrorAction Stop |
+                    Where-Object @filterParams |
+                    Select-Object @selectParams
+
+                Write-StatusMessage -Message "Found $($All365Groups.Count) groups to process" -Type INFO
+
+                # Export groups if path provided
+                if ($ExportPath) {
+                    try {
+                        $All365Groups | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
+                        Write-StatusMessage -Message "Exported user groups to: $ExportPath" -Type OK
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to export user groups"
+                        Add-ErrorType -ErrorType General
+                    }
+                }
+
+                foreach ($365Group in $All365Groups) {
+                    Write-StatusMessage -Message "Processing group: $($365Group.DisplayName)" -Type INFO
+
+                    try {
+                        if ($365Group.securityEnabled -eq 'True' -or $365Group.groupType -eq 'Unified') {
+                            Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $userId -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed from Security/Unified Group: $($365Group.DisplayName)" -Type OK
+                        }
+                        else {
+                            Remove-DistributionGroupMember -Identity $365Group.Id -Member $userId -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed from Distribution Group: $($365Group.DisplayName)" -Type OK
+                        }
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove from group $($365Group.DisplayName)"
+                        Add-ErrorType -ErrorType Group
+                    }
+                }
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get user group memberships"
+                Add-ErrorType -ErrorType Group
+                throw
+            }
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserFromGroups"
+            Add-ErrorType -ErrorType Group
+            throw
+        }
+    }
+
+    function Remove-UserFromDirectoryRoles {
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory)]
+            [string]$UserId
+        )
+
+        try {
+            Write-StatusMessage -Message "Checking for directory role memberships..." -Type INFO
+
+            try {
+                # Get all directory roles the user is a member of
+                $directoryRoles = Get-MgUserMemberOf -UserId $UserId -ErrorAction Stop |
+                    Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.directoryRole' }
+
+                if (-not $directoryRoles) {
+                    Write-StatusMessage -Message "User is not a member of any directory roles" -Type INFO
+                    return
+                }
+
+                Write-StatusMessage -Message "Found $($directoryRoles.Count) directory role(s)" -Type INFO
+
+                foreach ($role in $directoryRoles) {
+                    try {
+                        $roleId = $role.Id
+                        $roleName = $role.AdditionalProperties.displayName
+
+                        Write-StatusMessage -Message "Removing from role: $roleName" -Type INFO
+                        Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $roleId -DirectoryObjectId $UserId -ErrorAction Stop
+                        Write-StatusMessage -Message "Successfully removed from role: $roleName" -Type OK
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove from role $roleName"
+                        Add-ErrorType -ErrorType Permission
+                    }
+                }
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get directory roles"
+                Add-ErrorType -ErrorType Permission
+                throw
+            }
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserFromDirectoryRoles"
+            Add-ErrorType -ErrorType Permission
+            throw
+        }
+    }
+
+    function Remove-UserLicenses {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$UserId,
+
+            [Parameter()]
+            [string]$ExportPath
+        )
+
+        try {
+            Write-StatusMessage -Message "Starting license removal process" -Type INFO
+
+            try {
+                # Get and export license details if path provided
+                $licenseDetails = Get-MgUserLicenseDetail -UserId $UserId -ErrorAction Stop |
+                    Select-Object SkuPartNumber, SkuId, Id
+
+                if ($ExportPath) {
+                    try {
+                        $licenseDetails | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
+                        Write-StatusMessage -Message "Exported user licenses to: $ExportPath" -Type OK
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to export user licenses"
+                        Add-ErrorType -ErrorType License
+                    }
+                }
+
+                # Define primary licenses that must be removed last
+                $primaryLicenses = @(
+                    "O365_BUSINESS_ESSENTIALS"
+                    "SPE_E3"
+                    "SPB"
+                    "EXCHANGESTANDARD"
+                )
+
+                # Step 1: Remove Ancillary Licenses
+                foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -notin $primaryLicenses })) {
+                    try {
+                        Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+                        Write-StatusMessage -Message "Removed Ancillary License: $($license.SkuPartNumber)" -Type OK
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove Ancillary License $($license.SkuPartNumber)"
+                        Add-ErrorType -ErrorType License
+                    }
+                }
+
+                # Step 2: Remove Primary Licenses
+                foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -in $primaryLicenses })) {
+                    try {
+                        Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+                        Write-StatusMessage -Message "Removed Primary License: $($license.SkuPartNumber)" -Type OK
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove Primary License $($license.SkuPartNumber)"
+                        Add-ErrorType -ErrorType License
+                    }
+                }
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get user licenses"
+                Add-ErrorType -ErrorType License
+                throw
+            }
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserLicenses"
+            Add-ErrorType -ErrorType License
+            throw
+        }
+    }
+
+    function Remove-UserFromZoom {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$UserId
+        )
+
+        try {
+            Write-StatusMessage -Message "Checking Zoom assignments..." -Type INFO
+            try {
+                $ZoomSSO = Get-MgUserAppRoleAssignment -UserId $UserId -ErrorAction Stop |
+                    Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
+
+                if ($ZoomSSO) {
+                    try {
+                        Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $ZoomSSO.Id -UserId $UserId -ErrorAction Stop
+                        Write-StatusMessage -Message "Successfully removed user from Zoom Workplace Phones" -Type OK
+                    }
+                    catch {
+                        Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove Zoom assignment"
+                        Add-ErrorType -ErrorType Permission
+                    }
+                }
+                else {
+                    Write-StatusMessage -Message "User is not assigned to Zoom Workplace Phones" -Type INFO
+                }
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get Zoom assignments"
+                Add-ErrorType -ErrorType Permission
+                throw
+            }
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserFromZoom"
+            Add-ErrorType -ErrorType General
+            throw
+        }
+    }
+
+    function Set-TerminatedOneDrive {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$UserPrincipalName,
+
+            [Parameter()]
+            [switch]$SetReadOnly,
+
+            [Parameter()]
+            [string]$OneDriveUser,
+
+            [Parameter()]
+            [int]$MaxRetries = 3,
+
+            [Parameter()]
+            [int]$RetryDelaySeconds = 30
+        )
+
+        try {
+            # Get OneDrive URL with retry logic
+            Write-StatusMessage -Message "Getting OneDrive URL" -Type INFO
+            $retryCount = 0
+            $success = $false
+            $UserOneDriveURL = $null
+
+            do {
+                try {
+                    $profileProps = Get-PnPUserProfileProperty -Account $UserPrincipalName -Properties PersonalUrl -ErrorAction Stop
+                    $UserOneDriveURL = $profileProps.PersonalUrl
+
+                    if ($UserOneDriveURL) {
+                        $success = $true
+                        Write-StatusMessage -Message "Successfully retrieved OneDrive URL" -Type OK
+                    }
+                    else {
+                        throw [System.InvalidOperationException]::new("OneDrive URL is empty")
+                    }
+                }
+                catch {
+                    $retryCount++
+                    if ($retryCount -ge $MaxRetries) {
+                        Write-StatusMessage -Message "Failed to get OneDrive URL after $MaxRetries attempts" -Type WARN
+                        $response = Read-Host "Would you like to try again? (Y/N)"
+                        if ($response -eq 'Y') {
+                            $retryCount = 0
+                            Write-StatusMessage -Message "Retrying OneDrive URL retrieval..." -Type INFO
+                        }
+                        else {
+                            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "OneDrive URL retrieval skipped by user"
+                            Add-ErrorType -ErrorType OneDrive
+                            return
+                        }
+                    }
+                    else {
+                        Write-StatusMessage -Message "Attempt $retryCount of $MaxRetries failed. Waiting $RetryDelaySeconds seconds..." -Type INFO
+                        Start-Sleep -Seconds $RetryDelaySeconds
+                    }
+                }
+            } while (-not $success -and $retryCount -lt $MaxRetries)
+
+            if (-not $UserOneDriveURL) {
+                Write-StatusMessage -Message "OneDrive URL not found for user" -Type WARN
+                return
+            }
+
+            # Verify OneDrive site exists
+            Write-StatusMessage -Message "Verifying OneDrive site accessibility" -Type INFO
+            try {
+                $site = Get-PnPTenantSite -Url $UserOneDriveURL -ErrorAction Stop
+                Write-StatusMessage -Message "OneDrive site verified" -Type OK
+            }
+            catch {
+                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "OneDrive site not accessible"
+                Add-ErrorType -ErrorType OneDrive
+
+                $response = Read-Host "Would you like to wait for OneDrive provisioning? (Y/N)"
+                if ($response -eq 'Y') {
+                    $retryCount = 0
+                    do {
+                        try {
+                            Start-Sleep -Seconds $RetryDelaySeconds
+                            $site = Get-PnPTenantSite -Url $UserOneDriveURL -ErrorAction Stop
+                            $success = $true
+                            Write-StatusMessage -Message "OneDrive site now accessible" -Type OK
+                        }
+                        catch {
+                            $retryCount++
+                            Write-StatusMessage -Message "Attempt $retryCount of $MaxRetries. Waiting $RetryDelaySeconds seconds..." -Type INFO
+                        }
+                    } while (-not $success -and $retryCount -lt $MaxRetries)
+                }
+                else {
+                    Write-StatusMessage -Message "OneDrive configuration skipped by user" -Type WARN
+                    return
+                }
+            }
+
+            # Set OneDrive to read-only if specified
+            if ($SetReadOnly) {
+                Write-StatusMessage -Message "Setting OneDrive to Read Only" -Type INFO
+                try {
+                    Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly -ErrorAction Stop
+                    Write-StatusMessage -Message "Successfully set OneDrive to read-only" -Type OK
+                }
+                catch {
+                    Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to set OneDrive to read-only"
+                    Add-ErrorType -ErrorType OneDrive
+                }
+            }
+
+            # Grant access if OneDriveUser is provided
+            if ($OneDriveUser) {
+                try {
+                    Write-StatusMessage -Message "Granting OneDrive access to $OneDriveUser" -Type INFO
+
+                    $pnpParams = @{
+                        Url         = $UserOneDriveURL
+                        Owners      = $OneDriveUser
+                        ErrorAction = 'Stop'
+                    }
+
+                    Set-PnPTenantSite @pnpParams
+                    Write-StatusMessage -Message "Successfully granted OneDrive access" -Type OK
+                    Write-StatusMessage -Message "OneDrive URL: $UserOneDriveURL" -Type INFO
+
+                    do {
+                        $response = Read-Host "Please copy the OneDrive URL above. Have you copied it? (y/n)"
+                    } while ($response -ne 'y')
+                }
+                catch {
+                    Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to grant OneDrive access"
+                    Add-ErrorType -ErrorType OneDrive
+                }
+            }
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Set-TerminatedOneDrive"
+            Add-ErrorType -ErrorType OneDrive
+            throw
+        }
+    }
+
+    function Start-ADSyncAndFinalize {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory)]
+            [string]$User,
+
+            [Parameter(Mandatory)]
+            [string]$UserPrincipalName,
+
+            [Parameter(Mandatory)]
+            [string]$DestinationOU,
+
+            [Parameter()]
+            [string]$GrantUserFullControl,
+
+            [Parameter()]
+            [string]$SetUserMailFWD,
+
+            [Parameter()]
+            [string]$GrantUserOneDriveAccess,
+
+            [Parameter()]
+            [string]$ExportPath
+        )
+
+        try {
+            # Start AD Sync
+            Write-StatusMessage -Message "Starting AD sync cycle" -Type INFO
+            try {
+                Import-Module -Name ADSync -UseWindowsPowerShell -ErrorAction Stop -Verbose:$false
+                $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
+                Write-StatusMessage -Message "AD sync cycle initiated successfully" -Type OK
+            }
+            catch {
+                try {
+                    # Fallback to direct PowerShell execution if module import fails
+                    $null = powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "PowerShell execution failed with exit code: $LASTEXITCODE"
+                    }
+                    Write-StatusMessage -Message "AD sync cycle initiated through PowerShell" -Type OK
+                }
+                catch {
+                    Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to start AD sync cycle"
+                    Add-ErrorType -ErrorType Sync
+                    throw
+                }
+            }
+
+            # Create summary message
+            $summaryParts = @(
+                "Summary of Actions:",
+                "----------------------------------------",
+                "User $User should now be disabled unless any errors occurred during the process.",
+                "User disabled: $UserPrincipalName",
+                "Moved to OU: $DestinationOU"
+            )
+
+            if ($GrantUserFullControl) {
+                $summaryParts += "Mailbox access granted to: $GrantUserFullControl"
+            }
+            if ($SetUserMailFWD) {
+                $summaryParts += "Mail forwarded to: $SetUserMailFWD"
+            }
+            if ($GrantUserOneDriveAccess) {
+                $summaryParts += "OneDrive access granted to: $GrantUserOneDriveAccess"
+            }
+            if ($ExportPath) {
+                $summaryParts += "Exports saved to: $ExportPath"
+            }
+
+            $summaryParts += "----------------------------------------"
+            $summaryMessage = $summaryParts -join "`n"
+
+            Write-StatusMessage -Message $summaryMessage -Type SUMMARY
+
+            # Add error summary if there were errors
+            if ($script:errorCount -gt 0) {
+                Write-StatusMessage -Message (Get-ErrorSummary) -Type SUMMARY
+            }
+
+            Exit-Script -Message "$User has been successfully disabled." -ExitCode Success
+        }
+        catch {
+            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Start-ADSyncAndFinalize"
+            Add-ErrorType -ErrorType General
+            throw
+        }
+    }
+
+    Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
+
+    Write-Host "`n  Script Ready!" -ForegroundColor Cyan
+    Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-    exit
-}
-Connect-PnPOnline -Url compassmsp-admin.sharepoint.com -ClientId $PnPAppId -Tenant $Org -Thumbprint $($PNPCert.Thumbprint)
+    Clear-Host
 
-## Set OneDrive as Read Only
-$UserOneDriveURL = (Get-PnPUserProfileProperty -Account $UserFromAD.UserPrincipalName -Properties PersonalUrl).PersonalUrl
-Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly
-
-# Set OneDrive grant access
-if ($SPOAccessConfirmation -eq 'y') {
-
+    #Region Main Execution
     try {
-        $GetUserOneDriveAccess = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop
-        $GetUserOneDriveAccessCheck = 'yes'
-        Write-Host "Granting OneDrive access rights to $($GetUserOneDriveAccess.PrimarySmtpAddress)"
+
+        # Step 0: Initialization
+        Write-ProgressStep -StepName $progressSteps[0].Name -Status $progressSteps[0].Description
+
+        # Load configuration
+        $config = Get-ScriptConfig
+
+        # Get connection parameters from config
+        $Organization = $config.ExchangeOnline.Organization
+        $ExOAppId = $config.ExchangeOnline.AppId
+        $ExOCertSubject = $Config.ExchangeOnline.CertificateSubject
+        $GraphAppId = $config.Graph.AppId
+        $tenantID = $config.Graph.TenantId
+        $GraphCertSubject = $Config.Graph.CertificateSubject
+        $PnPAppId = $config.PnPSharePoint.AppId
+        $PnPUrl = $config.PnPSharePoint.Url
+        $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
+        $localExportPath = $config.Paths.TermExportPath
+
+        Connect-ServiceEndpoints
+
+        # Call the custom input window function
+        $result = Show-CustomTerminationWindow
+        if (-not $result) {
+            Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
+        }
+
+        # Get values from window
+        $User = $result.InputUser
+        $GrantUserFullControl = $result.InputUserFullControl
+        $SetUserMailFWD = $result.InputUserFWD
+        $GrantUserOneDriveAccess = $result.InputUserOneDriveAccess
+        $SetOneDriveReadOnly = $result.SetOneDriveReadOnly
+
+        # Set confirmation flags
+        $SPOAccessConfirmation = if ($GrantUserOneDriveAccess) { 'y' } else { 'n' }
+
+        # Validate OneDrive access user if specified
+        $oneDriveUser = $null
+        if ($SPOAccessConfirmation -eq 'y') {
+            try {
+                Write-StatusMessage -Message "Validating OneDrive access user..." -Type 'INFO'
+                $oneDriveUser = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop
+                Write-StatusMessage -Message "OneDrive access user validated" -Type 'OK'
+            } catch {
+                Write-StatusMessage -Message "Invalid OneDrive access user specified: $_" -Type 'ERROR'
+                Write-StatusMessage -Message "OneDrive access user validation failed. Skipping OneDrive access grant." -Type 'ERROR'
+                $SPOAccessConfirmation = 'n'
+            }
+        }
+
+        # Step 1: User Input
+        Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].Description
+        $userInfo = Get-TerminationPrerequisites -User $User
+
+        # Extract variables for use in the rest of the script
+        $UserFromAD = $userInfo.UserFromAD
+        $DestinationOU = $userInfo.DestinationOU
+        $365Mailbox = $userInfo.Mailbox
+        $MgUser = $userInfo.MgUser
+
+        # Step 2: AD Tasks
+        Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
+        Disable-ADUser -UserFromAD $UserFromAD -DestinationOU $DestinationOU
+
+        # Step 3: Azure/Entra Tasks
+        Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
+
+        Remove-UserSessions -UserPrincipalName $UserFromAD.UserPrincipalName
+
+        $mailboxParams = @{
+            Mailbox = $365Mailbox
+        }
+
+        # Only add these parameters if they exist and have values
+        if ($SetUserMailFWD) {
+            $mailboxParams['ForwardingAddress'] = $SetUserMailFWD
+
+        }
+
+        if ($GrantUserFullControl) {
+            $mailboxParams['GrantAccessTo'] = $GrantUserFullControl
+        }
+
+        Set-TerminatedMailbox @mailboxParams
+
+        # Step 4: Remove Directory Roles
+        Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
+        Remove-UserFromDirectoryRoles -UserId $MgUser.Id
+
+        # Step 5: Remove Groups
+        Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
+        $groupExportPath = Join-Path $localExportPath "$($User)_Groups_Id.csv"
+        Remove-UserFromGroups -UserId $MgUser.Id -ExportPath $groupExportPath
+
+        # Step 6: Remove Licenses
+        Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
+        $licensePath = Join-Path $localExportPath "$($User)_License_Id.csv"
+        Remove-UserLicenses -UserId $UserFromAD.UserPrincipalName -ExportPath $licensePath
+
+        # Step 7: Send Email
+        Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
+        $emailSubject = "KB4 – Remove User"
+        $emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)"
+        $MsgFrom = $config.Email.NotificationFrom
+        $ToAddress = $config.Email.NotificationTo
+        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+
+        # Step 8: Remove from Zoom
+        Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
+        Remove-UserFromZoom -UserId $MgUser.Id
+
+        # Step 9: Configure OneDrive
+        Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
+
+        Write-StatusMessage -Message "Disconnecting from Exchange Online and Graph. This may take a few moments..." -Type INFO
+
+        Connect-ServiceEndpoints -Disconnect -ExchangeOnline -Graph
+
+        Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type INFO
+
+        Connect-ServiceEndpoints -SharePoint
+
+        $oneDriveParams = @{
+            UserPrincipalName = $UserFromAD.UserPrincipalName
+        }
+
+        if ($SetOneDriveReadOnly) {
+            $oneDriveParams['SetReadOnly'] = $true
+        }
+
+        if ($SPOAccessConfirmation -eq 'y') {
+            $oneDriveParams['OneDriveUser'] = $oneDriveUser
+        }
+
+        Set-TerminatedOneDrive @oneDriveParams
+
+        # Step 10: Final Sync and Summary
+        Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
+
+        $null = Disconnect-PnPOnline
+
+        Start-ADSyncAndFinalize -User $User `
+            -UserPrincipalName $UserFromAD.UserPrincipalName `
+            -DestinationOU $DestinationOU `
+            -GrantUserFullControl $GrantUserFullControl `
+            -SetUserMailFWD $SetUserMailFWD `
+            -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
+            -ExportPath $localExportPath
+
     } catch {
-        Write-Host "User $GrantUserOneDriveAccess not found. Skipping OneDrive access grant" -ForegroundColor Red -BackgroundColor Black
-        $GetUserOneDriveAccessCheck = 'no'
+        Exit-Script -Message "Failed to complete termination process: $_" -ExitCode GeneralError
     }
 
-} Else {
-    Write-Host "Skipping OneDrive access grant"
+    # Script duration tracking
+    if ($script:errorCount -gt 0) {
+        Write-StatusMessage "Completed with $script:errorCount errors" -Type WARN
+    }
+
+    $endTime = Get-Date
+    $duration = $endTime - $startTime
+    Write-StatusMessage "Script completed in $($duration.TotalMinutes.ToString('F2')) minutes" -Type INFO
+} finally {
+    Stop-Job $loadingJob | Out-Null
+    Remove-Job $loadingJob | Out-Null
 }
 
-if ($GetUserOneDriveAccessCheck -eq 'yes') {
-    Set-PnPTenantSite -Url $UserOneDriveURL -Owners $GrantUserOneDriveAccess
-    $UserOneDriveURL
-    Read-Host 'Please copy the OneDrive URL. Press any key to continue'
+#Region Functions
+# Add error handling helper functions
+function Write-ErrorRecord {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord,
+
+        [Parameter()]
+        [string]$CustomMessage,
+
+        [Parameter()]
+        [ValidateSet('Warning', 'Error')]
+        [string]$ErrorLevel = 'Error'
+    )
+
+    # Build detailed error message
+    $errorDetails = @(
+        "Error Details:"
+        "-------------"
+        "Message: $($ErrorRecord.Exception.Message)"
+        "Category: $($ErrorRecord.CategoryInfo.Category)"
+        "Target: $($ErrorRecord.TargetObject)"
+        "Script: $($ErrorRecord.InvocationInfo.ScriptName)"
+        "Line: $($ErrorRecord.InvocationInfo.ScriptLineNumber)"
+        "Command: $($ErrorRecord.InvocationInfo.MyCommand)"
+    )
+
+    if ($CustomMessage) {
+        $errorDetails = @("$CustomMessage", "") + $errorDetails
+    }
+
+    # Log the error
+    $errorMessage = $errorDetails -join "`n"
+    Write-StatusMessage -Message $errorMessage -Type $ErrorLevel.ToUpper()
+    Write-Log -Message $errorMessage -Level $ErrorLevel.ToUpper()
+
+    # Add to error count if it's an error
+    if ($ErrorLevel -eq 'Error') {
+        $script:errorCount++
+    }
 }
 
-Disconnect-PnPOnline
+function Add-ErrorType {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet(
+            'Configuration',
+            'Connection',
+            'Permission',
+            'Validation',
+            'Sync',
+            'License',
+            'Group',
+            'Mailbox',
+            'OneDrive',
+            'General'
+        )]
+        [string]$ErrorType
+    )
 
-#endregion Office365
+    if (-not $script:errorTypes) {
+        $script:errorTypes = @{
+            Configuration = 0
+            Connection    = 0
+            Permission    = 0
+            Validation    = 0
+            Sync          = 0
+            License       = 0
+            Group         = 0
+            Mailbox       = 0
+            OneDrive      = 0
+            General       = 0
+        }
+    }
 
-#Start AD Sync
-powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+    $script:errorTypes[$ErrorType]++
+}
 
-Write-Host "User $($User) should now be disabled unless any errors occurred during the process."
+function Get-ErrorSummary {
+    [CmdletBinding()]
+    param()
+
+    if ($script:errorCount -eq 0) {
+        return "No errors occurred during execution"
+    }
+
+    $summary = @(
+        "Error Summary:"
+        "-------------"
+        "Total Errors: $script:errorCount"
+        ""
+        "Error Types:"
+    )
+
+    foreach ($type in $script:errorTypes.Keys | Sort-Object) {
+        if ($script:errorTypes[$type] -gt 0) {
+            $summary += "- $type : $($script:errorTypes[$type])"
+        }
+    }
+
+    return $summary -join "`n"
+}
