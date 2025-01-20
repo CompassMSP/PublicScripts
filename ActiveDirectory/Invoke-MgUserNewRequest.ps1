@@ -235,8 +235,7 @@ try {
         try {
             if ($Type -eq 'SUMMARY') {
                 Write-Host $Message -ForegroundColor $config[$Type].Color
-            }
-            else {
+            } else {
                 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
                 $statusPadded = $config[$Type].Status.PadRight(7)
                 Write-Host "[$timestamp] [$statusPadded] $Message" -ForegroundColor $config[$Type].Color
@@ -246,8 +245,7 @@ try {
             if (-not ([System.Management.Automation.CallStackFrame]$MyInvocation.GetStackTrace() -match 'Write-Log')) {
                 Write-Log -Message $Message -Level $Type
             }
-        }
-        catch {
+        } catch {
             Write-Host "Failed to write status message: $_" -ForegroundColor Red
         }
     }
@@ -315,8 +313,7 @@ try {
             Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
             try {
                 Connect-ServiceEndpoints -Disconnect
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disconnect services during exit" -ErrorLevel Warning
                 Add-ErrorType -ErrorType Connection
             }
@@ -332,8 +329,7 @@ try {
 
             # Return the appropriate exit code
             exit $exitCodes[$ExitCode]
-        }
-        catch {
+        } catch {
             # Catch-all for any unexpected errors during exit
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error during script exit"
             Add-ErrorType -ErrorType General
@@ -451,8 +447,7 @@ try {
             if ($Level -eq 'ERROR') {
                 $script:errorCount++
             }
-        }
-        catch {
+        } catch {
             Write-StatusMessage -Message "Failed to write to log: $_" -Type ERROR
             Add-ErrorType -ErrorType General
         }
@@ -628,8 +623,7 @@ try {
                     try {
                         Disconnect-ExchangeOnline -Confirm:$false -ErrorAction Stop
                         Write-StatusMessage -Message "Disconnected from Exchange Online" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disconnect from Exchange Online"
                         Add-ErrorType -ErrorType Connection
                     }
@@ -639,8 +633,7 @@ try {
                     try {
                         Disconnect-MgGraph -ErrorAction Stop
                         Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disconnect from Microsoft Graph"
                         Add-ErrorType -ErrorType Connection
                     }
@@ -650,8 +643,7 @@ try {
                     try {
                         Disconnect-PnPOnline -ErrorAction Stop
                         Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disconnect from SharePoint Online"
                         Add-ErrorType -ErrorType Connection
                     }
@@ -664,8 +656,8 @@ try {
                 Write-StatusMessage -Message "Connecting to Exchange Online..." -Type INFO
                 try {
                     $ExOCert = Get-ChildItem Cert:\LocalMachine\My |
-                        Where-Object { ($_.Subject -like "*$ExOCertSubject*") -and ($_.NotAfter -gt (Get-Date)) } |
-                        Select-Object -First 1
+                    Where-Object { ($_.Subject -like "*$ExOCertSubject*") -and ($_.NotAfter -gt (Get-Date)) } |
+                    Select-Object -First 1
 
                     if (-not $ExOCert) {
                         throw "No valid Exchange Online certificate found"
@@ -674,8 +666,7 @@ try {
                     Connect-ExchangeOnline -AppId $ExOAppId -Organization $Organization `
                         -CertificateThumbprint $ExOCert.Thumbprint -ShowBanner:$false -ErrorAction Stop
                     Write-StatusMessage -Message "Connected to Exchange Online" -Type OK
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to connect to Exchange Online"
                     Add-ErrorType -ErrorType Connection
                     throw
@@ -686,8 +677,8 @@ try {
                 Write-StatusMessage -Message "Connecting to Microsoft Graph..." -Type INFO
                 try {
                     $GraphCert = Get-ChildItem Cert:\LocalMachine\My |
-                        Where-Object { ($_.Subject -like "*$GraphCertSubject*") -and ($_.NotAfter -gt (Get-Date)) } |
-                        Select-Object -First 1
+                    Where-Object { ($_.Subject -like "*$GraphCertSubject*") -and ($_.NotAfter -gt (Get-Date)) } |
+                    Select-Object -First 1
 
                     if (-not $GraphCert) {
                         throw "No valid Graph certificate found"
@@ -696,8 +687,7 @@ try {
                     Connect-MgGraph -ClientId $GraphAppId -TenantId $tenantId `
                         -Certificate $GraphCert -ErrorAction Stop
                     Write-StatusMessage -Message "Connected to Microsoft Graph" -Type OK
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to connect to Microsoft Graph"
                     Add-ErrorType -ErrorType Connection
                     throw
@@ -710,15 +700,13 @@ try {
                     Connect-PnPOnline -Url $PnPUrl -ClientId $PnPAppId -Tenant $Organization `
                         -CertificateThumbprint $PnPCert.Thumbprint -ErrorAction Stop
                     Write-StatusMessage -Message "Connected to SharePoint Online" -Type OK
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to connect to SharePoint Online"
                     Add-ErrorType -ErrorType Connection
                     throw
                 }
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Connect-ServiceEndpoints"
             Add-ErrorType -ErrorType Connection
             throw
@@ -726,10 +714,105 @@ try {
     }
 
     function Show-NewUserRequestWindow {
+        <#
+        .SYNOPSIS
+        Shows a GUI window for creating a new user request.
+
+        .DESCRIPTION
+        Displays a WPF window that collects information needed to create a new user,
+        including user details, mobile number, and license selections.
+
+        .OUTPUTS
+        [PSCustomObject] Returns a custom object with the following properties:
+            InputNewUser           : [string] The new user's display name (First Last format)
+            InputNewMobile        : [string] Formatted mobile number or null if not provided
+            InputUserToCopy       : [string] Template user's display name to copy permissions from
+            InputRequiredLicense  : [hashtable] Selected required license with properties:
+                - SkuId          : [string] The license SKU ID
+                - DisplayName    : [string] The friendly name of the license
+            InputAncillaryLicenses: [array] Array of selected additional licenses, each containing:
+                - SkuId          : [string] The license SKU ID
+                - DisplayName    : [string] The friendly name of the license
+        Returns $null if the user cancels the operation.
+        #>
+
         # 1. Add required assemblies
         Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
         # 2. UI Assembly Helper Functions
+        function New-ScrollingStackPanel {
+            param (
+                [int]$MaxHeight = 0,
+                [string]$Margin = "5"
+            )
+            $scrollViewer = New-FormScrollViewer -MaxHeight $MaxHeight -Margin $Margin
+            $stackPanel = New-Object System.Windows.Controls.StackPanel
+            $scrollViewer.Content = $stackPanel
+            return @{
+                ScrollViewer = $scrollViewer
+                StackPanel   = $stackPanel
+            }
+        }
+
+        function New-FormScrollViewer {
+            param (
+                [int]$MaxHeight = 0,
+                [string]$Margin = "5"
+            )
+            $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
+            $scrollViewer.VerticalScrollBarVisibility = "Auto"
+            if ($MaxHeight -gt 0) {
+                $scrollViewer.MaxHeight = $MaxHeight
+            }
+            $scrollViewer.Margin = $Margin
+            return $scrollViewer
+        }
+
+        function New-FormWindow {
+            param (
+                [string]$Title,
+                [int]$Width = 500,
+                [int]$Height,
+                [string]$Background = '#F0F0F0'
+            )
+            $window = New-Object System.Windows.Window
+            $window.Title = $Title
+            $window.Width = $Width
+            $window.Height = $Height
+            $window.WindowStartupLocation = 'CenterScreen'
+            $window.Background = $Background
+            return $window
+        }
+
+        function New-ButtonPanel {
+            param (
+                [string]$Margin = '0,10,0,0'
+            )
+            $buttonPanel = New-Object System.Windows.Controls.StackPanel
+            $buttonPanel.Orientation = 'Horizontal'
+            $buttonPanel.HorizontalAlignment = 'Right'
+            $buttonPanel.Margin = $Margin
+            return $buttonPanel
+        }
+
+        function New-FormDockPanel {
+            param (
+                [string]$Margin = '0,0,0,5'
+            )
+            $dockPanel = New-Object System.Windows.Controls.DockPanel
+            $dockPanel.Margin = $Margin
+            return $dockPanel
+        }
+
+        function New-MainPanel {
+            param (
+                [string]$Margin = '10'
+            )
+            $mainPanel = New-Object System.Windows.Controls.StackPanel
+            $mainPanel.Margin = $Margin
+            return $mainPanel
+        }
+
         function New-HeaderPanel {
             param ([string]$Text)
             $headerPanel = New-Object System.Windows.Controls.Border
@@ -786,6 +869,38 @@ try {
                 Group = $group
                 Stack = $stack
             }
+        }
+
+        function New-FormCheckBox {
+            param (
+                [string]$Content,
+                [string]$ToolTip,
+                [string]$Margin = "5,5,5,5",
+                [bool]$IsChecked = $false
+            )
+            $checkbox = New-Object System.Windows.Controls.CheckBox
+            $checkbox.Content = $Content
+            $checkbox.ToolTip = $ToolTip
+            $checkbox.Margin = $Margin
+            $checkbox.IsChecked = $IsChecked
+            return $checkbox
+        }
+
+        function New-FormComboBox {
+            param (
+                [string]$ToolTip,
+                [string]$Margin = "0,0,0,10",
+                [string]$Padding = "5,3,5,3",
+                [string]$DisplayMemberPath
+            )
+            $comboBox = New-Object System.Windows.Controls.ComboBox
+            $comboBox.Margin = $Margin
+            $comboBox.Padding = $Padding
+            $comboBox.ToolTip = $ToolTip
+            if ($DisplayMemberPath) {
+                $comboBox.DisplayMemberPath = $DisplayMemberPath
+            }
+            return $comboBox
         }
 
         # 3. Validation Helper Functions
@@ -862,8 +977,8 @@ try {
                 }
                 @{
                     DisplayName = "$($SkuDisplayName) (Available: $available)"
-                    SkuId = $_.SkuId
-                    SortName = $SkuDisplayName
+                    SkuId       = $_.SkuId
+                    SortName    = $SkuDisplayName
                 }
             } | Sort-Object { $_.SortName }
         }
@@ -945,18 +1060,44 @@ try {
         }
         $licenseInfo = Get-FormattedLicenseInfo -Skus $skus
 
-        # Create window and main containers
-        $window = New-Object System.Windows.Window
-        $window.Title = "New User Request"
-        $window.Width = 500
-        $window.Height = 800
-        $window.WindowStartupLocation = 'CenterScreen'
-        $window.Background = '#F0F0F0'
+        # Define required and ignored licenses
+        $requiredLicenses = @(
+            "Exchange Online (Plan 1)",
+            "Office 365 E3",
+            "Microsoft 365 Business Basic",
+            "Microsoft 365 E3",
+            "Microsoft 365 Business Premium"
+        )
 
-        $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
-        $scrollViewer.VerticalScrollBarVisibility = "Auto"
-        $mainPanel = New-Object System.Windows.Controls.StackPanel
-        $mainPanel.Margin = '10'
+        $ignoredLicenses = @(
+            "Microsoft Teams Rooms Standard",
+            "Microsoft Teams Phone Standard",
+            "Power Automate Premium",
+            "Power Apps Premium",
+            "Power BI Pro",
+            "Power BI Standard",
+            "Microsoft 365 Lighthouse",
+            "Rights Management Service Basic Content Protection",
+            "Communications Credits",
+            "Rights Management Adhoc",
+            "Power Virtual Agents Viral Trial",
+            "Windows Store for Business",
+            "Skype for Business PSTN Domestic Calling",
+            "Microsoft Business Center",
+            "Microsoft Teams Phone Resource Account",
+            "Microsoft PowerApps for Developer",
+            "Microsoft Power Apps Plan 2 Trial",
+            "Microsoft Power Automate Free",
+            "Microsoft_Copilot_for_Finance_trial",
+            "STREAM",
+            "Project Plan 3 (for Department)",
+            "Dynamics 365 Business Central for IWs"
+        )
+
+        # Create window and main containers
+        $window = New-FormWindow -Title "New User Request" -Height 800
+        $scrollViewer = New-FormScrollViewer
+        $mainPanel = New-MainPanel -Margin '10'
         $scrollViewer.Content = $mainPanel
         $window.Content = $scrollViewer
 
@@ -992,61 +1133,21 @@ try {
             -ToolTipText "Enter a 10-digit mobile number (e.g., 1234567890)"
         $mobileSection.Stack.Children.Add($mobileTextBox)
 
-        $bypassPanel = New-Object System.Windows.Controls.DockPanel
-        $bypassPanel.Margin = '0,0,0,5'
-        $bypassFormattingCheckBox = New-Object System.Windows.Controls.CheckBox
-        $bypassFormattingCheckBox.Content = "Bypass Mobile Number Formatting"
-        $bypassFormattingCheckBox.ToolTip = "Check this box to skip automatic formatting of the mobile number"
-        $bypassFormattingCheckBox.Margin = '0,5,0,5'
+        $bypassPanel = New-FormDockPanel -Margin "0,0,0,5"
+        $bypassFormattingCheckBox = New-FormCheckBox `
+            -Content "Bypass Mobile Number Formatting" `
+            -ToolTip "Check this box to skip automatic formatting of the mobile number" `
+            -Margin "0,5,0,5"
+        $bypassFormattingCheckBox.VerticalAlignment = 'Center'
         $bypassPanel.Children.Add($bypassFormattingCheckBox)
         $mobileSection.Stack.Children.Add($bypassPanel)
         $mainPanel.Children.Add($mobileSection.Group)
 
-        # Modify the licenses section to create two separate controls
-        $requiredLicenses = @(
-            "Exchange Online (Plan 1)",
-            "Office 365 E3",
-            "Microsoft 365 Business Basic",
-            "Microsoft 365 E3",
-            "Microsoft 365 Business Premium"
-        )
-
-        $ignoredLicenses = @(
-            "Microsoft Teams Rooms Standard",
-            "Microsoft Teams Phone Standard",
-            "Power Automate Premium",
-            "Power Apps Premium",
-            "Power BI Pro",
-            "Power BI Standard",
-            "Microsoft 365 Lighthouse",
-            "Rights Management Service Basic Content Protection",
-            "Communications Credits",
-            "Rights Management Adhoc",
-            "Power Virtual Agents Viral Trial",
-            "Windows Store for Business",
-            "Skype for Business PSTN Domestic Calling",
-            "Microsoft Business Center",
-            "Microsoft Teams Phone Resource Account",
-            "Microsoft PowerApps for Developer",
-            "Microsoft Power Apps Plan 2 Trial",
-            "Microsoft Power Automate Free",
-            "Microsoft_Copilot_for_Finance_trial",
-            "STREAM",
-            "Project Plan 3 (for Department)",
-            "Dynamics 365 Business Central for IWs"
-        )
-        # Required License ComboBox Section
-        $requiredGroup = New-Object System.Windows.Controls.GroupBox
-        $requiredGroup.Header = "Required License (Select One) *"
-        $requiredGroup.Margin = "0,0,0,10"  # Match other group margins
-
-        $requiredStack = New-Object System.Windows.Controls.StackPanel
-        $requiredStack.Margin = "5"  # Match other stack margins
-
-        $requiredComboBox = New-Object System.Windows.Controls.ComboBox
-        $requiredComboBox.Margin = "0,0,0,10"  # Match other control margins
-        $requiredComboBox.Padding = "5,3,5,3"  # Match other control padding
-        $requiredComboBox.ToolTip = "Select one of the required base licenses for the user"
+        # Required License Section
+        $requiredSection = New-FormGroupBox -Header "Required License (Select One) *"
+        $requiredComboBox = New-FormComboBox `
+            -ToolTip "Select one of the required base licenses for the user" `
+            -DisplayMemberPath "DisplayName"
 
         # Create a custom object for each required license
         foreach ($license in $licenseInfo) {
@@ -1061,26 +1162,13 @@ try {
             }
         }
 
-        # Set the DisplayMemberPath to show the DisplayName
-        $requiredComboBox.DisplayMemberPath = "DisplayName"
-        $requiredStack.Children.Add($requiredComboBox)
-        $requiredGroup.Content = $requiredStack
-        $mainPanel.Children.Add($requiredGroup)
+        $requiredSection.Stack.Children.Add($requiredComboBox)
+        $mainPanel.Children.Add($requiredSection.Group)
 
         # Ancillary Licenses Section
-        $ancillaryGroup = New-Object System.Windows.Controls.GroupBox
-        $ancillaryGroup.Header = "Ancillary Licenses"
-        $ancillaryGroup.Margin = "0,0,0,10"  # Match other group margins
-
-        # Create ScrollViewer for ancillary licenses
-        $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
-        $scrollViewer.VerticalScrollBarVisibility = "Auto"
-        $scrollViewer.MaxHeight = 200
-        $scrollViewer.Margin = "5"  # Match other stack margins
-
-        $licensesStack = New-Object System.Windows.Controls.StackPanel
-        $scrollViewer.Content = $licensesStack
-        $ancillaryGroup.Content = $scrollViewer
+        $ancillarySection = New-FormGroupBox -Header "Ancillary Licenses"
+        $scrollingPanel = New-ScrollingStackPanel -MaxHeight 200
+        $licensesStack = $scrollingPanel.StackPanel
 
         $SkuCheckBoxes = @()
         foreach ($license in $licenseInfo) {
@@ -1100,10 +1188,8 @@ try {
                 }
             }
             if (-not $isRequired -and -not $isIgnored) {
-                $skucb = New-Object System.Windows.Controls.CheckBox
-                $skucb.Content = $license.DisplayName
+                $skucb = New-FormCheckBox -Content $license.DisplayName -ToolTip $license.SkuId
                 $skucb.Tag = $license.SkuId
-                $skucb.Margin = "5,5,5,5"
                 if ($license.DisplayName -like "*Microsoft Entra ID P2*") {
                     $skucb.IsChecked = $true
                 }
@@ -1111,70 +1197,54 @@ try {
                 $licensesStack.Children.Add($skucb)
             }
         }
-        $mainPanel.Children.Add($ancillaryGroup)
+        $ancillarySection.Group.Content = $scrollingPanel.ScrollViewer
+        $mainPanel.Children.Add($ancillarySection.Group)
 
         # Create and add OK and Cancel buttons
-        $buttonPanel = New-Object System.Windows.Controls.StackPanel
-        $buttonPanel.Orientation = 'Horizontal'
-        $buttonPanel.HorizontalAlignment = 'Right'
-        $buttonPanel.Margin = '0,10,0,0'
+        $buttonPanel = New-ButtonPanel -Margin "0,10,0,0"
 
         $okButton = New-FormButton -Content "OK" -Margin "0,0,10,0" -ClickHandler {
             # Validate New User input
             if (-not $newUserTextBox.Text) {
-                [System.Windows.MessageBox]::Show("New User is a mandatory field. Please enter a valid Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                Show-ValidationError -Message "New User is a mandatory field. Please enter a valid Display Name."
                 return
             }
             if (-not (Test-DisplayName $newUserTextBox.Text)) {
-                [System.Windows.MessageBox]::Show("Invalid format for New User. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                Show-ValidationError -Message "Invalid format for New User. Please use 'First Last' name format."
                 return
             }
 
             # Validate User To Copy input
             if (-not $userToCopyTextBox.Text) {
-                [System.Windows.MessageBox]::Show("User To Copy is a mandatory field. Please enter a Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                Show-ValidationError -Message "User To Copy is a mandatory field. Please enter a Display Name."
                 return
             }
             if (-not (Test-DisplayName $userToCopyTextBox.Text)) {
-                [System.Windows.MessageBox]::Show("Invalid format for User To Copy. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                Show-ValidationError -Message "Invalid format for User To Copy. Please use 'First Last' name format."
                 return
             }
 
-            # Validate Mobile Number only if entered and formatting not bypassed
+            # Validate Mobile Number
             if ($mobileTextBox.Text -ne $mobileTextBox.Tag -and -not $bypassFormattingCheckBox.IsChecked) {
-                $unformattedMobile = $mobileTextBox.Text
-                $digits = -join ($unformattedMobile -replace '\D', '')  # Remove non-digit characters
-                if ($digits.Length -ne 10) {
-                    [System.Windows.MessageBox]::Show("Invalid mobile number format. Please enter a valid 10-digit mobile number.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                $formattedNumber = Format-MobileNumber $mobileTextBox.Text
+                if ($null -eq $formattedNumber) {
+                    Show-ValidationError -Message "Invalid mobile number format. Please enter a valid 10-digit mobile number."
                     return
                 }
             }
 
             # Validate required license selection
             if ($null -eq $requiredComboBox.SelectedItem) {
-                [System.Windows.MessageBox]::Show(
-                    "Please select a required license.",
-                    "Required License Missing",
-                    [System.Windows.MessageBoxButton]::OK,
-                    [System.Windows.MessageBoxImage]::Warning)
+                Show-ValidationError -Message "Please select a required license." -Title "Required License Missing"
                 return
             }
 
-            # Get selected licenses (both required and ancillary)
-            $script:selectedLicenses = @()
-            $script:selectedLicenses += $requiredComboBox.SelectedItem.SkuId
-            $script:selectedLicenses += ($SkuCheckBoxes | Where-Object { $_.IsChecked } | ForEach-Object { $_.Tag })
-
-            # Check for available licenses
+            # Check license availability
             if ($requiredComboBox.SelectedItem.DisplayName -match "Available: (\d+)") {
                 $availableCount = [int]$Matches[1]
                 if ($availableCount -eq 0) {
                     $licenseName = $requiredComboBox.SelectedItem.DisplayName -replace ' \(Available: \d+\)$', ''
-                    [System.Windows.MessageBox]::Show(
-                        "$licenseName has no licenses available.",
-                        "No Available Licenses",
-                        [System.Windows.MessageBoxButton]::OK,
-                        [System.Windows.MessageBoxImage]::Warning)
+                    Show-ValidationError -Message "$licenseName has no licenses available." -Title "No Available Licenses"
                     return
                 }
             }
@@ -1186,15 +1256,16 @@ try {
                     $availableCount = [int]$Matches[1]
                     if ($availableCount -eq 0) {
                         $licenseName = $cb.Content -replace ' \(Available: \d+\)$', ''
-                        [System.Windows.MessageBox]::Show(
-                            "$licenseName has no licenses available.",
-                            "No Available Licenses",
-                            [System.Windows.MessageBoxButton]::OK,
-                            [System.Windows.MessageBoxImage]::Warning)
+                        Show-ValidationError -Message "$licenseName has no licenses available." -Title "No Available Licenses"
                         return
                     }
                 }
             }
+
+            # Get selected licenses
+            $script:selectedLicenses = @()
+            $script:selectedLicenses += $requiredComboBox.SelectedItem.SkuId
+            $script:selectedLicenses += ($SkuCheckBoxes | Where-Object { $_.IsChecked } | ForEach-Object { $_.Tag })
 
             $window.DialogResult = $true
             $window.Close()
@@ -1257,8 +1328,8 @@ try {
             Write-StatusMessage -Message "Getting template user details" -Type INFO
 
             $adUserParams = @{
-                Filter     = "DisplayName -eq '$UserToCopy'"
-                Properties = @(
+                Filter      = "DisplayName -eq '$UserToCopy'"
+                Properties  = @(
                     'Title'
                     'Fax'
                     'wWWHomePage'
@@ -1279,8 +1350,7 @@ try {
 
             Write-StatusMessage -Message "Successfully retrieved template user details" -Type OK
             return $templateUser
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get template user"
             Add-ErrorType -ErrorType Validation
             throw
@@ -1311,8 +1381,7 @@ try {
             }
 
             Write-StatusMessage -Message "Source user validated successfully" -Type OK
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Test-SourceUser"
             Add-ErrorType -ErrorType Validation
             throw
@@ -1366,8 +1435,7 @@ Continue? (Y/N)
             }
 
             Write-StatusMessage -Message "User confirmed creation" -Type OK
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Confirm-UserCreation"
             Add-ErrorType -ErrorType Validation
             throw
@@ -1398,7 +1466,7 @@ Continue? (Y/N)
             # Generate email and samAccountName
             try {
                 $email = "$($firstName.ToLower()).$($lastName.ToLower())@domain.com"
-                $samAccountName = ($firstName.Substring(0,1) + $lastName).ToLower()
+                $samAccountName = ($firstName.Substring(0, 1) + $lastName).ToLower()
 
                 # Handle duplicate samAccountNames
                 $counter = 1
@@ -1410,22 +1478,20 @@ Continue? (Y/N)
                         throw [System.InvalidOperationException]::new("Unable to generate unique SamAccountName after 99 attempts")
                     }
                 }
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to generate user properties"
                 Add-ErrorType -ErrorType Validation
                 throw
             }
 
             return @{
-                FirstName     = $firstName
-                LastName      = $lastName
-                DisplayName   = $displayName
-                Email        = $email
+                FirstName      = $firstName
+                LastName       = $lastName
+                DisplayName    = $displayName
+                Email          = $email
                 SamAccountName = $samAccountName
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in New-UserProperties"
             Add-ErrorType -ErrorType Validation
             throw
@@ -1451,12 +1517,10 @@ Continue? (Y/N)
                     Add-ErrorType -ErrorType Validation
                     Exit-Script -Message "User already exists: $($adUser.UserPrincipalName)" -ExitCode DuplicateUser
                 }
-            }
-            catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
+            } catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
                 # This is expected - user should not exist
                 Write-StatusMessage -Message "AD validation passed - user does not exist" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Error checking AD for existing user"
                 Add-ErrorType -ErrorType Validation
                 throw
@@ -1470,20 +1534,17 @@ Continue? (Y/N)
                     Add-ErrorType -ErrorType Validation
                     Exit-Script -Message "Mailbox already exists: $Email" -ExitCode DuplicateUser
                 }
-            }
-            catch [Microsoft.Exchange.Management.RestApiClient.RestApiException] {
+            } catch [Microsoft.Exchange.Management.RestApiClient.RestApiException] {
                 # This is expected - mailbox should not exist
                 Write-StatusMessage -Message "Exchange validation passed - mailbox does not exist" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Error checking Exchange for existing mailbox"
                 Add-ErrorType -ErrorType Validation
                 throw
             }
 
             Write-StatusMessage -Message "All existence checks passed successfully" -Type OK
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Test-NewUserExists"
             Add-ErrorType -ErrorType Validation
             throw
@@ -1525,19 +1586,17 @@ Continue? (Y/N)
 
             try {
                 $securePassword = ConvertTo-SecureString -String $finalPassword -AsPlainText -Force
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to create secure string from password"
                 Add-ErrorType -ErrorType General
                 throw
             }
 
             return @{
-                PlainPassword   = $finalPassword
+                PlainPassword  = $finalPassword
                 SecurePassword = $securePassword
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in New-SecureRandomPassword"
             Add-ErrorType -ErrorType General
             throw
@@ -1576,22 +1635,19 @@ Continue? (Y/N)
                     try {
                         Add-ADGroupMember -Identity $group -Members $targetGroups -ErrorAction Stop
                         Write-StatusMessage -Message "Added to group: $group" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to add to group: $group"
                         Add-ErrorType -ErrorType Group
                     }
                 }
 
                 Write-StatusMessage -Message "AD Groups have been added to new user" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get user group memberships"
                 Add-ErrorType -ErrorType Group
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Copy-ADGroupMemberships"
             Add-ErrorType -ErrorType Group
             throw
@@ -1777,8 +1833,7 @@ Continue? (Y/N)
             # Determine Zoom role based on department
             if ($MgUser.Department -eq 'Reactive') {
                 $zoom_app_role_name = "Basic"
-            }
-            else {
+            } else {
                 $zoom_app_role_name = "Licensed"
             }
 
@@ -1797,8 +1852,7 @@ Continue? (Y/N)
                 $zoom_synchronizationJobRuleId = (Get-MgServicePrincipalSynchronizationJobSchema -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_synchronizationJob.Id).SynchronizationRules.Id
 
                 Write-StatusMessage -Message "Retrieved Zoom app details successfully" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get Zoom app details"
                 Add-ErrorType -ErrorType Permission
                 throw
@@ -1809,13 +1863,12 @@ Continue? (Y/N)
                 $params = @{
                     "PrincipalId" = $MgUser.Id
                     "ResourceId"  = $zoom_ServicePrincipal.Id
-                    "AppRoleId"  = ($zoom_ServicePrincipal.AppRoles | Where-Object { $_.DisplayName -eq $zoom_app_role_name }).Id
+                    "AppRoleId"   = ($zoom_ServicePrincipal.AppRoles | Where-Object { $_.DisplayName -eq $zoom_app_role_name }).Id
                 }
 
                 New-MgUserAppRoleAssignment -UserId $MgUser.Id -BodyParameter $params -ErrorAction Stop
                 Write-StatusMessage -Message "Successfully assigned Zoom role to user" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to assign Zoom role"
                 Add-ErrorType -ErrorType Permission
                 throw
@@ -1825,14 +1878,12 @@ Continue? (Y/N)
             try {
                 Start-MgServicePrincipalSynchronizationJob -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_synchronizationJob.Id -ErrorAction Stop
                 Write-StatusMessage -Message "Successfully started Zoom sync" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to start Zoom sync"
                 Add-ErrorType -ErrorType Sync
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Add-UserToZoom"
             Add-ErrorType -ErrorType General
             throw
@@ -1880,13 +1931,13 @@ Continue? (Y/N)
             $messageParams = @{
                 Subject      = $Subject
                 ToRecipients = @(@{
-                    EmailAddress = @{
-                        Address = $ToAddress
-                    }
-                })
+                        EmailAddress = @{
+                            Address = $ToAddress
+                        }
+                    })
                 Body         = @{
                     ContentType = $ContentType
-                    Content    = $Content
+                    Content     = $Content
                 }
             }
 
@@ -1916,12 +1967,11 @@ Continue? (Y/N)
                     $messageParams['Attachments'] = @(
                         @{
                             "@odata.type" = "#microsoft.graph.fileAttachment"
-                            Name         = $attachmentName
-                            ContentBytes = $attachmentContent
+                            Name          = $attachmentName
+                            ContentBytes  = $attachmentContent
                         }
                     )
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to process attachment"
                     Add-ErrorType -ErrorType General
                     throw
@@ -1932,14 +1982,12 @@ Continue? (Y/N)
             try {
                 Send-MgUserMail -UserId $FromAddress -Message $messageParams -ErrorAction Stop
                 Write-StatusMessage -Message "Email notification sent successfully" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to send email"
                 Add-ErrorType -ErrorType General
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Send-GraphMailMessage"
             Add-ErrorType -ErrorType General
             throw
@@ -1987,8 +2035,7 @@ Continue? (Y/N)
                             Write-StatusMessage -Message "Mailbox found for $UserEmail" -Type OK
                             break
                         }
-                    }
-                    catch {
+                    } catch {
                         $elapsed = ((Get-Date) - $startTime).TotalSeconds
                         if ($elapsed -ge $ProvisioningTimeout) {
                             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Mailbox provisioning timeout after $($elapsed.ToString('F0')) seconds"
@@ -1998,8 +2045,7 @@ Continue? (Y/N)
                             if ($response -eq 'Y') {
                                 $startTime = Get-Date
                                 Write-StatusMessage -Message "Extending wait time for mailbox provisioning" -Type INFO
-                            }
-                            else {
+                            } else {
                                 Write-StatusMessage -Message "Mailbox provisioning wait cancelled by user" -Type WARN
                                 return
                             }
@@ -2009,8 +2055,7 @@ Continue? (Y/N)
                         Start-Sleep -Seconds $RetryIntervalSeconds
                     }
                 } while (-not $mailboxProvisioned)
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to check mailbox provisioning"
                 Add-ErrorType -ErrorType Mailbox
                 throw
@@ -2036,12 +2081,11 @@ Continue? (Y/N)
                         }
 
                         # Set AD attribute
-                        Set-ADUser -Identity $SamAccountName -Add @{extensionAttribute15 = $extAttr15} -ErrorAction Stop
+                        Set-ADUser -Identity $SamAccountName -Add @{extensionAttribute15 = $extAttr15 } -ErrorAction Stop
                         Write-StatusMessage -Message "Successfully set BookWithMeId: $extAttr15" -Type OK
                         $success = $true
                         break
-                    }
-                    catch {
+                    } catch {
                         $retryCount++
                         if ($retryCount -ge $MaxRetries) {
                             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to set BookWithMeId after $MaxRetries attempts"
@@ -2051,14 +2095,12 @@ Continue? (Y/N)
                             if ($response -eq 'Y') {
                                 $retryCount = 0
                                 Write-StatusMessage -Message "Retrying BookWithMeId configuration..." -Type INFO
-                            }
-                            else {
+                            } else {
                                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "BookWithMeId configuration skipped - manual intervention required"
                                 Add-ErrorType -ErrorType General
                                 return
                             }
-                        }
-                        else {
+                        } else {
                             Write-StatusMessage -Message "Attempt $retryCount of $MaxRetries failed. Waiting $RetryIntervalSeconds seconds..." -Type INFO
                             Start-Sleep -Seconds $RetryIntervalSeconds
                         }
@@ -2075,14 +2117,12 @@ Continue? (Y/N)
                     Write-StatusMessage -Message "SamAccountName: $SamAccountName" -Type INFO
                     Write-StatusMessage -Message "Expected BookWithMeId format: {ExchangeGuid}@compassmsp.com?anonymous&ep=plink" -Type INFO
                 }
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to configure BookWithMeId"
                 Add-ErrorType -ErrorType General
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Set-UserBookWithMeId"
             Add-ErrorType -ErrorType General
             throw
@@ -2107,7 +2147,7 @@ Continue? (Y/N)
 
             try {
                 $sourceGroups = Get-MgUserMemberOf -UserId $SourceUserId -ErrorAction Stop |
-                    Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.group' }
+                Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.group' }
 
                 if (-not $sourceGroups) {
                     Write-StatusMessage -Message "Source user is not a member of any groups" -Type WARN
@@ -2121,8 +2161,7 @@ Continue? (Y/N)
                     try {
                         $sourceGroups | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
                         Write-StatusMessage -Message "Exported group memberships to: $ExportPath" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to export group memberships"
                         Add-ErrorType -ErrorType General
                     }
@@ -2135,8 +2174,7 @@ Continue? (Y/N)
                         Add-MgGroupMemberByRef -GroupId $group.Id -OdataId "https://graph.microsoft.com/v1.0/users/$TargetUserId" -ErrorAction Stop
                         Write-StatusMessage -Message "Added to group: $($group.AdditionalProperties.displayName)" -Type OK
                         $successCount++
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to add to group: $($group.AdditionalProperties.displayName)"
                         Add-ErrorType -ErrorType Group
                     }
@@ -2144,14 +2182,12 @@ Continue? (Y/N)
 
                 Write-StatusMessage -Message "Successfully copied $successCount of $($sourceGroups.Count) groups" -Type OK
                 return $successCount
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get source user group memberships"
                 Add-ErrorType -ErrorType Group
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Copy-UserGroups"
             Add-ErrorType -ErrorType Group
             throw
@@ -2228,8 +2264,7 @@ Continue? (Y/N)
             try {
                 $summaryMessage = $summaryParts -join "`n"
                 Write-StatusMessage -Message $summaryMessage -Type SUMMARY
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to display summary message"
                 Add-ErrorType -ErrorType General
                 throw
@@ -2239,8 +2274,7 @@ Continue? (Y/N)
             try {
                 Write-Log -Message "New user creation completed for $NewUser ($EmailAddress)" -Level SUCCESS
                 Write-Log -Message "Groups: $AssignedGroupCount of $TemplateGroupCount assigned" -Level INFO
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to log completion"
                 Add-ErrorType -ErrorType General
             }
@@ -2248,12 +2282,10 @@ Continue? (Y/N)
             # Exit with appropriate status
             if ($TemplateGroupCount -eq $AssignedGroupCount) {
                 Exit-Script -Message "$NewUser has been successfully created" -ExitCode Success
-            }
-            else {
+            } else {
                 Exit-Script -Message "$NewUser created with warnings - please verify group assignments" -ExitCode Success
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Start-NewUserFinalize"
             Add-ErrorType -ErrorType General
             Exit-Script -Message "Failed to complete user creation finalization" -ExitCode GeneralError

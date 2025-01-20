@@ -309,8 +309,7 @@ try {
             Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
             try {
                 Connect-ServiceEndpoints -Disconnect
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disconnect services during exit" -ErrorLevel Warning
                 Add-ErrorType -ErrorType Connection
             }
@@ -326,8 +325,7 @@ try {
 
             # Return the appropriate exit code
             exit $exitCodes[$ExitCode]
-        }
-        catch {
+        } catch {
             # Catch-all for any unexpected errors during exit
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error during script exit"
             Add-ErrorType -ErrorType General
@@ -451,10 +449,101 @@ try {
 
     # Function to create and show a custom WPF window for user termination
     function Show-CustomTerminationWindow {
+        <#
+    .SYNOPSIS
+    Shows a GUI window for processing a user termination request.
+
+    .DESCRIPTION
+    Displays a WPF window that collects information needed to terminate a user,
+    including delegation of access rights and mailbox settings.
+
+    .OUTPUTS
+    [PSCustomObject] Returns a custom object with the following properties:
+        InputUser               : [string] Email address of the user to terminate
+        InputUserFullControl    : [string] Email of user to receive full mailbox control (empty if not specified)
+        InputUserFWD           : [string] Email address for mail forwarding (empty if not specified)
+        InputUserOneDriveAccess: [string] Email of user to receive OneDrive access (empty if not specified)
+        SetOneDriveReadOnly    : [bool] Whether to set OneDrive as read-only
+    Returns $null if the user cancels the operation.
+    #>
+
         # 1. Add required assemblies
         Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
         # 2. UI Assembly Helper Functions
+        function New-ScrollingStackPanel {
+            param (
+                [int]$MaxHeight = 0,
+                [string]$Margin = "5"
+            )
+            $scrollViewer = New-FormScrollViewer -MaxHeight $MaxHeight -Margin $Margin
+            $stackPanel = New-Object System.Windows.Controls.StackPanel
+            $scrollViewer.Content = $stackPanel
+            return @{
+                ScrollViewer = $scrollViewer
+                StackPanel   = $stackPanel
+            }
+        }
+
+        function New-FormScrollViewer {
+            param (
+                [int]$MaxHeight = 0,
+                [string]$Margin = "5"
+            )
+            $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
+            $scrollViewer.VerticalScrollBarVisibility = "Auto"
+            if ($MaxHeight -gt 0) {
+                $scrollViewer.MaxHeight = $MaxHeight
+            }
+            $scrollViewer.Margin = $Margin
+            return $scrollViewer
+        }
+
+        function New-FormWindow {
+            param (
+                [string]$Title,
+                [int]$Width = 500,
+                [int]$Height,
+                [string]$Background = '#F0F0F0'
+            )
+            $window = New-Object System.Windows.Window
+            $window.Title = $Title
+            $window.Width = $Width
+            $window.Height = $Height
+            $window.WindowStartupLocation = 'CenterScreen'
+            $window.Background = $Background
+            return $window
+        }
+
+        function New-ButtonPanel {
+            param (
+                [string]$Margin = '0,10,0,0'
+            )
+            $buttonPanel = New-Object System.Windows.Controls.StackPanel
+            $buttonPanel.Orientation = 'Horizontal'
+            $buttonPanel.HorizontalAlignment = 'Right'
+            $buttonPanel.Margin = $Margin
+            return $buttonPanel
+        }
+
+        function New-FormDockPanel {
+            param (
+                [string]$Margin = '0,0,0,5'
+            )
+            $dockPanel = New-Object System.Windows.Controls.DockPanel
+            $dockPanel.Margin = $Margin
+            return $dockPanel
+        }
+
+        function New-MainPanel {
+            param (
+                [string]$Margin = '10'
+            )
+            $mainPanel = New-Object System.Windows.Controls.StackPanel
+            $mainPanel.Margin = $Margin
+            return $mainPanel
+        }
+
         function New-HeaderPanel {
             param ([string]$Text)
             $headerPanel = New-Object System.Windows.Controls.Border
@@ -513,6 +602,21 @@ try {
             }
         }
 
+        function New-FormCheckBox {
+            param (
+                [string]$Content,
+                [string]$ToolTip,
+                [string]$Margin = "5,5,5,5",
+                [bool]$IsChecked = $false
+            )
+            $checkbox = New-Object System.Windows.Controls.CheckBox
+            $checkbox.Content = $Content
+            $checkbox.ToolTip = $ToolTip
+            $checkbox.Margin = $Margin
+            $checkbox.IsChecked = $IsChecked
+            return $checkbox
+        }
+
         # 3. Validation Helper Functions
         function Test-EmailAddress {
             param ([string]$Email)
@@ -557,10 +661,12 @@ try {
             param (
                 [string]$PlaceholderText,
                 [string]$ToolTipText,
+                [string]$Name,
                 [string]$Margin = '0,0,0,10'
             )
 
             $textBox = New-Object System.Windows.Controls.TextBox
+            $textBox.Name = $Name
             $textBox.Margin = $Margin
             $textBox.Padding = '5,3,5,3'
             $textBox.Tag = $PlaceholderText
@@ -576,17 +682,9 @@ try {
 
         # 6. Main UI Creation and Logic
         # Create window and main containers
-        $window = New-Object System.Windows.Window
-        $window.Title = "User Termination Request"
-        $window.Width = 500
-        $window.Height = 530
-        $window.WindowStartupLocation = 'CenterScreen'
-        $window.Background = '#F0F0F0'
-
-        $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
-        $scrollViewer.VerticalScrollBarVisibility = "Auto"
-        $mainPanel = New-Object System.Windows.Controls.StackPanel
-        $mainPanel.Margin = '10'
+        $window = New-FormWindow -Title "User Termination Request" -Height 530
+        $scrollViewer = New-FormScrollViewer
+        $mainPanel = New-MainPanel -Margin '10'
         $scrollViewer.Content = $mainPanel
         $window.Content = $scrollViewer
 
@@ -594,106 +692,88 @@ try {
         $mainPanel.Children.Add((New-HeaderPanel -Text "User Termination Request`nPlease fill in all required fields marked with *"))
 
         # Create user termination group
-        $termGroup = New-Object System.Windows.Controls.GroupBox
-        $termGroup.Header = "User Information"
-        $termGroup.Margin = '0,0,0,10'
-
-        $termStack = New-Object System.Windows.Controls.StackPanel
-        $termStack.Margin = '5'
-
-        # User to terminate
-        $lblUserToTerm = New-FormLabel -Content "User to Terminate (Email) *"
-        $termStack.Children.Add($lblUserToTerm)
-
-        $txtUserToTerm = Initialize-EmailTextBox -PlaceholderText "Enter user's email address" -ToolTipText "Enter the email address of the user to be terminated"
-        $termStack.Children.Add($txtUserToTerm)
-        $termGroup.Content = $termStack
-        $mainPanel.Children.Add($termGroup)
+        $termSection = New-FormGroupBox -Header "User Information"
+        $termSection.Stack.Children.Add((New-FormLabel -Content "User to Terminate (Email) *"))
+        $txtUserToTerm = Initialize-EmailTextBox `
+            -Name "userToTerm" `
+            -PlaceholderText "Enter user's email address" `
+            -ToolTipText "Enter the email address of the user to be terminated"
+        $termSection.Stack.Children.Add($txtUserToTerm)
+        $mainPanel.Children.Add($termSection.Group)
 
         # Create access delegation group
-        $delegateGroup = New-Object System.Windows.Controls.GroupBox
-        $delegateGroup.Header = "Access Delegation"
-        $delegateGroup.Margin = '0,0,0,10'
-
-        $delegateStack = New-Object System.Windows.Controls.StackPanel
-        $delegateStack.Margin = '5'
+        $delegateSection = New-FormGroupBox -Header "Access Delegation"
 
         # OneDrive Access
-        $lblOneDriveAccess = New-FormLabel -Content "Grant OneDrive Access To (Email):"
-        $delegateStack.Children.Add($lblOneDriveAccess)
-
-        $txtOneDriveAccess = Initialize-EmailTextBox -PlaceholderText "Enter delegate's email address" -ToolTipText "Enter the email of the person who should receive OneDrive access"
-        $delegateStack.Children.Add($txtOneDriveAccess)
+        $delegateSection.Stack.Children.Add((New-FormLabel -Content "Grant OneDrive Access To (Email):"))
+        $txtOneDriveAccess = Initialize-EmailTextBox `
+            -Name "oneDriveAccess" `
+            -PlaceholderText "Enter delegate's email address" `
+            -ToolTipText "Enter the email of the person who should receive OneDrive access"
+        $delegateSection.Stack.Children.Add($txtOneDriveAccess)
 
         # Mailbox Control
-        $lblMailboxControl = New-FormLabel -Content "Grant Mailbox Full Control To (Email):"
-        $delegateStack.Children.Add($lblMailboxControl)
-
-        $txtMailboxControl = Initialize-EmailTextBox -PlaceholderText "Enter delegate's email address" -ToolTipText "Enter the email of the person who should receive mailbox access"
-        $delegateStack.Children.Add($txtMailboxControl)
+        $delegateSection.Stack.Children.Add((New-FormLabel -Content "Grant Mailbox Full Control To (Email):"))
+        $txtMailboxControl = Initialize-EmailTextBox `
+            -Name "mailboxControl" `
+            -PlaceholderText "Enter delegate's email address" `
+            -ToolTipText "Enter the email of the person who should receive mailbox access"
+        $delegateSection.Stack.Children.Add($txtMailboxControl)
 
         # Forward Mailbox
-        $lblForwardMailbox = New-FormLabel -Content "Forward Mailbox To (Email):"
-        $delegateStack.Children.Add($lblForwardMailbox)
-
-        $txtForwardMailbox = Initialize-EmailTextBox -PlaceholderText "Enter forward-to email address" -ToolTipText "Enter the email address where future emails should be forwarded"
-        $delegateStack.Children.Add($txtForwardMailbox)
+        $delegateSection.Stack.Children.Add((New-FormLabel -Content "Forward Mailbox To (Email):"))
+        $txtForwardMailbox = Initialize-EmailTextBox `
+            -Name "forwardMailbox" `
+            -PlaceholderText "Enter forward-to email address" `
+            -ToolTipText "Enter the email address where future emails should be forwarded"
+        $delegateSection.Stack.Children.Add($txtForwardMailbox)
 
         # OneDrive Read-Only option
-        $oneDrivePanel = New-Object System.Windows.Controls.DockPanel
-        $oneDrivePanel.Margin = '0,0,0,5'
+        $oneDrivePanel = New-FormDockPanel -Margin "0,0,0,5"
 
-        $lblOneDriveReadOnly = New-FormLabel -Content "Set OneDrive as Read-Only:"
-        $lblOneDriveReadOnly.VerticalAlignment = 'Center'
+        $chkOneDriveReadOnly = New-FormCheckBox `
+            -Content "Set OneDrive as Read-Only" `
+            -ToolTip "Check to make the OneDrive content read-only" `
+            -Margin "10,0,0,0"
 
-        $chkOneDriveReadOnly = New-Object System.Windows.Controls.CheckBox
-        $chkOneDriveReadOnly.VerticalAlignment = 'Center'
-        $chkOneDriveReadOnly.Margin = '10,0,0,0'
-        $chkOneDriveReadOnly.ToolTip = "Check to make the OneDrive content read-only"
-
-        $oneDrivePanel.Children.Add($lblOneDriveReadOnly)
         $oneDrivePanel.Children.Add($chkOneDriveReadOnly)
-        $delegateStack.Children.Add($oneDrivePanel)
+        $delegateSection.Stack.Children.Add($oneDrivePanel)
 
-        $delegateGroup.Content = $delegateStack
-        $mainPanel.Children.Add($delegateGroup)
+        $mainPanel.Children.Add($delegateSection.Group)
 
-        # Create and add OK and Cancel buttons
-        $buttonPanel = New-Object System.Windows.Controls.StackPanel
-        $buttonPanel.Orientation = 'Horizontal'
-        $buttonPanel.HorizontalAlignment = 'Right'
-        $buttonPanel.Margin = '0,10,0,0'
+        # Create buttons
+        $buttonPanel = New-ButtonPanel -Margin "0,10,0,0"
 
-        $okButton = New-FormButton -Content "OK" -ClickHandler {
-                # Validate required fields first
-                if (-not $txtUserToTerm.Text -or $txtUserToTerm.Text -eq $txtUserToTerm.Tag -or -not (Test-EmailAddress -Email $txtUserToTerm.Text)) {
-                    [System.Windows.MessageBox]::Show("Invalid or missing email for required field: User to Terminate", "Input Error")
+        $okButton = New-FormButton -Content "OK" -Margin "0,0,10,0" -ClickHandler {
+            # Validate required fields first
+            if (-not $txtUserToTerm.Text -or $txtUserToTerm.Text -eq $txtUserToTerm.Tag -or -not (Test-EmailAddress -Email $txtUserToTerm.Text)) {
+                Show-ValidationError -Message "Invalid or missing email for required field: User to Terminate"
+                return
+            }
+
+            # Validate optional fields if they have content
+            $optionalTextBoxes = @{
+                'OneDrive Access' = $txtOneDriveAccess
+                'Mailbox Control' = $txtMailboxControl
+                'Forward Mailbox' = $txtForwardMailbox
+            }
+
+            foreach ($field in $optionalTextBoxes.GetEnumerator()) {
+                if ($field.Value.Text -ne $field.Value.Tag -and -not (Test-EmailAddress -Email $field.Value.Text)) {
+                    Show-ValidationError -Message "Invalid email format for: $($field.Key)"
                     return
                 }
-
-                # Validate optional fields if they have content
-                $optionalTextBoxes = @{
-                    'OneDrive Access' = $txtOneDriveAccess
-                    'Mailbox Control' = $txtMailboxControl
-                    'Forward Mailbox' = $txtForwardMailbox
-                }
-
-                foreach ($field in $optionalTextBoxes.GetEnumerator()) {
-                    if ($field.Value.Text -ne $field.Value.Tag -and -not (Test-EmailAddress -Email $field.Value.Text)) {
-                        [System.Windows.MessageBox]::Show("Invalid email format for: $($field.Key)", "Input Error")
-                        return
-                    }
-                }
-
-                $window.DialogResult = $true
-                $window.Close()
             }
+
+            $window.DialogResult = $true
+            $window.Close()
+        }
         $buttonPanel.Children.Add($okButton)
 
         $cancelButton = New-FormButton -Content "Cancel" -ClickHandler {
-                $window.DialogResult = $false
-                $window.Close()
-            }
+            $window.DialogResult = $false
+            $window.Close()
+        }
         $buttonPanel.Children.Add($cancelButton)
 
         $mainPanel.Children.Add($buttonPanel)
@@ -1125,7 +1205,7 @@ Continue? (Y/N)
                     Description = "Disabled on $(Get-Date -Format 'FileDate')"
                     Enabled     = $False
                     Replace     = @{msExchHideFromAddressLists = $true }
-                    Clear      = @(
+                    Clear       = @(
                         'company',
                         'Title',
                         'physicalDeliveryOfficeName',
@@ -1147,8 +1227,7 @@ Continue? (Y/N)
 
                 Set-ADUser @SetADUserParams -ErrorAction Stop
                 Write-StatusMessage -Message "User account disabled and attributes cleared" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disable user account"
                 Add-ErrorType -ErrorType General
                 throw
@@ -1160,8 +1239,7 @@ Continue? (Y/N)
                 try {
                     Remove-ADGroupMember -Identity $group -Members $UserFromAD.SamAccountName -Confirm:$false -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully removed from group: $($group)" -Type OK
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove from AD group: $group"
                     Add-ErrorType -ErrorType Group
                 }
@@ -1173,14 +1251,12 @@ Continue? (Y/N)
             try {
                 $UserFromAD | Move-ADObject -TargetPath $DestinationOU -ErrorAction Stop
                 Write-StatusMessage -Message "Successfully moved user to disabled OU" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to move user to disabled OU"
                 Add-ErrorType -ErrorType General
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Disable-ADUser"
             Add-ErrorType -ErrorType General
             throw
@@ -1200,8 +1276,7 @@ Continue? (Y/N)
             try {
                 Revoke-MgUserSignInSession -UserId $UserPrincipalName -ErrorAction Stop
                 Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to revoke user sessions"
                 Add-ErrorType -ErrorType Permission
             }
@@ -1215,14 +1290,12 @@ Continue? (Y/N)
                     try {
                         Remove-MobileDevice -DeviceID $mobileDevice.Id -Confirm:$false -ErrorAction Stop
                         Write-StatusMessage -Message "Successfully removed mobile device: $($mobileDevice.Id)" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove mobile device $($mobileDevice.Id)"
                         Add-ErrorType -ErrorType General
                     }
                 }
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get mobile devices"
                 Add-ErrorType -ErrorType General
             }
@@ -1235,19 +1308,16 @@ Continue? (Y/N)
                     try {
                         Update-MgDevice -DeviceId $termUserDevice.Id -BodyParameter @{ AccountEnabled = $false } -ErrorAction Stop
                         Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.Id)" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disable device $($termUserDevice.Id)"
                         Add-ErrorType -ErrorType General
                     }
                 }
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get registered devices"
                 Add-ErrorType -ErrorType General
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserSessions"
             Add-ErrorType -ErrorType General
             throw
@@ -1273,8 +1343,7 @@ Continue? (Y/N)
             try {
                 Set-Mailbox -Identity $Mailbox.Identity -ForwardingAddress $null -ForwardingSmtpAddress $null -ErrorAction Stop
                 Write-StatusMessage -Message "Successfully disabled existing forwarding" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to disable existing mailbox forwarding"
                 Add-ErrorType -ErrorType Mailbox
             }
@@ -1284,8 +1353,7 @@ Continue? (Y/N)
             try {
                 Set-Mailbox -Identity $Mailbox.Identity -Type Shared -ErrorAction Stop
                 Write-StatusMessage -Message "Successfully converted to shared mailbox" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to convert to shared mailbox"
                 Add-ErrorType -ErrorType Mailbox
             }
@@ -1298,15 +1366,14 @@ Continue? (Y/N)
 
                     $mailboxParams = @{
                         Identity                   = $Mailbox.Identity
-                        ForwardingAddress         = $ForwardingAddress
+                        ForwardingAddress          = $ForwardingAddress
                         DeliverToMailboxAndForward = $False
-                        ErrorAction               = 'Stop'
+                        ErrorAction                = 'Stop'
                     }
 
                     Set-Mailbox @mailboxParams
                     Write-StatusMessage -Message "Successfully set up mail forwarding" -Type OK
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to set up mail forwarding"
                     Add-ErrorType -ErrorType Mailbox
                 }
@@ -1320,23 +1387,21 @@ Continue? (Y/N)
 
                     $mailboxPermissionParams = @{
                         Identity        = $Mailbox.Identity
-                        User           = $GrantAccessTo
-                        AccessRights   = 'FullAccess'
+                        User            = $GrantAccessTo
+                        AccessRights    = 'FullAccess'
                         InheritanceType = 'All'
                         AutoMapping     = $true
-                        ErrorAction    = 'Stop'
+                        ErrorAction     = 'Stop'
                     }
 
                     Add-MailboxPermission @mailboxPermissionParams
                     Write-StatusMessage -Message "Successfully granted full access permissions" -Type OK
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to grant mailbox permissions"
                     Add-ErrorType -ErrorType Permission
                 }
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Set-TerminatedMailbox"
             Add-ErrorType -ErrorType Mailbox
             throw
@@ -1378,8 +1443,8 @@ Continue? (Y/N)
 
             try {
                 $All365Groups = Get-MgUserMemberOf -UserId $userId -ErrorAction Stop |
-                    Where-Object @filterParams |
-                    Select-Object @selectParams
+                Where-Object @filterParams |
+                Select-Object @selectParams
 
                 Write-StatusMessage -Message "Found $($All365Groups.Count) groups to process" -Type INFO
 
@@ -1388,8 +1453,7 @@ Continue? (Y/N)
                     try {
                         $All365Groups | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
                         Write-StatusMessage -Message "Exported user groups to: $ExportPath" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to export user groups"
                         Add-ErrorType -ErrorType General
                     }
@@ -1402,25 +1466,21 @@ Continue? (Y/N)
                         if ($365Group.securityEnabled -eq 'True' -or $365Group.groupType -eq 'Unified') {
                             Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $userId -ErrorAction Stop
                             Write-StatusMessage -Message "Removed from Security/Unified Group: $($365Group.DisplayName)" -Type OK
-                        }
-                        else {
+                        } else {
                             Remove-DistributionGroupMember -Identity $365Group.Id -Member $userId -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction Stop
                             Write-StatusMessage -Message "Removed from Distribution Group: $($365Group.DisplayName)" -Type OK
                         }
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove from group $($365Group.DisplayName)"
                         Add-ErrorType -ErrorType Group
                     }
                 }
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get user group memberships"
                 Add-ErrorType -ErrorType Group
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserFromGroups"
             Add-ErrorType -ErrorType Group
             throw
@@ -1440,7 +1500,7 @@ Continue? (Y/N)
             try {
                 # Get all directory roles the user is a member of
                 $directoryRoles = Get-MgUserMemberOf -UserId $UserId -ErrorAction Stop |
-                    Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.directoryRole' }
+                Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.directoryRole' }
 
                 if (-not $directoryRoles) {
                     Write-StatusMessage -Message "User is not a member of any directory roles" -Type INFO
@@ -1457,20 +1517,17 @@ Continue? (Y/N)
                         Write-StatusMessage -Message "Removing from role: $roleName" -Type INFO
                         Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $roleId -DirectoryObjectId $UserId -ErrorAction Stop
                         Write-StatusMessage -Message "Successfully removed from role: $roleName" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove from role $roleName"
                         Add-ErrorType -ErrorType Permission
                     }
                 }
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get directory roles"
                 Add-ErrorType -ErrorType Permission
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserFromDirectoryRoles"
             Add-ErrorType -ErrorType Permission
             throw
@@ -1493,14 +1550,13 @@ Continue? (Y/N)
             try {
                 # Get and export license details if path provided
                 $licenseDetails = Get-MgUserLicenseDetail -UserId $UserId -ErrorAction Stop |
-                    Select-Object SkuPartNumber, SkuId, Id
+                Select-Object SkuPartNumber, SkuId, Id
 
                 if ($ExportPath) {
                     try {
                         $licenseDetails | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
                         Write-StatusMessage -Message "Exported user licenses to: $ExportPath" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to export user licenses"
                         Add-ErrorType -ErrorType License
                     }
@@ -1519,8 +1575,7 @@ Continue? (Y/N)
                     try {
                         Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
                         Write-StatusMessage -Message "Removed Ancillary License: $($license.SkuPartNumber)" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove Ancillary License $($license.SkuPartNumber)"
                         Add-ErrorType -ErrorType License
                     }
@@ -1531,20 +1586,17 @@ Continue? (Y/N)
                     try {
                         Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
                         Write-StatusMessage -Message "Removed Primary License: $($license.SkuPartNumber)" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove Primary License $($license.SkuPartNumber)"
                         Add-ErrorType -ErrorType License
                     }
                 }
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get user licenses"
                 Add-ErrorType -ErrorType License
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserLicenses"
             Add-ErrorType -ErrorType License
             throw
@@ -1562,29 +1614,25 @@ Continue? (Y/N)
             Write-StatusMessage -Message "Checking Zoom assignments..." -Type INFO
             try {
                 $ZoomSSO = Get-MgUserAppRoleAssignment -UserId $UserId -ErrorAction Stop |
-                    Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
+                Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
 
                 if ($ZoomSSO) {
                     try {
                         Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $ZoomSSO.Id -UserId $UserId -ErrorAction Stop
                         Write-StatusMessage -Message "Successfully removed user from Zoom Workplace Phones" -Type OK
-                    }
-                    catch {
+                    } catch {
                         Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to remove Zoom assignment"
                         Add-ErrorType -ErrorType Permission
                     }
-                }
-                else {
+                } else {
                     Write-StatusMessage -Message "User is not assigned to Zoom Workplace Phones" -Type INFO
                 }
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to get Zoom assignments"
                 Add-ErrorType -ErrorType Permission
                 throw
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Remove-UserFromZoom"
             Add-ErrorType -ErrorType General
             throw
@@ -1625,12 +1673,10 @@ Continue? (Y/N)
                     if ($UserOneDriveURL) {
                         $success = $true
                         Write-StatusMessage -Message "Successfully retrieved OneDrive URL" -Type OK
-                    }
-                    else {
+                    } else {
                         throw [System.InvalidOperationException]::new("OneDrive URL is empty")
                     }
-                }
-                catch {
+                } catch {
                     $retryCount++
                     if ($retryCount -ge $MaxRetries) {
                         Write-StatusMessage -Message "Failed to get OneDrive URL after $MaxRetries attempts" -Type WARN
@@ -1638,14 +1684,12 @@ Continue? (Y/N)
                         if ($response -eq 'Y') {
                             $retryCount = 0
                             Write-StatusMessage -Message "Retrying OneDrive URL retrieval..." -Type INFO
-                        }
-                        else {
+                        } else {
                             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "OneDrive URL retrieval skipped by user"
                             Add-ErrorType -ErrorType OneDrive
                             return
                         }
-                    }
-                    else {
+                    } else {
                         Write-StatusMessage -Message "Attempt $retryCount of $MaxRetries failed. Waiting $RetryDelaySeconds seconds..." -Type INFO
                         Start-Sleep -Seconds $RetryDelaySeconds
                     }
@@ -1662,8 +1706,7 @@ Continue? (Y/N)
             try {
                 $site = Get-PnPTenantSite -Url $UserOneDriveURL -ErrorAction Stop
                 Write-StatusMessage -Message "OneDrive site verified" -Type OK
-            }
-            catch {
+            } catch {
                 Write-ErrorRecord -ErrorRecord $_ -CustomMessage "OneDrive site not accessible"
                 Add-ErrorType -ErrorType OneDrive
 
@@ -1676,14 +1719,12 @@ Continue? (Y/N)
                             $site = Get-PnPTenantSite -Url $UserOneDriveURL -ErrorAction Stop
                             $success = $true
                             Write-StatusMessage -Message "OneDrive site now accessible" -Type OK
-                        }
-                        catch {
+                        } catch {
                             $retryCount++
                             Write-StatusMessage -Message "Attempt $retryCount of $MaxRetries. Waiting $RetryDelaySeconds seconds..." -Type INFO
                         }
                     } while (-not $success -and $retryCount -lt $MaxRetries)
-                }
-                else {
+                } else {
                     Write-StatusMessage -Message "OneDrive configuration skipped by user" -Type WARN
                     return
                 }
@@ -1695,8 +1736,7 @@ Continue? (Y/N)
                 try {
                     Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully set OneDrive to read-only" -Type OK
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to set OneDrive to read-only"
                     Add-ErrorType -ErrorType OneDrive
                 }
@@ -1720,14 +1760,12 @@ Continue? (Y/N)
                     do {
                         $response = Read-Host "Please copy the OneDrive URL above. Have you copied it? (y/n)"
                     } while ($response -ne 'y')
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to grant OneDrive access"
                     Add-ErrorType -ErrorType OneDrive
                 }
             }
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Set-TerminatedOneDrive"
             Add-ErrorType -ErrorType OneDrive
             throw
@@ -1766,8 +1804,7 @@ Continue? (Y/N)
                 Import-Module -Name ADSync -UseWindowsPowerShell -ErrorAction Stop -Verbose:$false
                 $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
                 Write-StatusMessage -Message "AD sync cycle initiated successfully" -Type OK
-            }
-            catch {
+            } catch {
                 try {
                     # Fallback to direct PowerShell execution if module import fails
                     $null = powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
@@ -1775,8 +1812,7 @@ Continue? (Y/N)
                         throw "PowerShell execution failed with exit code: $LASTEXITCODE"
                     }
                     Write-StatusMessage -Message "AD sync cycle initiated through PowerShell" -Type OK
-                }
-                catch {
+                } catch {
                     Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to start AD sync cycle"
                     Add-ErrorType -ErrorType Sync
                     throw
@@ -1816,8 +1852,7 @@ Continue? (Y/N)
             }
 
             Exit-Script -Message "$User has been successfully disabled." -ExitCode Success
-        }
-        catch {
+        } catch {
             Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Start-ADSyncAndFinalize"
             Add-ErrorType -ErrorType General
             throw
