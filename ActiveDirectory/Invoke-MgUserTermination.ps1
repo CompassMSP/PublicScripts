@@ -451,8 +451,34 @@ try {
 
     # Function to create and show a custom WPF window for user termination
     function Show-CustomTerminationWindow {
+
         # Build out UI for user input
         Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+
+            # Move this to the start of the function, right after Add-Type
+            $emailFields = @{
+                'UserToTerminate' = @{
+                    Label = "User to Terminate (Email) *"
+                    Placeholder = "Enter user's email address"
+                    Tooltip = "Enter the email address of the user to be terminated"
+                    Required = $true
+                }
+                'OneDriveAccess' = @{
+                    Label = "Grant OneDrive Access To (Email):"
+                    Placeholder = "Enter delegate's email address"
+                    Tooltip = "Enter the email of the person who should receive OneDrive access"
+                }
+                'MailboxControl' = @{
+                    Label = "Grant Mailbox Full Control To (Email):"
+                    Placeholder = "Enter delegate's email address"
+                    Tooltip = "Enter the email of the person who should receive mailbox access"
+                }
+                'ForwardMailbox' = @{
+                    Label = "Forward Mailbox To (Email):"
+                    Placeholder = "Enter forward-to email address"
+                    Tooltip = "Enter the email address where future emails should be forwarded"
+                }
+            }
 
         # Function to validate email addresses
         function Test-EmailAddress {
@@ -460,6 +486,60 @@ try {
                 [string]$Email
             )
             return $Email -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'  # Basic email regex
+        }
+
+        function Initialize-EmailTextBox {
+            param (
+                [string]$PlaceholderText,
+                [string]$ToolTipText,
+                [string]$Margin = '0,0,0,10'
+            )
+
+            $textBox = New-Object System.Windows.Controls.TextBox
+            $textBox.Margin = $Margin
+            $textBox.Padding = '5,3,5,3'
+            $textBox.Tag = $PlaceholderText
+            $textBox.Text = $PlaceholderText
+            $textBox.Foreground = 'Gray'
+            $textBox.ToolTip = $ToolTipText
+
+            # Add common event handlers
+            $textBox.Add_GotFocus($Script:emailGotFocusHandler)
+            $textBox.Add_LostFocus($Script:emailLostFocusHandler)
+
+            return $textBox
+        }
+
+        # Define common event handlers
+        $Script:emailGotFocusHandler = {
+            if ($this.Text -eq $this.Tag) {
+                $this.Text = ""
+                $this.Foreground = 'Black'
+            }
+        }
+
+        $Script:emailLostFocusHandler = {
+            if ([string]::IsNullOrWhiteSpace($this.Text) -or $this.Text -eq $this.Tag) {
+                $this.Text = $this.Tag
+                $this.Foreground = 'Gray'
+                $this.BorderBrush = $null
+                $this.BorderThickness = 1
+                return
+            }
+            if (-not (Test-EmailAddress -Email $this.Text)) {
+                $this.BorderBrush = 'Red'
+                $this.BorderThickness = 2
+            } else {
+                $this.BorderBrush = $null
+                $this.BorderThickness = 1
+            }
+        }
+
+        function New-FormLabel {
+            param ([string]$Content)
+            $label = New-Object System.Windows.Controls.Label
+            $label.Content = $Content
+            return $label
         }
 
         # Create a new WPF window
@@ -503,40 +583,10 @@ try {
         $termStack.Margin = '5'
 
         # User to terminate
-        $lblUserToTerm = New-Object System.Windows.Controls.Label
-        $lblUserToTerm.Content = "User to Terminate (Email) *"
+        $lblUserToTerm = New-FormLabel -Content "User to Terminate (Email) *"
         $termStack.Children.Add($lblUserToTerm)
 
-        $txtUserToTerm = New-Object System.Windows.Controls.TextBox
-        $txtUserToTerm.Margin = '0,0,0,10'
-        $txtUserToTerm.Padding = '5,3,5,3'
-        $txtUserToTerm.Tag = "Enter user's email address"
-        $txtUserToTerm.Text = $txtUserToTerm.Tag
-        $txtUserToTerm.Foreground = 'Gray'
-        $txtUserToTerm.ToolTip = "Enter the email address of the user to be terminated"
-
-        # Add placeholder and validation behavior
-        $txtUserToTerm.Add_GotFocus({
-                if ($this.Text -eq $this.Tag) {
-                    $this.Text = ""
-                    $this.Foreground = 'Black'
-                }
-            })
-
-        $txtUserToTerm.Add_LostFocus({
-                if ([string]::IsNullOrWhiteSpace($this.Text)) {
-                    $this.Text = $this.Tag
-                    $this.Foreground = 'Gray'
-                }
-                if ($this.Text -ne $this.Tag -and -not (Test-EmailAddress -Email $this.Text)) {
-                    $this.BorderBrush = 'Red'
-                    $this.BorderThickness = 2
-                } else {
-                    $this.BorderBrush = $null
-                    $this.BorderThickness = 1
-                }
-            })
-
+        $txtUserToTerm = Initialize-EmailTextBox -PlaceholderText "Enter user's email address" -ToolTipText "Enter the email address of the user to be terminated"
         $termStack.Children.Add($txtUserToTerm)
         $termGroup.Content = $termStack
         $mainPanel.Children.Add($termGroup)
@@ -550,122 +600,31 @@ try {
         $delegateStack.Margin = '5'
 
         # OneDrive Access
-        $lblOneDriveAccess = New-Object System.Windows.Controls.Label
-        $lblOneDriveAccess.Content = "Grant OneDrive Access To (Email):"
+        $lblOneDriveAccess = New-FormLabel -Content "Grant OneDrive Access To (Email):"
         $delegateStack.Children.Add($lblOneDriveAccess)
 
-        $txtOneDriveAccess = New-Object System.Windows.Controls.TextBox
-        $txtOneDriveAccess.Margin = '0,0,0,10'
-        $txtOneDriveAccess.Padding = '5,3,5,3'
-        $txtOneDriveAccess.Tag = "Enter delegate's email address"
-        $txtOneDriveAccess.Text = $txtOneDriveAccess.Tag
-        $txtOneDriveAccess.Foreground = 'Gray'
-        $txtOneDriveAccess.ToolTip = "Enter the email of the person who should receive OneDrive access"
-
-        # Add placeholder and validation behavior
-        $txtOneDriveAccess.Add_GotFocus({
-                if ($this.Text -eq $this.Tag) {
-                    $this.Text = ""
-                    $this.Foreground = 'Black'
-                }
-            })
-
-        $txtOneDriveAccess.Add_LostFocus({
-                if ([string]::IsNullOrWhiteSpace($this.Text)) {
-                    $this.Text = $this.Tag
-                    $this.Foreground = 'Gray'
-                }
-                if ($this.Text -ne $this.Tag -and -not (Test-EmailAddress -Email $this.Text)) {
-                    $this.BorderBrush = 'Red'
-                    $this.BorderThickness = 2
-                } else {
-                    $this.BorderBrush = $null
-                    $this.BorderThickness = 1
-                }
-            })
-
+        $txtOneDriveAccess = Initialize-EmailTextBox -PlaceholderText "Enter delegate's email address" -ToolTipText "Enter the email of the person who should receive OneDrive access"
         $delegateStack.Children.Add($txtOneDriveAccess)
 
         # Mailbox Control
-        $lblMailboxControl = New-Object System.Windows.Controls.Label
-        $lblMailboxControl.Content = "Grant Mailbox Full Control To (Email):"
+        $lblMailboxControl = New-FormLabel -Content "Grant Mailbox Full Control To (Email):"
         $delegateStack.Children.Add($lblMailboxControl)
 
-        $txtMailboxControl = New-Object System.Windows.Controls.TextBox
-        $txtMailboxControl.Margin = '0,0,0,10'
-        $txtMailboxControl.Padding = '5,3,5,3'
-        $txtMailboxControl.Tag = "Enter delegate's email address"
-        $txtMailboxControl.Text = $txtMailboxControl.Tag
-        $txtMailboxControl.Foreground = 'Gray'
-        $txtMailboxControl.ToolTip = "Enter the email of the person who should receive mailbox access"
-
-        # Add same placeholder and validation behavior
-        $txtMailboxControl.Add_GotFocus({
-                if ($this.Text -eq $this.Tag) {
-                    $this.Text = ""
-                    $this.Foreground = 'Black'
-                }
-            })
-
-        $txtMailboxControl.Add_LostFocus({
-                if ([string]::IsNullOrWhiteSpace($this.Text)) {
-                    $this.Text = $this.Tag
-                    $this.Foreground = 'Gray'
-                }
-                if ($this.Text -ne $this.Tag -and -not (Test-EmailAddress -Email $this.Text)) {
-                    $this.BorderBrush = 'Red'
-                    $this.BorderThickness = 2
-                } else {
-                    $this.BorderBrush = $null
-                    $this.BorderThickness = 1
-                }
-            })
-
+        $txtMailboxControl = Initialize-EmailTextBox -PlaceholderText "Enter delegate's email address" -ToolTipText "Enter the email of the person who should receive mailbox access"
         $delegateStack.Children.Add($txtMailboxControl)
 
         # Forward Mailbox
-        $lblForwardMailbox = New-Object System.Windows.Controls.Label
-        $lblForwardMailbox.Content = "Forward Mailbox To (Email):"
+        $lblForwardMailbox = New-FormLabel -Content "Forward Mailbox To (Email):"
         $delegateStack.Children.Add($lblForwardMailbox)
 
-        $txtForwardMailbox = New-Object System.Windows.Controls.TextBox
-        $txtForwardMailbox.Margin = '0,0,0,10'
-        $txtForwardMailbox.Padding = '5,3,5,3'
-        $txtForwardMailbox.Tag = "Enter forward-to email address"
-        $txtForwardMailbox.Text = $txtForwardMailbox.Tag
-        $txtForwardMailbox.Foreground = 'Gray'
-        $txtForwardMailbox.ToolTip = "Enter the email address where future emails should be forwarded"
-
-        # Add same placeholder and validation behavior
-        $txtForwardMailbox.Add_GotFocus({
-                if ($this.Text -eq $this.Tag) {
-                    $this.Text = ""
-                    $this.Foreground = 'Black'
-                }
-            })
-
-        $txtForwardMailbox.Add_LostFocus({
-                if ([string]::IsNullOrWhiteSpace($this.Text)) {
-                    $this.Text = $this.Tag
-                    $this.Foreground = 'Gray'
-                }
-                if ($this.Text -ne $this.Tag -and -not (Test-EmailAddress -Email $this.Text)) {
-                    $this.BorderBrush = 'Red'
-                    $this.BorderThickness = 2
-                } else {
-                    $this.BorderBrush = $null
-                    $this.BorderThickness = 1
-                }
-            })
-
+        $txtForwardMailbox = Initialize-EmailTextBox -PlaceholderText "Enter forward-to email address" -ToolTipText "Enter the email address where future emails should be forwarded"
         $delegateStack.Children.Add($txtForwardMailbox)
 
         # OneDrive Read-Only option
         $oneDrivePanel = New-Object System.Windows.Controls.DockPanel
         $oneDrivePanel.Margin = '0,0,0,5'
 
-        $lblOneDriveReadOnly = New-Object System.Windows.Controls.Label
-        $lblOneDriveReadOnly.Content = "Set OneDrive as Read-Only:"
+        $lblOneDriveReadOnly = New-FormLabel -Content "Set OneDrive as Read-Only:"
         $lblOneDriveReadOnly.VerticalAlignment = 'Center'
 
         $chkOneDriveReadOnly = New-Object System.Windows.Controls.CheckBox
@@ -692,30 +651,29 @@ try {
         $okButton.Height = 30
         $okButton.Margin = '0,0,10,0'
         $okButton.Add_Click({
-                # Validate user termination input
-                if (-not $txtUserToTerm.Text) {
-                    [System.Windows.MessageBox]::Show("User to Terminate is a mandatory field. Please enter a email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+            # Validate required fields first
+            if (-not $txtUserToTerm.Text -or $txtUserToTerm.Text -eq $txtUserToTerm.Tag -or -not (Test-EmailAddress -Email $txtUserToTerm.Text)) {
+                [System.Windows.MessageBox]::Show("Invalid or missing email for required field: User to Terminate", "Input Error")
+                return
+            }
+
+            # Validate optional fields if they have content
+            $optionalTextBoxes = @{
+                'OneDrive Access' = $txtOneDriveAccess
+                'Mailbox Control' = $txtMailboxControl
+                'Forward Mailbox' = $txtForwardMailbox
+            }
+
+            foreach ($field in $optionalTextBoxes.GetEnumerator()) {
+                if ($field.Value.Text -ne $field.Value.Tag -and -not (Test-EmailAddress -Email $field.Value.Text)) {
+                    [System.Windows.MessageBox]::Show("Invalid email format for: $($field.Key)", "Input Error")
                     return
                 }
+            }
 
-                # Validate optional email inputs
-                $emailInputs = @{
-                    "Grant OneDrive Access To (Email):"      = $txtOneDriveAccess.Text
-                    "Grant Mailbox Full Control To (Email):" = $txtMailboxControl.Text
-                    "Forward Mailbox To (Email):"            = $txtForwardMailbox.Text
-                }
-
-                foreach ($input in $emailInputs.GetEnumerator()) {
-                    if ($input.Value -and -not (Test-EmailAddress -Email $input.Value)) {
-                        [System.Windows.MessageBox]::Show("Invalid email format for: $($input.Key). Please enter a valid email address.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-                        return
-                    }
-                }
-
-                # Set the DialogResult to true and close the window
-                $window.DialogResult = $true
-                $window.Close()
-            })
+            $window.DialogResult = $true
+            $window.Close()
+        })
         $buttonPanel.Children.Add($okButton)
 
         $cancelButton = New-Object System.Windows.Controls.Button
