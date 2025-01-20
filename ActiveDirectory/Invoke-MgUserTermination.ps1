@@ -451,66 +451,83 @@ try {
 
     # Function to create and show a custom WPF window for user termination
     function Show-CustomTerminationWindow {
-
-        # Build out UI for user input
+        # 1. Add required assemblies
         Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
-            # Move this to the start of the function, right after Add-Type
-            $emailFields = @{
-                'UserToTerminate' = @{
-                    Label = "User to Terminate (Email) *"
-                    Placeholder = "Enter user's email address"
-                    Tooltip = "Enter the email address of the user to be terminated"
-                    Required = $true
-                }
-                'OneDriveAccess' = @{
-                    Label = "Grant OneDrive Access To (Email):"
-                    Placeholder = "Enter delegate's email address"
-                    Tooltip = "Enter the email of the person who should receive OneDrive access"
-                }
-                'MailboxControl' = @{
-                    Label = "Grant Mailbox Full Control To (Email):"
-                    Placeholder = "Enter delegate's email address"
-                    Tooltip = "Enter the email of the person who should receive mailbox access"
-                }
-                'ForwardMailbox' = @{
-                    Label = "Forward Mailbox To (Email):"
-                    Placeholder = "Enter forward-to email address"
-                    Tooltip = "Enter the email address where future emails should be forwarded"
-                }
-            }
+        # 2. UI Assembly Helper Functions
+        function New-HeaderPanel {
+            param ([string]$Text)
+            $headerPanel = New-Object System.Windows.Controls.Border
+            $headerPanel.Background = '#E1E1E1'
+            $headerPanel.Padding = '10'
+            $headerPanel.Margin = '0,0,0,15'
+            $headerPanel.BorderBrush = '#CCCCCC'
+            $headerPanel.BorderThickness = '1'
 
-        # Function to validate email addresses
-        function Test-EmailAddress {
-            param (
-                [string]$Email
-            )
-            return $Email -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'  # Basic email regex
+            $headerText = New-Object System.Windows.Controls.TextBlock
+            $headerText.Text = $Text
+            $headerText.TextWrapping = 'Wrap'
+            $headerPanel.Child = $headerText
+
+            return $headerPanel
         }
 
-        function Initialize-EmailTextBox {
+        function New-FormButton {
             param (
-                [string]$PlaceholderText,
-                [string]$ToolTipText,
+                [string]$Content,
+                [scriptblock]$ClickHandler,
+                [string]$Margin = '0,0,0,0'
+            )
+            $button = New-Object System.Windows.Controls.Button
+            $button.Content = $Content
+            $button.Width = 100
+            $button.Height = 30
+            $button.Margin = $Margin
+            $button.Add_Click($ClickHandler)
+            return $button
+        }
+
+        function New-FormLabel {
+            param ([string]$Content)
+            $label = New-Object System.Windows.Controls.Label
+            $label.Content = $Content
+            return $label
+        }
+
+        function New-FormGroupBox {
+            param (
+                [string]$Header,
                 [string]$Margin = '0,0,0,10'
             )
+            $group = New-Object System.Windows.Controls.GroupBox
+            $group.Header = $Header
+            $group.Margin = $Margin
 
-            $textBox = New-Object System.Windows.Controls.TextBox
-            $textBox.Margin = $Margin
-            $textBox.Padding = '5,3,5,3'
-            $textBox.Tag = $PlaceholderText
-            $textBox.Text = $PlaceholderText
-            $textBox.Foreground = 'Gray'
-            $textBox.ToolTip = $ToolTipText
+            $stack = New-Object System.Windows.Controls.StackPanel
+            $stack.Margin = '5'
+            $group.Content = $stack
 
-            # Add common event handlers
-            $textBox.Add_GotFocus($Script:emailGotFocusHandler)
-            $textBox.Add_LostFocus($Script:emailLostFocusHandler)
-
-            return $textBox
+            return @{
+                Group = $group
+                Stack = $stack
+            }
         }
 
-        # Define common event handlers
+        # 3. Validation Helper Functions
+        function Test-EmailAddress {
+            param ([string]$Email)
+            return $Email -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        }
+
+        function Show-ValidationError {
+            param (
+                [string]$Message,
+                [string]$Title = "Input Error"
+            )
+            [System.Windows.MessageBox]::Show($Message, $Title, [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+        }
+
+        # 4. Event Handlers
         $Script:emailGotFocusHandler = {
             if ($this.Text -eq $this.Tag) {
                 $this.Text = ""
@@ -535,44 +552,46 @@ try {
             }
         }
 
-        function New-FormLabel {
-            param ([string]$Content)
-            $label = New-Object System.Windows.Controls.Label
-            $label.Content = $Content
-            return $label
+        # 5. Input Control Initialization
+        function Initialize-EmailTextBox {
+            param (
+                [string]$PlaceholderText,
+                [string]$ToolTipText,
+                [string]$Margin = '0,0,0,10'
+            )
+
+            $textBox = New-Object System.Windows.Controls.TextBox
+            $textBox.Margin = $Margin
+            $textBox.Padding = '5,3,5,3'
+            $textBox.Tag = $PlaceholderText
+            $textBox.Text = $PlaceholderText
+            $textBox.Foreground = 'Gray'
+            $textBox.ToolTip = $ToolTipText
+
+            $textBox.Add_GotFocus($Script:emailGotFocusHandler)
+            $textBox.Add_LostFocus($Script:emailLostFocusHandler)
+
+            return $textBox
         }
 
-        # Create a new WPF window
+        # 6. Main UI Creation and Logic
+        # Create window and main containers
         $window = New-Object System.Windows.Window
         $window.Title = "User Termination Request"
         $window.Width = 500
-        $window.Height = 530  # Slightly increased for better spacing
+        $window.Height = 530
         $window.WindowStartupLocation = 'CenterScreen'
-        $window.Background = '#F0F0F0'  # Light gray background
+        $window.Background = '#F0F0F0'
 
-        # Create ScrollViewer as main container
         $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
         $scrollViewer.VerticalScrollBarVisibility = "Auto"
-
-        # Create main StackPanel
         $mainPanel = New-Object System.Windows.Controls.StackPanel
         $mainPanel.Margin = '10'
         $scrollViewer.Content = $mainPanel
         $window.Content = $scrollViewer
 
-        # Add header/description
-        $headerPanel = New-Object System.Windows.Controls.Border
-        $headerPanel.Background = '#E1E1E1'
-        $headerPanel.Padding = '10'
-        $headerPanel.Margin = '0,0,0,15'
-        $headerPanel.BorderBrush = '#CCCCCC'
-        $headerPanel.BorderThickness = '1'
-
-        $headerText = New-Object System.Windows.Controls.TextBlock
-        $headerText.Text = "User Termination Request`nPlease fill in all required fields marked with *"
-        $headerText.TextWrapping = 'Wrap'
-        $headerPanel.Child = $headerText
-        $mainPanel.Children.Add($headerPanel)
+        # Add header
+        $mainPanel.Children.Add((New-HeaderPanel -Text "User Termination Request`nPlease fill in all required fields marked with *"))
 
         # Create user termination group
         $termGroup = New-Object System.Windows.Controls.GroupBox
@@ -645,45 +664,36 @@ try {
         $buttonPanel.HorizontalAlignment = 'Right'
         $buttonPanel.Margin = '0,10,0,0'
 
-        $okButton = New-Object System.Windows.Controls.Button
-        $okButton.Content = "OK"
-        $okButton.Width = 100
-        $okButton.Height = 30
-        $okButton.Margin = '0,0,10,0'
-        $okButton.Add_Click({
-            # Validate required fields first
-            if (-not $txtUserToTerm.Text -or $txtUserToTerm.Text -eq $txtUserToTerm.Tag -or -not (Test-EmailAddress -Email $txtUserToTerm.Text)) {
-                [System.Windows.MessageBox]::Show("Invalid or missing email for required field: User to Terminate", "Input Error")
-                return
-            }
-
-            # Validate optional fields if they have content
-            $optionalTextBoxes = @{
-                'OneDrive Access' = $txtOneDriveAccess
-                'Mailbox Control' = $txtMailboxControl
-                'Forward Mailbox' = $txtForwardMailbox
-            }
-
-            foreach ($field in $optionalTextBoxes.GetEnumerator()) {
-                if ($field.Value.Text -ne $field.Value.Tag -and -not (Test-EmailAddress -Email $field.Value.Text)) {
-                    [System.Windows.MessageBox]::Show("Invalid email format for: $($field.Key)", "Input Error")
+        $okButton = New-FormButton -Content "OK" -ClickHandler {
+                # Validate required fields first
+                if (-not $txtUserToTerm.Text -or $txtUserToTerm.Text -eq $txtUserToTerm.Tag -or -not (Test-EmailAddress -Email $txtUserToTerm.Text)) {
+                    [System.Windows.MessageBox]::Show("Invalid or missing email for required field: User to Terminate", "Input Error")
                     return
                 }
-            }
 
-            $window.DialogResult = $true
-            $window.Close()
-        })
+                # Validate optional fields if they have content
+                $optionalTextBoxes = @{
+                    'OneDrive Access' = $txtOneDriveAccess
+                    'Mailbox Control' = $txtMailboxControl
+                    'Forward Mailbox' = $txtForwardMailbox
+                }
+
+                foreach ($field in $optionalTextBoxes.GetEnumerator()) {
+                    if ($field.Value.Text -ne $field.Value.Tag -and -not (Test-EmailAddress -Email $field.Value.Text)) {
+                        [System.Windows.MessageBox]::Show("Invalid email format for: $($field.Key)", "Input Error")
+                        return
+                    }
+                }
+
+                $window.DialogResult = $true
+                $window.Close()
+            }
         $buttonPanel.Children.Add($okButton)
 
-        $cancelButton = New-Object System.Windows.Controls.Button
-        $cancelButton.Content = "Cancel"
-        $cancelButton.Width = 100
-        $cancelButton.Height = 30
-        $cancelButton.Add_Click({
+        $cancelButton = New-FormButton -Content "Cancel" -ClickHandler {
                 $window.DialogResult = $false
                 $window.Close()
-            })
+            }
         $buttonPanel.Children.Add($cancelButton)
 
         $mainPanel.Children.Add($buttonPanel)

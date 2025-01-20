@@ -726,63 +726,523 @@ try {
     }
 
     function Show-NewUserRequestWindow {
-        [CmdletBinding()]
-        param()
+        # 1. Add required assemblies
+        Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
-        try {
-            # Build out UI for user input
-            Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+        # 2. UI Assembly Helper Functions
+        function New-HeaderPanel {
+            param ([string]$Text)
+            $headerPanel = New-Object System.Windows.Controls.Border
+            $headerPanel.Background = '#E1E1E1'
+            $headerPanel.Padding = '10'
+            $headerPanel.Margin = '0,0,0,15'
+            $headerPanel.BorderBrush = '#CCCCCC'
+            $headerPanel.BorderThickness = '1'
 
-            # Create and show window
-            try {
-                $window = New-Object System.Windows.Window
-                $window.Title = "New User Request"
-                $window.SizeToContent = "WidthAndHeight"
-                $window.WindowStartupLocation = "CenterScreen"
+            $headerText = New-Object System.Windows.Controls.TextBlock
+            $headerText.Text = $Text
+            $headerText.TextWrapping = 'Wrap'
+            $headerPanel.Child = $headerText
 
-                # Add UI elements and event handlers
-                # ... (existing UI code) ...
+            return $headerPanel
+        }
 
-                $result = $window.ShowDialog()
+        function New-FormButton {
+            param (
+                [string]$Content,
+                [scriptblock]$ClickHandler,
+                [string]$Margin = '0,0,0,0'
+            )
+            $button = New-Object System.Windows.Controls.Button
+            $button.Content = $Content
+            $button.Width = 100
+            $button.Height = 30
+            $button.Margin = $Margin
+            $button.Add_Click($ClickHandler)
+            return $button
+        }
 
-                if ($result -eq $true) {
-                    # Validate required fields
-                    if ([string]::IsNullOrWhiteSpace($newUserTextBox.Text) -or
-                        [string]::IsNullOrWhiteSpace($userToCopyTextBox.Text) -or
-                        $null -eq $requiredComboBox.SelectedItem) {
-                        throw [System.ArgumentException]::new("Required fields cannot be empty")
-                    }
+        function New-FormLabel {
+            param ([string]$Content)
+            $label = New-Object System.Windows.Controls.Label
+            $label.Content = $Content
+            return $label
+        }
 
-                    return @{
-                        InputNewUser           = $newUserTextBox.Text
-                        InputNewMobile         = $formattedMobile
-                        InputUserToCopy        = $userToCopyTextBox.Text
-                        InputRequiredLicense   = @{
-                            SkuId       = $requiredComboBox.SelectedItem.SkuId
-                            DisplayName = $requiredComboBox.SelectedItem.DisplayName
-                        }
-                        InputAncillaryLicenses = ($SkuCheckBoxes |
-                            Where-Object { $_.IsChecked } |
-                            ForEach-Object {
-                                @{
-                                    SkuId       = $_.Tag
-                                    DisplayName = $_.Content
-                                }
-                            })
-                    }
-                }
-                return $null
-            }
-            catch {
-                Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Failed to create or show window"
-                Add-ErrorType -ErrorType General
-                throw
+        function New-FormGroupBox {
+            param (
+                [string]$Header,
+                [string]$Margin = '0,0,0,10'
+            )
+            $group = New-Object System.Windows.Controls.GroupBox
+            $group.Header = $Header
+            $group.Margin = $Margin
+
+            $stack = New-Object System.Windows.Controls.StackPanel
+            $stack.Margin = '5'
+            $group.Content = $stack
+
+            return @{
+                Group = $group
+                Stack = $stack
             }
         }
-        catch {
-            Write-ErrorRecord -ErrorRecord $_ -CustomMessage "Critical error in Show-NewUserRequestWindow"
-            Add-ErrorType -ErrorType General
-            throw
+
+        # 3. Validation Helper Functions
+        function Test-DisplayName {
+            param ([string]$DisplayName)
+            return $DisplayName -match '^[A-Za-z]+ [A-Za-z]+$'
+        }
+
+        function Format-MobileNumber {
+            param ([string]$MobileNumber)
+            $digits = -join ($MobileNumber -replace '\D', '')
+            if ($digits.Length -eq 10) {
+                return "($($digits.Substring(0, 3))) $($digits.Substring(3, 3))-$($digits.Substring(6, 4))"
+            }
+        }
+
+        function Show-ValidationError {
+            param (
+                [string]$Message,
+                [string]$Title = "Input Error"
+            )
+            [System.Windows.MessageBox]::Show($Message, $Title, [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+        }
+
+        # 4. License Processing Functions
+        function Get-LicenseDisplayName {
+            param ([string]$SkuPartNumber)
+            $displayName = switch -Regex ($SkuPartNumber) {
+                "POWERAUTOMATE_ATTENDED_RPA" { "Power Automate Premium" }
+                "PROJECT_MADEIRA_PREVIEW_IW_SKU" { "Dynamics 365 Business Central for IWs" }
+                "PROJECT_PLAN3_DEPT" { "Project Plan 3 (for Department)" }
+                "FLOW_FREE" { "Microsoft Power Automate Free" }
+                "WINDOWS_STORE" { "Windows Store for Business" }
+                "RMSBASIC" { "Rights Management Service Basic Content Protection" }
+                "RIGHTSMANAGEMENT_ADHOC" { "Rights Management Adhoc" }
+                "POWERAPPS_VIRAL" { "Microsoft Power Apps Plan 2 Trial" }
+                "POWERAPPS_PER_USER" { "Power Apps Premium" }
+                "POWERAPPS_DEV" { "Microsoft PowerApps for Developer" }
+                "PHONESYSTEM_VIRTUALUSER" { "Microsoft Teams Phone Resource Account" }
+                "MICROSOFT_BUSINESS_CENTER" { "Microsoft Business Center" }
+                "MCOPSTNC" { "Communications Credits" }
+                "MCOPSTN1" { "Skype for Business PSTN Domestic Calling" }
+                "MEETING_ROOM" { "Microsoft Teams Rooms Standard" }
+                "MCOMEETADV" { "Microsoft 365 Audio Conferencing" }
+                "CCIBOTS_PRIVPREV_VIRAL" { "Power Virtual Agents Viral Trial" }
+                "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
+                "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
+                "SPE_E3" { "Microsoft 365 E3" }
+                "SPB" { "Microsoft 365 Business Premium" }
+                "ENTERPRISEPACK" { "Office 365 E3" }
+                "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
+                "PROJECT_P1" { "Project Plan 1" }
+                "PROJECTPROFESSIONAL" { "Project Plan 3" }
+                "VISIOCLIENT" { "Visio Plan 2" }
+                "Microsoft_Teams_Audio_Conferencing_select_dial_out" { "Microsoft Teams Audio Conferencing with dial-out to USA/CAN" }
+                "POWER_BI_PRO" { "Power BI Pro" }
+                "Microsoft_365_Copilot" { "Microsoft 365 Copilot" }
+                "Microsoft_Teams_Premium" { "Microsoft Teams Premium" }
+                "MCOEV" { "Microsoft Teams Phone Standard" }
+                "POWER_BI_STANDARD" { "Power BI Standard" }
+                "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
+                default { $SkuPartNumber }
+            }
+            return $displayName
+        }
+
+        function Get-FormattedLicenseInfo {
+            param ([array]$Skus)
+            return $Skus | ForEach-Object {
+                $available = $_.PrepaidUnits - $_.ConsumedUnits
+                $SkuDisplayName = Get-LicenseDisplayName $_.SkuPartNumber
+                if ([string]::IsNullOrEmpty($SkuDisplayName)) {
+                    $SkuDisplayName = $_.SkuPartNumber
+                }
+                @{
+                    DisplayName = "$($SkuDisplayName) (Available: $available)"
+                    SkuId = $_.SkuId
+                    SortName = $SkuDisplayName
+                }
+            } | Sort-Object { $_.SortName }
+        }
+
+        # 5. Event Handlers
+        $Script:inputGotFocusHandler = {
+            if ($this.Text -eq $this.Tag) {
+                $this.Text = ""
+                $this.Foreground = 'Black'
+            }
+        }
+
+        $Script:inputLostFocusHandler = {
+            if ([string]::IsNullOrWhiteSpace($this.Text) -or $this.Text -eq $this.Tag) {
+                $this.Text = $this.Tag
+                $this.Foreground = 'Gray'
+                $this.BorderBrush = $null
+                $this.BorderThickness = 1
+                return
+            }
+            switch -Regex ($this.Name) {
+                'newUser|userToCopy' {
+                    if (-not (Test-DisplayName $this.Text)) {
+                        $this.BorderBrush = 'Red'
+                        $this.BorderThickness = 2
+                    } else {
+                        $this.BorderBrush = $null
+                        $this.BorderThickness = 1
+                    }
+                    break
+                }
+                'mobile' {
+                    if ($this.Text -ne $this.Tag) {
+                        $formattedNumber = Format-MobileNumber $this.Text
+                        if ($null -eq $formattedNumber) {
+                            $this.BorderBrush = 'Red'
+                            $this.BorderThickness = 2
+                        } else {
+                            $this.BorderBrush = $null
+                            $this.BorderThickness = 1
+                            if (-not $bypassFormattingCheckBox.IsChecked) {
+                                $this.Text = $formattedNumber
+                            }
+                        }
+                    }
+                    break
+                }
+            }
+        }
+
+        # 6. Input Control Initialization
+        function Initialize-InputTextBox {
+            param (
+                [string]$PlaceholderText,
+                [string]$ToolTipText,
+                [string]$Name,
+                [string]$Margin = '0,0,0,10'
+            )
+
+            $textBox = New-Object System.Windows.Controls.TextBox
+            $textBox.Name = $Name
+            $textBox.Margin = $Margin
+            $textBox.Padding = '5,3,5,3'
+            $textBox.Tag = $PlaceholderText
+            $textBox.Text = $PlaceholderText
+            $textBox.Foreground = 'Gray'
+            $textBox.ToolTip = $ToolTipText
+
+            $textBox.Add_GotFocus($Script:inputGotFocusHandler)
+            $textBox.Add_LostFocus($Script:inputLostFocusHandler)
+
+            return $textBox
+        }
+
+        # 7. Main UI Creation and Logic
+        # Get license information
+        $skus = Get-MgSubscribedSku | Select-Object SkuId, SkuPartNumber, ConsumedUnits, @{
+            Name = 'PrepaidUnits'; Expression = { $_.PrepaidUnits.Enabled }
+        }
+        $licenseInfo = Get-FormattedLicenseInfo -Skus $skus
+
+        # Create window and main containers
+        $window = New-Object System.Windows.Window
+        $window.Title = "New User Request"
+        $window.Width = 500
+        $window.Height = 800
+        $window.WindowStartupLocation = 'CenterScreen'
+        $window.Background = '#F0F0F0'
+
+        $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
+        $scrollViewer.VerticalScrollBarVisibility = "Auto"
+        $mainPanel = New-Object System.Windows.Controls.StackPanel
+        $mainPanel.Margin = '10'
+        $scrollViewer.Content = $mainPanel
+        $window.Content = $scrollViewer
+
+        # Add header
+        $mainPanel.Children.Add((New-HeaderPanel -Text "Create New User Request`nPlease fill in all required fields marked with *"))
+
+        # New User section
+        $newUserSection = New-FormGroupBox -Header "New User Information"
+        $newUserSection.Stack.Children.Add((New-FormLabel -Content "New User Name (First Last) *"))
+        $newUserTextBox = Initialize-InputTextBox `
+            -Name "newUser" `
+            -PlaceholderText "Enter first and last name" `
+            -ToolTipText "Enter the full name of the new user (e.g., John Smith)"
+        $newUserSection.Stack.Children.Add($newUserTextBox)
+        $mainPanel.Children.Add($newUserSection.Group)
+
+        # Template User section
+        $copyUserSection = New-FormGroupBox -Header "Template User Information"
+        $copyUserSection.Stack.Children.Add((New-FormLabel -Content "User To Copy (First Last) *"))
+        $userToCopyTextBox = Initialize-InputTextBox `
+            -Name "userToCopy" `
+            -PlaceholderText "Enter template user's name" `
+            -ToolTipText "Enter the name of an existing user whose permissions should be copied"
+        $copyUserSection.Stack.Children.Add($userToCopyTextBox)
+        $mainPanel.Children.Add($copyUserSection.Group)
+
+        # Mobile section
+        $mobileSection = New-FormGroupBox -Header "Contact Information"
+        $mobileSection.Stack.Children.Add((New-FormLabel -Content "Mobile Number"))
+        $mobileTextBox = Initialize-InputTextBox `
+            -Name "mobile" `
+            -PlaceholderText "Enter 10-digit mobile number" `
+            -ToolTipText "Enter a 10-digit mobile number (e.g., 1234567890)"
+        $mobileSection.Stack.Children.Add($mobileTextBox)
+
+        $bypassPanel = New-Object System.Windows.Controls.DockPanel
+        $bypassPanel.Margin = '0,0,0,5'
+        $bypassFormattingCheckBox = New-Object System.Windows.Controls.CheckBox
+        $bypassFormattingCheckBox.Content = "Bypass Mobile Number Formatting"
+        $bypassFormattingCheckBox.ToolTip = "Check this box to skip automatic formatting of the mobile number"
+        $bypassFormattingCheckBox.Margin = '0,5,0,5'
+        $bypassPanel.Children.Add($bypassFormattingCheckBox)
+        $mobileSection.Stack.Children.Add($bypassPanel)
+        $mainPanel.Children.Add($mobileSection.Group)
+
+        # Modify the licenses section to create two separate controls
+        $requiredLicenses = @(
+            "Exchange Online (Plan 1)",
+            "Office 365 E3",
+            "Microsoft 365 Business Basic",
+            "Microsoft 365 E3",
+            "Microsoft 365 Business Premium"
+        )
+
+        $ignoredLicenses = @(
+            "Microsoft Teams Rooms Standard",
+            "Microsoft Teams Phone Standard",
+            "Power Automate Premium",
+            "Power Apps Premium",
+            "Power BI Pro",
+            "Power BI Standard",
+            "Microsoft 365 Lighthouse",
+            "Rights Management Service Basic Content Protection",
+            "Communications Credits",
+            "Rights Management Adhoc",
+            "Power Virtual Agents Viral Trial",
+            "Windows Store for Business",
+            "Skype for Business PSTN Domestic Calling",
+            "Microsoft Business Center",
+            "Microsoft Teams Phone Resource Account",
+            "Microsoft PowerApps for Developer",
+            "Microsoft Power Apps Plan 2 Trial",
+            "Microsoft Power Automate Free",
+            "Microsoft_Copilot_for_Finance_trial",
+            "STREAM",
+            "Project Plan 3 (for Department)",
+            "Dynamics 365 Business Central for IWs"
+        )
+        # Required License ComboBox Section
+        $requiredGroup = New-Object System.Windows.Controls.GroupBox
+        $requiredGroup.Header = "Required License (Select One) *"
+        $requiredGroup.Margin = "0,0,0,10"  # Match other group margins
+
+        $requiredStack = New-Object System.Windows.Controls.StackPanel
+        $requiredStack.Margin = "5"  # Match other stack margins
+
+        $requiredComboBox = New-Object System.Windows.Controls.ComboBox
+        $requiredComboBox.Margin = "0,0,0,10"  # Match other control margins
+        $requiredComboBox.Padding = "5,3,5,3"  # Match other control padding
+        $requiredComboBox.ToolTip = "Select one of the required base licenses for the user"
+
+        # Create a custom object for each required license
+        foreach ($license in $licenseInfo) {
+            foreach ($reqLicense in $requiredLicenses) {
+                if ($license.DisplayName -like "*$reqLicense*") {
+                    $item = [PSCustomObject]@{
+                        DisplayName = $license.DisplayName
+                        SkuId       = $license.SkuId
+                    }
+                    $requiredComboBox.Items.Add($item)
+                }
+            }
+        }
+
+        # Set the DisplayMemberPath to show the DisplayName
+        $requiredComboBox.DisplayMemberPath = "DisplayName"
+        $requiredStack.Children.Add($requiredComboBox)
+        $requiredGroup.Content = $requiredStack
+        $mainPanel.Children.Add($requiredGroup)
+
+        # Ancillary Licenses Section
+        $ancillaryGroup = New-Object System.Windows.Controls.GroupBox
+        $ancillaryGroup.Header = "Ancillary Licenses"
+        $ancillaryGroup.Margin = "0,0,0,10"  # Match other group margins
+
+        # Create ScrollViewer for ancillary licenses
+        $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
+        $scrollViewer.VerticalScrollBarVisibility = "Auto"
+        $scrollViewer.MaxHeight = 200
+        $scrollViewer.Margin = "5"  # Match other stack margins
+
+        $licensesStack = New-Object System.Windows.Controls.StackPanel
+        $scrollViewer.Content = $licensesStack
+        $ancillaryGroup.Content = $scrollViewer
+
+        $SkuCheckBoxes = @()
+        foreach ($license in $licenseInfo) {
+            # Skip licenses that are in the required licenses list
+            $isRequired = $false
+            foreach ($reqLicense in $requiredLicenses) {
+                if ($license.DisplayName -like "*$reqLicense*") {
+                    $isRequired = $true
+                    break
+                }
+            }
+            $isIgnored = $false
+            foreach ($ignoredLicense in $ignoredLicenses) {
+                if ($license.DisplayName -like "*$ignoredLicense*") {
+                    $isIgnored = $true
+                    break
+                }
+            }
+            if (-not $isRequired -and -not $isIgnored) {
+                $skucb = New-Object System.Windows.Controls.CheckBox
+                $skucb.Content = $license.DisplayName
+                $skucb.Tag = $license.SkuId
+                $skucb.Margin = "5,5,5,5"
+                if ($license.DisplayName -like "*Microsoft Entra ID P2*") {
+                    $skucb.IsChecked = $true
+                }
+                $SkuCheckBoxes += $skucb
+                $licensesStack.Children.Add($skucb)
+            }
+        }
+        $mainPanel.Children.Add($ancillaryGroup)
+
+        # Create and add OK and Cancel buttons
+        $buttonPanel = New-Object System.Windows.Controls.StackPanel
+        $buttonPanel.Orientation = 'Horizontal'
+        $buttonPanel.HorizontalAlignment = 'Right'
+        $buttonPanel.Margin = '0,10,0,0'
+
+        $okButton = New-FormButton -Content "OK" -Margin "0,0,10,0" -ClickHandler {
+            # Validate New User input
+            if (-not $newUserTextBox.Text) {
+                [System.Windows.MessageBox]::Show("New User is a mandatory field. Please enter a valid Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+            if (-not (Test-DisplayName $newUserTextBox.Text)) {
+                [System.Windows.MessageBox]::Show("Invalid format for New User. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+
+            # Validate User To Copy input
+            if (-not $userToCopyTextBox.Text) {
+                [System.Windows.MessageBox]::Show("User To Copy is a mandatory field. Please enter a Display Name.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+            if (-not (Test-DisplayName $userToCopyTextBox.Text)) {
+                [System.Windows.MessageBox]::Show("Invalid format for User To Copy. Please use 'First Last' name format.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                return
+            }
+
+            # Validate Mobile Number only if entered and formatting not bypassed
+            if ($mobileTextBox.Text -ne $mobileTextBox.Tag -and -not $bypassFormattingCheckBox.IsChecked) {
+                $unformattedMobile = $mobileTextBox.Text
+                $digits = -join ($unformattedMobile -replace '\D', '')  # Remove non-digit characters
+                if ($digits.Length -ne 10) {
+                    [System.Windows.MessageBox]::Show("Invalid mobile number format. Please enter a valid 10-digit mobile number.", "Input Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+                    return
+                }
+            }
+
+            # Validate required license selection
+            if ($null -eq $requiredComboBox.SelectedItem) {
+                [System.Windows.MessageBox]::Show(
+                    "Please select a required license.",
+                    "Required License Missing",
+                    [System.Windows.MessageBoxButton]::OK,
+                    [System.Windows.MessageBoxImage]::Warning)
+                return
+            }
+
+            # Get selected licenses (both required and ancillary)
+            $script:selectedLicenses = @()
+            $script:selectedLicenses += $requiredComboBox.SelectedItem.SkuId
+            $script:selectedLicenses += ($SkuCheckBoxes | Where-Object { $_.IsChecked } | ForEach-Object { $_.Tag })
+
+            # Check for available licenses
+            if ($requiredComboBox.SelectedItem.DisplayName -match "Available: (\d+)") {
+                $availableCount = [int]$Matches[1]
+                if ($availableCount -eq 0) {
+                    $licenseName = $requiredComboBox.SelectedItem.DisplayName -replace ' \(Available: \d+\)$', ''
+                    [System.Windows.MessageBox]::Show(
+                        "$licenseName has no licenses available.",
+                        "No Available Licenses",
+                        [System.Windows.MessageBoxButton]::OK,
+                        [System.Windows.MessageBoxImage]::Warning)
+                    return
+                }
+            }
+
+            # Check ancillary licenses availability
+            $selectedCheckboxes = $SkuCheckBoxes | Where-Object { $_.IsChecked }
+            foreach ($cb in $selectedCheckboxes) {
+                if ($cb.Content -match "Available: (\d+)") {
+                    $availableCount = [int]$Matches[1]
+                    if ($availableCount -eq 0) {
+                        $licenseName = $cb.Content -replace ' \(Available: \d+\)$', ''
+                        [System.Windows.MessageBox]::Show(
+                            "$licenseName has no licenses available.",
+                            "No Available Licenses",
+                            [System.Windows.MessageBoxButton]::OK,
+                            [System.Windows.MessageBoxImage]::Warning)
+                        return
+                    }
+                }
+            }
+
+            $window.DialogResult = $true
+            $window.Close()
+        }
+        $buttonPanel.Children.Add($okButton)
+
+        $cancelButton = New-FormButton -Content "Cancel" -ClickHandler {
+            $window.DialogResult = $false
+            $window.Close()
+        }
+        $buttonPanel.Children.Add($cancelButton)
+
+        $mainPanel.Children.Add($buttonPanel)
+
+        # Show the window
+        $result = $window.ShowDialog()
+
+        # Initialize formattedMobile variable
+        $formattedMobile = $null
+        if ($mobileTextBox.Text -ne $mobileTextBox.Tag) {
+            # Only process if not placeholder text
+            if (-not $bypassFormattingCheckBox.IsChecked) {
+                $formattedMobile = Format-MobileNumber $mobileTextBox.Text
+            } else {
+                $formattedMobile = $mobileTextBox.Text  # Use the unformatted mobile number
+            }
+        }
+
+        if ($result -eq $true) {
+            return @{
+                InputNewUser           = $newUserTextBox.Text
+                InputNewMobile         = $formattedMobile
+                InputUserToCopy        = $userToCopyTextBox.Text
+                InputRequiredLicense   = @{
+                    SkuId       = $requiredComboBox.SelectedItem.SkuId
+                    DisplayName = $requiredComboBox.SelectedItem.DisplayName
+                }
+                InputAncillaryLicenses = ($SkuCheckBoxes |
+                    Where-Object { $_.IsChecked } |
+                    ForEach-Object {
+                        @{
+                            SkuId       = $_.Tag
+                            DisplayName = $_.Content
+                        }
+                    })
+            }
+        } else {
+            return $null
         }
     }
 
