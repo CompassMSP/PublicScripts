@@ -468,10 +468,11 @@ function Connect-ServiceEndpoints {
     # If Disconnect is specified, handle disconnections
     if ($Disconnect) {
         Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
+        # If no specific services selected, set all to true for disconnecting everything
+        $disconnectAll = -not ($ExchangeOnline -or $Graph -or $SharePoint)
 
         # Disconnect from Exchange Online
-        if (($ExchangeOnline -or -not ($ExchangeOnline -or $Graph -or $SharePoint)) -and
-                (Get-ConnectionInformation)) {
+        if (($ExchangeOnline -or $disconnectAll) -and (Get-ConnectionInformation)) {
             try {
                 Disconnect-ExchangeOnline -Confirm:$false -ErrorAction Stop
                 Write-StatusMessage -Message "Disconnected from Exchange Online" -Type OK
@@ -481,10 +482,9 @@ function Connect-ServiceEndpoints {
         }
 
         # Disconnect from Microsoft Graph
-        if (($Graph -or -not ($ExchangeOnline -or $Graph -or $SharePoint)) -and
-                (Get-MgContext)) {
+        if (($Graph -or $disconnectAll) -and (Get-MgContext)) {
             try {
-                Disconnect-MgGraph -ErrorAction Stop
+                $null =Disconnect-MgGraph -ErrorAction Stop
                 Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
             } catch {
                 Write-StatusMessage -Message "Failed to disconnect from Microsoft Graph: $_" -Type WARN
@@ -492,10 +492,17 @@ function Connect-ServiceEndpoints {
         }
 
         # Disconnect from SharePoint
-        if ($SharePoint -and (Get-PnPConnection -ErrorAction SilentlyContinue)) {
+        if (($SharePoint -or $disconnectAll)) {
             try {
-                Disconnect-PnPOnline -ErrorAction Stop
-                Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
+                # Try to disconnect only if there's an active connection
+                try {
+                    $pnpContext = Get-PnPContext -ErrorAction Stop
+                    if ($pnpContext) {
+                        Disconnect-PnPOnline -ErrorAction Stop
+                        Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
+                    }
+                } catch {
+                }
             } catch {
                 Write-StatusMessage -Message "Failed to disconnect from SharePoint Online: $_" -Type WARN
             }
@@ -504,67 +511,74 @@ function Connect-ServiceEndpoints {
         return
     }
 
-    # Validate parameters for requested services
-    if ($ExchangeOnline -or (-not ($ExchangeOnline -or $Graph -or $SharePoint))) {
-        $requiredExOParams = @('ExOAppId', 'Organization', 'ExOCertSubject')
-        $missingExOParams = $requiredExOParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
+    # If not disconnecting, handle connections
+    if (-not $Disconnect) {
+        # If no specific services selected, connect to all
+        $connectAll = -not ($ExchangeOnline -or $Graph -or $SharePoint)
+        Write-StatusMessage -Message "Connecting to services..." -Type INFO
 
-        if ($missingExOParams) {
-            throw "Exchange Online connection requires the following parameters: $($missingExOParams -join ', ')"
+        # Connect to Exchange Online
+        if ($ExchangeOnline -or $connectAll) {
+            $requiredExOParams = @('ExOAppId', 'Organization', 'ExOCertSubject')
+            $missingExOParams = $requiredExOParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
+
+            if ($missingExOParams) {
+                throw "Exchange Online connection requires the following parameters: $($missingExOParams -join ', ')"
+            }
+
+            Write-StatusMessage -Message "Connecting to Exchange Online..." -Type 'INFO'
+            $ExOCert = Get-ChildItem Cert:\LocalMachine\My |
+            Where-Object { ($_.Subject -like "*$($ExOCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+
+            if ($null -eq $ExOCert) {
+                Exit-Script -Message "No valid ExO PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
+            }
+
+            Connect-ExchangeOnline -AppId $ExOAppId -Organization $Organization -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
+            Write-StatusMessage -Message "Connected to Exchange Online" -Type 'OK'
         }
 
-        Write-StatusMessage -Message "Connecting to Exchange Online..." -Type 'INFO'
-        $ExOCert = Get-ChildItem Cert:\LocalMachine\My |
-        Where-Object { ($_.Subject -like "*$($ExOCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+        # Connect to Microsoft Graph
+        if ($Graph -or $connectAll) {
+            $requiredGraphParams = @('GraphAppId', 'TenantId', 'GraphCertSubject')
+            $missingGraphParams = $requiredGraphParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
 
-        if ($null -eq $ExOCert) {
-            Exit-Script -Message "No valid ExO PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
+            if ($missingGraphParams) {
+                throw "Graph connection requires the following parameters: $($missingGraphParams -join ', ')"
+            }
+
+            Write-StatusMessage -Message "Connecting to Microsoft Graph..." -Type 'INFO'
+            $GraphCert = Get-ChildItem Cert:\LocalMachine\My |
+            Where-Object { ($_.Subject -like "*$($GraphCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+
+            if ($null -eq $GraphCert) {
+                Exit-Script -Message "No valid Graph PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
+            }
+
+            Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+            Write-StatusMessage -Message "Connected to Microsoft Graph" -Type 'OK'
         }
 
-        Connect-ExchangeOnline -AppId $ExOAppId -Organization $Organization -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
-        Write-StatusMessage -Message "Connected to Exchange Online" -Type 'OK'
-    }
+        # Connect to SharePoint Online
+        if ($SharePoint -or $connectAll) {
+            $requiredPnPParams = @('PnPAppId', 'PnPUrl', 'Organization', 'PnPCertSubject')
+            $missingPnPParams = $requiredPnPParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
 
-    # Validate and connect to Microsoft Graph if requested
-    if ($Graph -or (-not ($ExchangeOnline -or $Graph -or $SharePoint))) {
-        $requiredGraphParams = @('GraphAppId', 'TenantId', 'GraphCertSubject')
-        $missingGraphParams = $requiredGraphParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
+            if ($missingPnPParams) {
+                throw "SharePoint connection requires the following parameters: $($missingPnPParams -join ', ')"
+            }
 
-        if ($missingGraphParams) {
-            throw "Graph connection requires the following parameters: $($missingGraphParams -join ', ')"
+            Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type 'INFO'
+            $PnPCert = Get-ChildItem Cert:\LocalMachine\My |
+            Where-Object { ($_.Subject -like "*$($PnPCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+
+            if ($null -eq $PnPCert) {
+                Exit-Script -Message "No valid PnP PowerShell certificates found in the LocalMachine\My store." -ExitCode ConfigError
+            }
+
+            Connect-PnPOnline -Url $PnPUrl -ClientId $PnPAppId -Tenant $Organization -Thumbprint $($PnPCert.Thumbprint)
+            Write-StatusMessage -Message "Connected to SharePoint Online" -Type 'OK'
         }
-
-        Write-StatusMessage -Message "Connecting to Microsoft Graph..." -Type 'INFO'
-        $GraphCert = Get-ChildItem Cert:\LocalMachine\My |
-        Where-Object { ($_.Subject -like "*$($GraphCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
-
-        if ($null -eq $GraphCert) {
-            Exit-Script -Message "No valid Graph PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
-        }
-
-        Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
-        Write-StatusMessage -Message "Connected to Microsoft Graph" -Type 'OK'
-    }
-
-    # Validate and connect to SharePoint Online if requested
-    if ($SharePoint) {
-        $requiredPnPParams = @('PnPAppId', 'PnPUrl', 'Organization', 'PnPCertSubject')
-        $missingPnPParams = $requiredPnPParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
-
-        if ($missingPnPParams) {
-            throw "SharePoint connection requires the following parameters: $($missingPnPParams -join ', ')"
-        }
-
-        Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type 'INFO'
-        $PnPCert = Get-ChildItem Cert:\LocalMachine\My |
-        Where-Object { ($_.Subject -like "*$($PnPCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
-
-        if ($null -eq $PnPCert) {
-            Exit-Script -Message "No valid PnP PowerShell certificates found in the LocalMachine\My store." -ExitCode ConfigError
-        }
-
-        Connect-PnPOnline -Url $PnPUrl -ClientId $PnPAppId -Tenant $Organization -Thumbprint $($PnPCert.Thumbprint)
-        Write-StatusMessage -Message "Connected to SharePoint Online" -Type 'OK'
     }
 }
 
@@ -2312,7 +2326,7 @@ $PnPAppId = $config.PnPSharePoint.AppId
 $PnPUrl = $config.PnPSharePoint.Url
 $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
 
-Connect-ServiceEndpoints
+Connect-ServiceEndpoints -ExchangeOnline -Graph
 
 # Step 1: User Input
 Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].Description
