@@ -465,6 +465,45 @@ function Connect-ServiceEndpoints {
         [switch]$Disconnect
     )
 
+    # If Disconnect is specified, handle disconnections
+    if ($Disconnect) {
+        Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
+
+        # Disconnect from Exchange Online
+        if (($ExchangeOnline -or -not ($ExchangeOnline -or $Graph -or $SharePoint)) -and
+                (Get-ConnectionInformation)) {
+            try {
+                Disconnect-ExchangeOnline -Confirm:$false -ErrorAction Stop
+                Write-StatusMessage -Message "Disconnected from Exchange Online" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to disconnect from Exchange Online: $_" -Type WARN
+            }
+        }
+
+        # Disconnect from Microsoft Graph
+        if (($Graph -or -not ($ExchangeOnline -or $Graph -or $SharePoint)) -and
+                (Get-MgContext)) {
+            try {
+                Disconnect-MgGraph -ErrorAction Stop
+                Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to disconnect from Microsoft Graph: $_" -Type WARN
+            }
+        }
+
+        # Disconnect from SharePoint
+        if ($SharePoint -and (Get-PnPConnection -ErrorAction SilentlyContinue)) {
+            try {
+                Disconnect-PnPOnline -ErrorAction Stop
+                Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to disconnect from SharePoint Online: $_" -Type WARN
+            }
+        }
+
+        return
+    }
+
     # Validate parameters for requested services
     if ($ExchangeOnline -or (-not ($ExchangeOnline -or $Graph -or $SharePoint))) {
         $requiredExOParams = @('ExOAppId', 'Organization', 'ExOCertSubject')

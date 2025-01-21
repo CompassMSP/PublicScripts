@@ -464,6 +464,45 @@ function Connect-ServiceEndpoints {
         [switch]$Disconnect
     )
 
+    # If Disconnect is specified, handle disconnections
+    if ($Disconnect) {
+        Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
+
+        # Disconnect from Exchange Online
+        if (($ExchangeOnline -or -not ($ExchangeOnline -or $Graph -or $SharePoint)) -and
+                (Get-ConnectionInformation)) {
+            try {
+                Disconnect-ExchangeOnline -Confirm:$false -ErrorAction Stop
+                Write-StatusMessage -Message "Disconnected from Exchange Online" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to disconnect from Exchange Online: $_" -Type WARN
+            }
+        }
+
+        # Disconnect from Microsoft Graph
+        if (($Graph -or -not ($ExchangeOnline -or $Graph -or $SharePoint)) -and
+                (Get-MgContext)) {
+            try {
+                Disconnect-MgGraph -ErrorAction Stop
+                Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to disconnect from Microsoft Graph: $_" -Type WARN
+            }
+        }
+
+        # Disconnect from SharePoint
+        if ($SharePoint -and (Get-PnPConnection -ErrorAction SilentlyContinue)) {
+            try {
+                Disconnect-PnPOnline -ErrorAction Stop
+                Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to disconnect from SharePoint Online: $_" -Type WARN
+            }
+        }
+
+        return
+    }
+
     # Validate parameters for requested services
     if ($ExchangeOnline -or (-not ($ExchangeOnline -or $Graph -or $SharePoint))) {
         $requiredExOParams = @('ExOAppId', 'Organization', 'ExOCertSubject')
@@ -1594,127 +1633,74 @@ function Set-TerminatedOneDrive {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$UserPrincipalName,
+        [string]$TermUser,
 
         [Parameter()]
         [switch]$SetReadOnly,
 
         [Parameter()]
-        [string]$OneDriveUser,
-
-        [Parameter()]
-        [int]$MaxRetries = 3,
-
-        [Parameter()]
-        [int]$RetryDelaySeconds = 30
+        [string]$OneDriveUser
     )
 
+    # Skip if no actions are requested
+    if (-not $SetReadOnly -and -not $OneDriveUser) {
+        Write-StatusMessage -Message "No OneDrive actions requested. Skipping OneDrive configuration." -Type INFO
+        return
+    }
+
     try {
-        # Get OneDrive URL with retry logic
-        Write-StatusMessage -Message "Getting OneDrive URL" -Type INFO
-        $retryCount = 0
-        $success = $false
-        $UserOneDriveURL = $null
+        # Ensure SharePoint connection
+        Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type INFO
+        Connect-ServiceEndpoints -SharePoint
 
-        do {
-            try {
-                $profileProps = Get-PnPUserProfileProperty -Account $UserPrincipalName -Properties PersonalUrl -ErrorAction Stop
-                $UserOneDriveURL = $profileProps.PersonalUrl
+        # Get OneDrive URL
+        Write-StatusMessage -Message "Getting OneDrive URL for $TermUser" -Type INFO
+        $onedriveProps = Get-PnPUserProfileProperty -Account $TermUser -Properties PersonalUrl -ErrorAction Stop
 
-                if ($UserOneDriveURL) {
-                    $success = $true
-                    Write-StatusMessage -Message "Successfully retrieved OneDrive URL" -Type OK
-                } else {
-                    throw [System.InvalidOperationException]::new("OneDrive URL is empty")
-                }
-            } catch {
-                $retryCount++
-                if ($retryCount -ge $MaxRetries) {
-                    Write-StatusMessage -Message "Failed to get OneDrive URL after $MaxRetries attempts" -Type WARN
-                    $response = Read-Host "Would you like to try again? (Y/N)"
-                    if ($response -eq 'Y') {
-                        $retryCount = 0
-                        Write-StatusMessage -Message "Retrying OneDrive URL retrieval..." -Type INFO
-                    } else {
-                        Write-StatusMessage -Message "OneDrive URL retrieval skipped by user" -Type WARN
-                        return
-                    }
-                } else {
-                    Write-StatusMessage -Message "Attempt $retryCount of $MaxRetries failed. Waiting $RetryDelaySeconds seconds..." -Type INFO
-                    Start-Sleep -Seconds $RetryDelaySeconds
-                }
-            }
-        } while (-not $success -and $retryCount -lt $MaxRetries)
-
-        if (-not $UserOneDriveURL) {
-            Write-StatusMessage -Message "OneDrive URL not found for user" -Type WARN
+        if (-not $onedriveProps.PersonalUrl) {
+            Write-StatusMessage -Message "No OneDrive URL found for $TermUser. Skipping OneDrive configuration." -Type WARN
             return
         }
 
-        # Verify OneDrive site exists
-        Write-StatusMessage -Message "Verifying OneDrive site accessibility" -Type INFO
-        try {
-            $site = Get-PnPTenantSite -Url $UserOneDriveURL -ErrorAction Stop
-            Write-StatusMessage -Message "OneDrive site verified" -Type OK
-        } catch {
-            Write-StatusMessage -Message "OneDrive site not accessible" -Type WARN
+        $UserOneDriveURL = $onedriveProps.PersonalUrl
+        Write-StatusMessage -Message "Successfully retrieved OneDrive URL" -Type OK
 
-            $response = Read-Host "Would you like to wait for OneDrive provisioning? (Y/N)"
-            if ($response -eq 'Y') {
-                $retryCount = 0
-                do {
-                    try {
-                        Start-Sleep -Seconds $RetryDelaySeconds
-                        $site = Get-PnPTenantSite -Url $UserOneDriveURL -ErrorAction Stop
-                        $success = $true
-                        Write-StatusMessage -Message "OneDrive site now accessible" -Type OK
-                    } catch {
-                        $retryCount++
-                        Write-StatusMessage -Message "Attempt $retryCount of $MaxRetries. Waiting $RetryDelaySeconds seconds..." -Type INFO
-                    }
-                } while (-not $success -and $retryCount -lt $MaxRetries)
-            } else {
-                Write-StatusMessage -Message "OneDrive configuration skipped by user" -Type WARN
-                return
-            }
-        }
-
-        # Set OneDrive to read-only if specified
-        if ($SetReadOnly) {
-            Write-StatusMessage -Message "Setting OneDrive to Read Only" -Type INFO
-            try {
-                Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly -ErrorAction Stop
-                Write-StatusMessage -Message "Successfully set OneDrive to read-only" -Type OK
-            } catch {
-                Write-StatusMessage -Message "Failed to set OneDrive to read-only" -Type ERROR
-            }
-        }
-
-        # Grant access if OneDriveUser is provided
+        # Handle OneDrive access grant if specified
         if ($OneDriveUser) {
             try {
                 Write-StatusMessage -Message "Granting OneDrive access to $OneDriveUser" -Type INFO
-
-                $pnpParams = @{
-                    Url         = $UserOneDriveURL
-                    Owners      = $OneDriveUser
-                    ErrorAction = 'Stop'
-                }
-
-                Set-PnPTenantSite @pnpParams
+                Set-PnPTenantSite -Url $UserOneDriveURL -Owners $OneDriveUser -ErrorAction Stop
                 Write-StatusMessage -Message "Successfully granted OneDrive access" -Type OK
                 Write-StatusMessage -Message "OneDrive URL: $UserOneDriveURL" -Type INFO
 
                 do {
                     $response = Read-Host "Please copy the OneDrive URL above. Have you copied it? (y/n)"
-                } while ($response -ne 'y')
+                } while ($response -notmatch '^[yY]$')
+
             } catch {
-                Write-StatusMessage -Message "Failed to grant OneDrive access" -Type ERROR
+                Write-StatusMessage -Message "Failed to grant OneDrive access: $_" -Type ERROR
             }
         }
+
+        # Handle read-only setting if specified
+        if ($SetReadOnly) {
+            try {
+                Write-StatusMessage -Message "Setting OneDrive to read-only" -Type INFO
+                Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly -ErrorAction Stop
+                Write-StatusMessage -Message "Successfully set OneDrive to read-only" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to set OneDrive to read-only: $_" -Type ERROR
+            }
+        }
+
     } catch {
-        Write-StatusMessage -Message "Critical error in Set-TerminatedOneDrive" -Type ERROR
-        throw
+        Write-StatusMessage -Message "Error processing OneDrive configuration: $_" -Type ERROR
+    } finally {
+        # Disconnect from SharePoint if we connected
+        if (Get-PnPConnection -ErrorAction SilentlyContinue) {
+            Write-StatusMessage -Message "Disconnecting from SharePoint Online..." -Type INFO
+            Connect-ServiceEndpoints -SharePoint -Disconnect
+        }
     }
 }
 
@@ -1946,28 +1932,25 @@ Write-StatusMessage -Message "Disconnecting from Exchange Online and Graph. This
 
 Connect-ServiceEndpoints -Disconnect
 
-Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type INFO
+# Only create and run OneDrive params if needed
+if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
+    $oneDriveParams = @{
+        TermUser = $UserFromAD.UserPrincipalName
+    }
 
-Connect-ServiceEndpoints -SharePoint
+    if ($SetOneDriveReadOnly) {
+        $oneDriveParams['SetReadOnly'] = $true
+    }
 
-$oneDriveParams = @{
-    UserPrincipalName = $UserFromAD.UserPrincipalName
+    if ($GrantUserOneDriveAccess) {
+        $oneDriveParams['OneDriveUser'] = $oneDriveUser
+    }
+
+    Set-TerminatedOneDrive @oneDriveParams
 }
-
-if ($SetOneDriveReadOnly) {
-    $oneDriveParams['SetReadOnly'] = $true
-}
-
-if ($GrantUserOneDriveAccess) {
-    $oneDriveParams['OneDriveUser'] = $oneDriveUser
-}
-
-Set-TerminatedOneDrive @oneDriveParams
 
 # Step 10: Final Sync and Summary
 Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
-
-$null = Disconnect-PnPOnline
 
 Start-ADSyncAndFinalize -User $MgUser `
     -DestinationOU $DestinationOU `
