@@ -153,6 +153,7 @@ Set-ConsoleProperties -QuickEditMode Disable -InsertMode Disable
 
 # Initialize loading animation
 Clear-Host
+$loadingChars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 $i = 0
 $loadingJob = Start-Job -ScriptBlock { while ($true) { Start-Sleep -Milliseconds 100 } }
 
