@@ -1814,6 +1814,7 @@ Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
 
 #Region Main Execution
 
+
 # Step 0: Initialization
 Write-ProgressStep -StepName $progressSteps[0].Name -Status $progressSteps[0].Description
 
