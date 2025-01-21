@@ -1688,14 +1688,14 @@ function Confirm-UserCreation {
         $summary = @"
 New User Details:
 ----------------
-Display Name    = $($NewUserProperties.DisplayName)
-Email Address   = $($NewUserProperties.Email)
-Password        = $Password
-First Name      = $($NewUserProperties.FirstName)
-Last Name       = $($NewUserProperties.LastName)
-SamAccountName  = $($NewUserProperties.SamAccountName)
-Destination OU  = $DestinationOU
-Template User   = $TemplateUser
+- Display Name    = $($NewUserProperties.DisplayName)
+- Email Address   = $($NewUserProperties.Email)
+- Password        = $Password
+- First Name      = $($NewUserProperties.FirstName)
+- Last Name       = $($NewUserProperties.LastName)
+- SamAccountName  = $($NewUserProperties.SamAccountName)
+- Destination OU  = $DestinationOU
+- Template User   = $TemplateUser
 "@
 
         # Display summary and get confirmation
@@ -2267,6 +2267,7 @@ function Start-NewUserFinalize {
         "- Display Name: $($User.displayName)",
         "- Email Address: $($User.mail)",
         "- Password: $Password",
+        "- Template User   = $TemplateUser",
         "- Template Groups: $TemplateGroupCount",
         "- Assigned Groups: $AssignedGroupCount",
         "----------------------------------------",
@@ -2299,7 +2300,8 @@ function Start-NewUserFinalize {
 #EndRegion Functions
 
 Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
-
+Write-Host "`n  Ready to process user request..." -ForegroundColor Cyan
+Write-Host "`n  Beginning New User Request..." -ForegroundColor Cyan
 #Region Main Execution
 
 # Step 0: Initialization

@@ -1594,7 +1594,7 @@ function Remove-UserLicenses {
             # Step 2: Remove Primary Licenses
             foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -in $primaryLicenses })) {
                 try {
-                    Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+                    $null = Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Primary License: $($license.SkuPartNumber)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove Primary License $($license.SkuPartNumber)" -Type ERROR
@@ -1773,16 +1773,16 @@ function Start-ADSyncAndFinalize {
     )
 
     if ($GrantUserFullControl) {
-        $summaryParts += "Mailbox access granted to: $GrantUserFullControl"
+        $summaryParts += "- Mailbox access granted to: $GrantUserFullControl"
     }
     if ($SetUserMailFWD) {
-        $summaryParts += "Mail forwarded to: $SetUserMailFWD"
+        $summaryParts += "- Mail forwarded to: $SetUserMailFWD"
     }
     if ($GrantUserOneDriveAccess) {
-        $summaryParts += "OneDrive access granted to: $GrantUserOneDriveAccess"
+        $summaryParts += "- OneDrive access granted to: $GrantUserOneDriveAccess"
     }
     if ($ExportPath) {
-        $summaryParts += "Groups and licenses exported to: $ExportPath"
+        $summaryParts += "- Groups and licenses exported to: $ExportPath"
     }
 
     $summaryParts += "----------------------------------------"
@@ -1811,11 +1811,7 @@ function Start-ADSyncAndFinalize {
 }
 
 Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
-
-Write-Host "`n  Script Ready!" -ForegroundColor Cyan
-Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
-$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-Clear-Host
+Write-Host "`n  Ready to create new user account..." -ForegroundColor Cyan
 
 #Region Main Execution
 
