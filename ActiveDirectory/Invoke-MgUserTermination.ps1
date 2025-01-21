@@ -153,7 +153,6 @@ Set-ConsoleProperties -QuickEditMode Disable -InsertMode Disable
 
 # Initialize loading animation
 Clear-Host
-$loadingChars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 $i = 0
 $loadingJob = Start-Job -ScriptBlock { while ($true) { Start-Sleep -Milliseconds 100 } }
 
@@ -1812,13 +1811,7 @@ function Start-ADSyncAndFinalize {
 
 Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
 
-Write-Host "`n  Script Ready!" -ForegroundColor Cyan
-Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
-$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-Clear-Host
-
 #Region Main Execution
-
 
 # Step 0: Initialization
 Write-ProgressStep -StepName $progressSteps[0].Name -Status $progressSteps[0].Description
