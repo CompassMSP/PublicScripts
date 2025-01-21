@@ -484,7 +484,7 @@ function Connect-ServiceEndpoints {
         # Disconnect from Microsoft Graph
         if (($Graph -or $disconnectAll) -and (Get-MgContext)) {
             try {
-                $null =Disconnect-MgGraph -ErrorAction Stop
+                $null = Disconnect-MgGraph -ErrorAction Stop
                 Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
             } catch {
                 Write-StatusMessage -Message "Failed to disconnect from Microsoft Graph: $_" -Type WARN
@@ -1377,15 +1377,16 @@ function Get-TemplateUser {
         $adUserParams = @{
             Filter      = "DisplayName -eq '$UserToCopy'"
             Properties  = @(
-                'Title'
-                'Fax'
+                'Company',
+                'Title',
+                'Manager',
+                'physicalDeliveryOfficeName',
+                'Department',
+                'Description'.
+                'facsimileTelephoneNumber',
+                'l', # l is for Location because Microsoft AD attributes are stupid
+                'c', # c is for Country because Microsoft AD attributes are stupid
                 'wWWHomePage'
-                'physicalDeliveryOfficeName'
-                'Office'
-                'Manager'
-                'Description'
-                'Department'
-                'Company'
             )
             ErrorAction = 'Stop'
         }
@@ -2076,12 +2077,8 @@ function Add-UserToZoom {
     )
 
     try {
-        # Determine Zoom role based on department
-        if ($User.Department -eq 'Reactive') {
-            $zoom_app_role_name = "Basic"
-        } else {
-            $zoom_app_role_name = "Licensed"
-        }
+
+        $zoom_app_role_name = "Basic"
 
         $zoom_app_name = "Zoom Workplace Phones"
 

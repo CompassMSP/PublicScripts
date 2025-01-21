@@ -483,7 +483,7 @@ function Connect-ServiceEndpoints {
         # Disconnect from Microsoft Graph
         if (($Graph -or $disconnectAll) -and (Get-MgContext)) {
             try {
-                $null =Disconnect-MgGraph -ErrorAction Stop
+                $null = Disconnect-MgGraph -ErrorAction Stop
                 Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
             } catch {
                 Write-StatusMessage -Message "Failed to disconnect from Microsoft Graph: $_" -Type WARN
@@ -1239,13 +1239,15 @@ function Disable-ADUser {
                 Clear       = @(
                     'company',
                     'Title',
+                    'Manager',
                     'physicalDeliveryOfficeName',
                     'Department',
                     'facsimileTelephoneNumber',
+                    'l', # l is for Location because Microsoft AD attributes are stupid
+                    'c', # c is for Country because Microsoft AD attributes are stupid
+                    'wWWHomePage'
                     'mobile',
                     'telephoneNumber',
-                    'l', # l is for Location because Microsoft AD attributes are stupid
-                    'Manager',
                     'extensionAttribute1',
                     'extensionAttribute2',
                     'extensionAttribute3',
