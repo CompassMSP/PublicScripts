@@ -1881,7 +1881,7 @@ function Wait-ForADUserSync {
         for ($i = 1; $i -le 3; $i++) {
             try {
                 Write-StatusMessage -Message "Attempting to start AD sync (Attempt $i of 3)" -Type INFO
-                Import-Module -Name ADSync -UseWindowsPowerShell -ErrorAction Stop
+                Import-Module -Name ADSync -UseWindowsPowerShell -WarningAction:SilentlyContinue -ErrorAction Stop
                 $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
                 $syncStarted = $true
                 Write-StatusMessage -Message "AD sync started successfully" -Type OK

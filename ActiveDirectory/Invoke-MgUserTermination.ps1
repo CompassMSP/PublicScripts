@@ -1745,7 +1745,7 @@ function Start-ADSyncAndFinalize {
     # Start AD Sync
     Write-StatusMessage -Message "Starting AD sync cycle" -Type INFO
     try {
-        Import-Module -Name ADSync -UseWindowsPowerShell -ErrorAction Stop
+        Import-Module -Name ADSync -UseWindowsPowerShell -WarningAction:SilentlyContinue -ErrorAction Stop
         $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
         Write-StatusMessage -Message "AD sync cycle initiated successfully" -Type OK
     } catch {
