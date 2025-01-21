@@ -1812,6 +1812,11 @@ function Start-ADSyncAndFinalize {
 
 Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
 
+Write-Host "`n  Script Ready!" -ForegroundColor Cyan
+Write-Host "  Press any key to continue..." -ForegroundColor DarkGray
+$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+Clear-Host
+
 #Region Main Execution
 
 
