@@ -1920,7 +1920,7 @@ Remove-UserFromEntraDirectoryRoles -UserId $MgUser.Id
 # Step 5: Remove Groups
 Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
 $groupExportPath = Join-Path $localExportPath "$($User)_Groups_Id.csv"
-Remove-UserEntraFromGroups -UserId $MgUser.Id -ExportPath $groupExportPath
+Remove-UserFromEntraGroups -UserId $MgUser.Id -ExportPath $groupExportPath
 
 # Step 6: Remove Licenses
 Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
