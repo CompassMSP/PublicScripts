@@ -179,7 +179,7 @@ $progressSteps = @(
     @{ Number = 6; Name = "Group Removal"; Description = "Removing from groups" }
     @{ Number = 7; Name = "License Removal"; Description = "Removing licenses" }
     @{ Number = 8; Name = "Notifications"; Description = "Sending notifications" }
-    @{ Number = 9; Name = "Zoom Removal"; Description = "Removing from Zoom" }
+    @{ Number = 9; Name = "Disconnecting from services"; Description = "Disconnecting from services" }
     @{ Number = 10; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
     @{ Number = 11; Name = "Final Steps"; Description = "Running AD sync and finalizing" }
 )
@@ -1933,14 +1933,12 @@ $MsgFrom = $config.Email.NotificationFrom
 $ToAddress = $config.Email.NotificationTo
 Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
 
-# Step 8: Remove from Zoom
+# Step 8:  
 Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
-Remove-UserFromZoom -UserId $MgUser.Id
+Write-StatusMessage -Message "Disconnecting from Exchange Online and Graph. This may take a few moments..." -Type INFO
 
 # Step 9: Configure OneDrive
 Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
-
-Write-StatusMessage -Message "Disconnecting from Exchange Online and Graph. This may take a few moments..." -Type INFO
 
 Connect-ServiceEndpoints -Disconnect -ExchangeOnline -Graph
 
@@ -1960,6 +1958,9 @@ if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
 
     Set-TerminatedOneDrive @oneDriveParams
 }
+
+# Remove from Zoom
+# Remove-UserFromZoom -UserId $MgUser.Id
 
 # Step 10: Final Sync and Summary
 Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
