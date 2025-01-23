@@ -179,7 +179,7 @@ $progressSteps = @(
     @{ Number = 6; Name = "License Setup"; Description = "Assigning licenses" }
     @{ Number = 7; Name = "Entra Group Setup"; Description = "Copying Entra group memberships" }
     @{ Number = 8; Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
-    @{ Number = 9; Name = "Zoom Phone Setup"; Description = "Configuring Zoom Phone SSO" }
+    @{ Number = 9; Name = "Processing"; Description = "Proceessing" }
     @{ Number = 10; Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
     @{ Number = 11; Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
     @{ Number = 12; Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
@@ -2399,9 +2399,8 @@ if ($MgUser) {
     $ToAddress = $config.Email.NotificationTo
     Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
 
-    # Step 9: Zoom Phone Setup
+    # Step 9: Processing
     Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
-    Add-UserToZoom -User $MgUser
 
     # Step 10: BookWithMeId Setup
     Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
@@ -2419,6 +2418,7 @@ try {
     Write-StatusMessage -Message "Failed to provision OneDrive: $_" -Type ERROR
 }
 #>
+    #Add-UserToZoom -User $MgUser
 
     # Step 12: Cleanup and Summary
     Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
