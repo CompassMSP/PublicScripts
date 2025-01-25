@@ -1610,8 +1610,8 @@ function New-ReadablePassword {
     .PARAMETER WordCount
         Number of words to use in the password (2-20). Default is 3.
 
-    .PARAMETER RemoveSpaces
-        Removes spaces between words in the final password.
+    .PARAMETER AddSpaces
+        Adds spaces between words in the final password.
 
     .PARAMETER WordListPath
         Optional path to a custom wordlist file. If not provided, uses default GitHub wordlist.
@@ -1635,7 +1635,7 @@ function New-ReadablePassword {
     param(
         [ValidateRange(2, 20)]
         [int]$WordCount = 3,
-        [switch]$RemoveSpaces,
+        [switch]$AddSpaces,
         [string]$WordListPath,
         [Parameter(Mandatory)]
         [string]$GitHubToken
@@ -1679,7 +1679,7 @@ function New-ReadablePassword {
                 }
             }
 
-            $plainPassword = if ($RemoveSpaces) { $Password -join '' } else { $Password -join ' ' }
+            $plainPassword = if ($AddSpaces) { $Password -join ' ' } else { $Password -join '' }
 
             # Display password and get confirmation
             Write-Host "`nGenerated Password: $plainPassword" -ForegroundColor Cyan
