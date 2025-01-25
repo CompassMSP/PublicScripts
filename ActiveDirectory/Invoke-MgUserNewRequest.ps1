@@ -1645,7 +1645,7 @@ function New-ReadablePassword {
                 Get-Content $WordListPath
             } else {
                 $headers = @{
-                    "Authorization" = "token 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"
+                    "Authorization" = "token $GithubToken"
                     "Accept" = "application/json"
                 }
                 (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ryanchrisw/CompassDeploy/refs/heads/main/Wordlist/wordlist" -Headers $headers).Content.Trim().split("`n")
@@ -2351,6 +2351,7 @@ $GraphCertSubject = $Config.Graph.CertificateSubject
 $PnPAppId = $config.PnPSharePoint.AppId
 $PnPUrl = $config.PnPSharePoint.Url
 $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
+$GithubToken = $config.GitHub.Token
 
 Connect-ServiceEndpoints -ExchangeOnline -Graph
 
