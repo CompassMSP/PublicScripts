@@ -28,12 +28,21 @@
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2025-01-20
+    Last Modified: 2025-01-24
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
+    3.1.0        2025-01-25  Password System Update:
+                          - Replaced New-SecureRandomPassword with New-ReadablePassword
+                          - Added human-readable password generation using word list
+                          - Added interactive password acceptance/rejection
+                          - Added GitHub wordlist integration
+                          - Added support for custom word lists
+                          - Added configurable word count (2-20 words)
+                          - Added spaces/no-spaces password formatting options
+
     3.0.0        2025-01-20  Major Rework:
                           - Complete script reorganization and optimization
                           - Optimized UI spacing and element alignment
@@ -1589,79 +1598,102 @@ function New-UserProperties {
     }
 }
 
-function New-SecureRandomPassword {
+function New-ReadablePassword {
+    <#
+    .SYNOPSIS
+        Generates a human-readable password using random words and special characters.
+
+    .DESCRIPTION
+        Creates a memorable password by combining random words from a curated wordlist with special characters
+        and numbers. Allows user to accept or reject generated passwords. Returns both plain text and SecureString versions.
+
+    .PARAMETER WordCount
+        Number of words to use in the password (2-20). Default is 3.
+
+    .PARAMETER RemoveSpaces
+        Removes spaces between words in the final password.
+
+    .PARAMETER WordListPath
+        Optional path to a custom wordlist file. If not provided, uses default GitHub wordlist.
+
+    .EXAMPLE
+        $password = New-ReadablePassword
+        # Prompts user with generated password like: "Mountain7$ Forest#2 Lake"
+
+    .NOTES
+        Name: New-ReadablePassword
+        Author: Chris Williams
+        Version: 31.0
+        DateCreated: 2025-Jan-24
+    #>
+
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
-    param()
+    param(
+        [ValidateRange(2, 20)]
+        [int]$WordCount = 3,
+        [switch]$RemoveSpaces,
+        [string]$WordListPath
+    )
 
     try {
-        Write-StatusMessage -Message "Generating secure random password" -Type INFO
+        Write-StatusMessage -Message "Generating secure word-based password" -Type INFO
 
-        # Define character sets
-        $charSets = @{
-            Upper   = 'ABCDEFGHKLMNOPRSTUVWXYZ'
-            Lower   = 'abcdefghiklmnoprstuvwxyz'
-            Numbers = '23456789'
-            Special = '!@#$%^&*'
-        }
-
-        # Define requirements
-        $requirements = @(
-            @{ Set = 'Upper'; Count = 4 }
-            @{ Set = 'Lower'; Count = 6 }
-            @{ Set = 'Numbers'; Count = 4 }
-            @{ Set = 'Special'; Count = 2 }
-        )
-
-        try {
-            # Generate password parts
-            $passwordChars = foreach ($req in $requirements) {
-                $charSet = $charSets[$req.Set]
-                $charSet.ToCharArray() | Get-Random -Count $req.Count
+        do {
+            # Get word list
+            $FullList = if ($WordListPath -and (Test-Path $WordListPath)) {
+                Get-Content $WordListPath
+            } else {
+                $headers = @{
+                    "Authorization" = "token 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"
+                    "Accept" = "application/json"
+                }
+                (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ryanchrisw/CompassDeploy/refs/heads/main/Wordlist/wordlist" -Headers $headers).Content.Trim().split("`n")
             }
 
-            # Shuffle and join
-            $finalPassword = -join ($passwordChars | Get-Random -Count 16)
+            # Group words by length
+            $WordsByLength = $FullList | Group-Object Length -AsHashTable
 
-            # Validate complexity
-            $validations = @(
-                @{ Pattern = '[A-Z]'; Type = 'uppercase letter' }
-                @{ Pattern = '[a-z]'; Type = 'lowercase letter' }
-                @{ Pattern = '\d'; Type = 'number' }
-                @{ Pattern = '[^\w]'; Type = 'special character' }
-            )
+            # Select appropriate word lengths based on count
+            $WordList = switch ($WordCount) {
+                { $_ -le 3 } { $WordsByLength[7] + $WordsByLength[8] + $WordsByLength[9] }
+                4 { $WordsByLength[4..7] | ForEach-Object { $_ } }
+                5 { $WordsByLength[4..6] | ForEach-Object { $_ } }
+                default { $WordsByLength[3..5] | ForEach-Object { $_ } }
+            }
 
-            foreach ($validation in $validations) {
-                if (-not ($finalPassword -cmatch $validation.Pattern)) {
-                    Write-StatusMessage -Message "Password missing required $($validation.Type)" -Type ERROR
-                    Exit-Script -Message "Password complexity requirements not met" -ExitCode GeneralError
+            # Generate password
+            $SpecialChars = [char[]]((33,35) + (36..38) + (40..46) + (60..62) + (64))
+            $Numbers = [char[]](48..57)
+
+            $Password = 1..$WordCount | ForEach-Object {
+                if ($_ -eq $WordCount) {
+                    $WordList | Get-Random
+                } else {
+                    "$($WordList | Get-Random)$([char[]]($SpecialChars + $Numbers) | Get-Random)"
                 }
             }
 
-            # Convert to secure string
-            try {
-                $securePassword = ConvertTo-SecureString -String $finalPassword -AsPlainText -Force
-                Write-StatusMessage -Message "Successfully generated secure 16-character password" -Type OK
-            } catch {
-                Write-StatusMessage -Message "Failed to secure password: $_" -Type ERROR
-                Exit-Script -Message "Failed to secure password" -ExitCode GeneralError
-            }
+            $plainPassword = if ($RemoveSpaces) { $Password -join '' } else { $Password -join ' ' }
 
-            return @{
-                PlainPassword  = $finalPassword
-                SecurePassword = $securePassword
-            }
+            # Display password and get confirmation
+            Write-Host "`nGenerated Password: $plainPassword" -ForegroundColor Cyan
+            $response = Read-Host "Accept this password? (y/n)"
 
-        } catch {
-            Write-StatusMessage -Message "Failed to generate password: $_" -Type ERROR
-            Exit-Script -Message "Password generation failed" -ExitCode GeneralError
+        } while ($response -ne 'y')
+
+        Write-StatusMessage -Message "Password accepted" -Type OK
+        return @{
+            PlainPassword  = $plainPassword
+            SecurePassword = ConvertTo-SecureString -String $plainPassword -AsPlainText -Force
         }
-
-    } catch {
+    }
+    catch {
         Write-StatusMessage -Message "Critical error in password generation: $_" -Type ERROR
         Exit-Script -Message "Critical password generation failure" -ExitCode GeneralError
     }
 }
+
 
 function Confirm-UserCreation {
     [CmdletBinding()]
@@ -2343,7 +2375,7 @@ $newUserProperties = New-UserProperties -NewUser $NewUser -SourceUserUPN $UserTo
 
 # Step 3: AD User Creation
 Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
-$passwordResult = New-SecureRandomPassword
+$passwordResult = New-ReadablePassword
 
 # Show summary and get confirmation before creating
 Confirm-UserCreation -NewUserProperties $newUserProperties `
