@@ -1616,15 +1616,18 @@ function New-ReadablePassword {
     .PARAMETER WordListPath
         Optional path to a custom wordlist file. If not provided, uses default GitHub wordlist.
 
+    .PARAMETER GitHubToken
+        GitHub Personal Access Token for accessing private word list repository.
+
     .EXAMPLE
-        $password = New-ReadablePassword
+        $password = New-ReadablePassword -GitHubToken "your-github-pat"
         # Prompts user with generated password like: "Mountain7$ Forest#2 Lake"
 
     .NOTES
         Name: New-ReadablePassword
         Author: Chris Williams
-        Version: 31.0
-        DateCreated: 2025-Jan-24
+        Version: 1.0.0
+        DateCreated: 2025-Jan-25
     #>
 
     [CmdletBinding()]
@@ -1633,7 +1636,9 @@ function New-ReadablePassword {
         [ValidateRange(2, 20)]
         [int]$WordCount = 3,
         [switch]$RemoveSpaces,
-        [string]$WordListPath
+        [string]$WordListPath,
+        [Parameter(Mandatory)]
+        [string]$GitHubToken
     )
 
     try {
@@ -1645,7 +1650,7 @@ function New-ReadablePassword {
                 Get-Content $WordListPath
             } else {
                 $headers = @{
-                    "Authorization" = "token $GithubToken"
+                    "Authorization" = "token $GitHubToken"
                     "Accept" = "application/json"
                 }
                 (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ryanchrisw/CompassDeploy/refs/heads/main/Wordlist/wordlist" -Headers $headers).Content.Trim().split("`n")
@@ -1693,7 +1698,6 @@ function New-ReadablePassword {
         Exit-Script -Message "Critical password generation failure" -ExitCode GeneralError
     }
 }
-
 
 function Confirm-UserCreation {
     [CmdletBinding()]
@@ -2351,7 +2355,7 @@ $GraphCertSubject = $Config.Graph.CertificateSubject
 $PnPAppId = $config.PnPSharePoint.AppId
 $PnPUrl = $config.PnPSharePoint.Url
 $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
-$GithubToken = $config.GitHub.Token
+$GithubAPIToken = $config.GitHub.Token
 
 Connect-ServiceEndpoints -ExchangeOnline -Graph
 
@@ -2376,7 +2380,7 @@ $newUserProperties = New-UserProperties -NewUser $NewUser -SourceUserUPN $UserTo
 
 # Step 3: AD User Creation
 Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
-$passwordResult = New-ReadablePassword
+$passwordResult = New-ReadablePassword -GitHubToken $GithubAPIToken
 
 # Show summary and get confirmation before creating
 Confirm-UserCreation -NewUserProperties $newUserProperties `
