@@ -1316,7 +1316,7 @@ function Remove-UserSessions {
             foreach ($mobileDevice in $mobileDevices) {
                 Write-StatusMessage -Message "Removing mobile device: $($mobileDevice.Id)" -Type INFO
                 try {
-                    Remove-MobileDevice -DeviceID $mobileDevice.Id -Confirm:$false -ErrorAction Stop
+                    Remove-MobileDevice -Identity $mobileDevice.Id -Confirm:$false -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully removed mobile device: $($mobileDevice.Id)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove mobile device $($mobileDevice.Id)" -Type ERROR
