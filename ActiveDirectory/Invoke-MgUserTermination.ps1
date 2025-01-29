@@ -1305,9 +1305,61 @@ function Remove-UserSessions {
         try {
             Revoke-MgUserSignInSession -UserId $UserPrincipalName -ErrorAction Stop
             Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
-        } catch {
+        }
+        catch {
             Write-StatusMessage -Message "Failed to revoke user sessions" -Type ERROR
         }
+
+        # Remove authentication methods
+        Write-StatusMessage -Message "Removing user authentication methods" -Type INFO
+        try {
+            $authMethods = Get-MgUserAuthenticationMethod -UserId $UserPrincipalName -ErrorAction Stop
+                    
+            foreach ($authMethod in $authMethods) {
+                $authType = $authMethod.AdditionalProperties.'@odata.type'
+                        
+                try {
+                    switch ($authType) {
+                        "#microsoft.graph.passwordAuthenticationMethod" {
+                            continue
+                        }
+                        "#microsoft.graph.phoneAuthenticationMethod" {
+                            Remove-MgUserAuthenticationPhoneMethod -UserId $UserPrincipalName -PhoneAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Phone Authentication Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod" {
+                            Remove-MgUserAuthenticationWindowsHelloForBusinessMethod -UserId $UserPrincipalName -WindowsHelloForBusinessAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Windows Hello for Business Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod" {
+                            Remove-MgUserAuthenticationMicrosoftAuthenticatorMethod -UserId $UserPrincipalName -MicrosoftAuthenticatorAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Microsoft Authenticator Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.fido2AuthenticationMethod" {
+                            Remove-MgUserAuthenticationFido2Method -UserId $UserPrincipalName -Fido2AuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed FIDO2 Authenticator Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.softwareOathAuthenticationMethod" {
+                            Remove-MgUserAuthenticationSoftwareOathMethod -UserId $UserPrincipalName -SoftwareOathAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Software Oath Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.temporaryAccessPassAuthenticationMethod" {
+                            Remove-MgUserAuthenticationTemporaryAccessPassMethod -UserId $UserPrincipalName -TemporaryAccessPassAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Temporary Access Pass Method: $($authMethod.Id)" -Type OK
+                        }
+                        default {
+                            Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type INFO
+                        }
+                    }
+                }
+                catch {
+                    Write-StatusMessage -Message "Failed to remove authentication method $($authMethod.Id) of type $authType" -Type ERROR
+                }
+            }
+        }
+        catch {
+            Write-StatusMessage -Message "Failed to get user authentication methods" -Type ERROR
+        }        
 
         # Remove Mobile Devices
         Write-StatusMessage -Message "Removing all mobile devices" -Type INFO
@@ -1318,11 +1370,13 @@ function Remove-UserSessions {
                 try {
                     Remove-MobileDevice -Identity $mobileDevice.Id -Confirm:$false -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully removed mobile device: $($mobileDevice.Id)" -Type OK
-                } catch {
+                }
+                catch {
                     Write-StatusMessage -Message "Failed to remove mobile device $($mobileDevice.Id)" -Type ERROR
                 }
             }
-        } catch {
+        }
+        catch {
             Write-StatusMessage -Message "Failed to get mobile devices" -Type ERROR
         }
 
@@ -1334,13 +1388,16 @@ function Remove-UserSessions {
                 try {
                     Update-MgDevice -DeviceId $termUserDevice.Id -BodyParameter @{ AccountEnabled = $false } -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.Id)" -Type OK
-                } catch {
+                }
+                catch {
                     Write-StatusMessage -Message "Failed to disable device $($termUserDevice.Id)" -Type ERROR
                 }
             }
-        } catch {
+        }
+        catch {
             Write-StatusMessage -Message "Failed to get registered devices" -Type ERROR
         }
+
     } catch {
         Write-StatusMessage -Message "Critical error in Remove-UserSessions" -Type ERROR
         throw
