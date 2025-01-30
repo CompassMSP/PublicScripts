@@ -1314,10 +1314,10 @@ function Remove-UserSessions {
         Write-StatusMessage -Message "Removing user authentication methods" -Type INFO
         try {
             $authMethods = Get-MgUserAuthenticationMethod -UserId $UserPrincipalName -ErrorAction Stop
-                    
+
             foreach ($authMethod in $authMethods) {
                 $authType = $authMethod.AdditionalProperties.'@odata.type'
-                        
+
                 try {
                     switch ($authType) {
                         "#microsoft.graph.passwordAuthenticationMethod" {
@@ -1348,7 +1348,7 @@ function Remove-UserSessions {
                             Write-StatusMessage -Message "Removed Temporary Access Pass Method: $($authMethod.Id)" -Type OK
                         }
                         default {
-                            Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type INFO
+                            Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type ERROR
                         }
                     }
                 }
@@ -1359,7 +1359,7 @@ function Remove-UserSessions {
         }
         catch {
             Write-StatusMessage -Message "Failed to get user authentication methods" -Type ERROR
-        }        
+        }
 
         # Remove Mobile Devices
         Write-StatusMessage -Message "Removing all mobile devices" -Type INFO
@@ -1990,7 +1990,7 @@ $MsgFrom = $config.Email.NotificationFrom
 $ToAddress = $config.Email.NotificationTo
 Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
 
-# Step 8:  
+# Step 8:
 Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
 Write-StatusMessage -Message "Disconnecting from Exchange Online and Graph. This may take a few moments..." -Type INFO
 
