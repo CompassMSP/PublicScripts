@@ -1110,7 +1110,13 @@ function Get-TerminationPrerequisites {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$User
+        [string]$User,
+
+        [Parameter()]
+        [string]$UserPropertiesPath,
+
+        [Parameter()]
+        [string]$ADGroupsPath
     )
 
     try {
@@ -1203,19 +1209,80 @@ Continue? (Y/N)
             Exit-Script -Message "User termination cancelled by user. Did not enter 'Y'" -ExitCode Cancelled
         }
 
+        # After confirmation, export properties and groups if paths provided
+        if ($UserPropertiesPath -or $ADGroupsPath) {
+            try {
+                # Export user properties
+                if ($UserPropertiesPath) {
+                    Write-StatusMessage -Message "Exporting user properties" -Type INFO
+                    $propertyList = @(
+                        'displayName',
+                        'SamAccountName',
+                        'UserPrincipalName',
+                        'mail',
+                        'proxyAddresses',
+                        'company',
+                        'Title',
+                        'Manager',
+                        'physicalDeliveryOfficeName',
+                        'Department',
+                        'l',
+                        'c',
+                        'facsimileTelephoneNumber',
+                        'mobile',
+                        'telephoneNumber',
+                        'DistinguishedName',
+                        'extensionAttribute1',
+                        'extensionAttribute2',
+                        'extensionAttribute3',
+                        'extensionAttribute4',
+                        'extensionAttribute5',
+                        'extensionAttribute6',
+                        'extensionAttribute7',
+                        'extensionAttribute8',
+                        'extensionAttribute9',
+                        'extensionAttribute10',
+                        'extensionAttribute11',
+                        'extensionAttribute12',
+                        'extensionAttribute13',
+                        'extensionAttribute14',
+                        'extensionAttribute15'
+                    )
+                    $userProperties = Get-ADUser -Identity $UserFromAD.SamAccountName -Properties $propertyList
+                    $userProperties | Select-Object $propertyList | Export-Csv -Path $UserPropertiesPath -NoTypeInformation
+                    Write-StatusMessage -Message "Exported user properties to: $UserPropertiesPath" -Type OK
+                }
+
+                # Export group memberships
+                if ($ADGroupsPath) {
+                    Write-StatusMessage -Message "Exporting group memberships" -Type INFO
+                    $groups = $UserFromAD.MemberOf | ForEach-Object {
+                        Get-ADGroup -Identity $_ -Properties Name, Description, GroupCategory, GroupScope |
+                            Select-Object Name, Description, GroupCategory, GroupScope, DistinguishedName
+                    }
+                    $groups | Export-Csv -Path $ADGroupsPath -NoTypeInformation
+                    Write-StatusMessage -Message "Exported group memberships to: $ADGroupsPath" -Type OK
+                }
+            }
+            catch {
+                Write-StatusMessage -Message "Failed to export user data: $_" -Type ERROR
+            }
+        }
+
         # Return all the collected information
         return @{
             UserFromAD    = $UserFromAD
             DestinationOU = $DestinationOU
             Mailbox       = $365Mailbox
             MgUser        = $MgUser
+            UserPropertiesPath = $UserPropertiesPath
+            ADGroupsPath = $ADGroupsPath
         }
 
     } catch {
         Exit-Script -Message "Failed to validate termination prerequisites: $_" -ExitCode UserNotFound
     }
 }
-
 function Disable-ADUser {
     [CmdletBinding()]
     param(
@@ -1944,7 +2011,12 @@ if ($GrantUserOneDriveAccess) {
 # Step 2: User Input
 Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
 # Should this be a function in the New User Script?
-$UserInfo = Get-TerminationPrerequisites -User $User
+$userPropertiesPath = Join-Path $localExportPath "$($User)_Properties.csv"
+$adGroupsPath = Join-Path $localExportPath "$($User)_ADGroups.csv"
+$UserInfo = Get-TerminationPrerequisites `
+    -User $User `
+    -UserPropertiesPath $userPropertiesPath `
+    -ADGroupsPath $adGroupsPath
 
 # Extract variables for use in the rest of the script
 $UserFromAD = $userInfo.UserFromAD
@@ -1960,6 +2032,9 @@ Disable-ADUser -UserFromAD $UserFromAD -DestinationOU $DestinationOU
 Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
 Remove-UserSessions -UserPrincipalName $UserFromAD.UserPrincipalName
 
+# Step 5: Convert to SharedMailbox, Set forwarding/grant access
+Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
+
 $mailboxParams = @{
     Mailbox = $365Mailbox
 }
@@ -1967,15 +2042,12 @@ $mailboxParams = @{
 # Only add these parameters if they exist and have values
 if ($SetUserMailFWD) {
     $mailboxParams['ForwardingAddress'] = $SetUserMailFWD
-
 }
 
 if ($GrantUserFullControl) {
     $mailboxParams['GrantAccessTo'] = $GrantUserFullControl
 }
 
-# Step 5: Convert to SharedMailbox, Set forwarding/grant access
-Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
 Set-TerminatedMailbox @mailboxParams
 
 # Step 6: Remove Directory Roles
@@ -1984,12 +2056,12 @@ Remove-UserFromEntraDirectoryRoles -UserId $MgUser.Id
 
 # Step 7: Remove Groups
 Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
-$groupExportPath = Join-Path $localExportPath "$($User)_Groups_Id.csv"
+$GroupExportPath = Join-Path $localExportPath "$($User)_EntraGroups.csv"
 Remove-UserFromEntraGroups -UserId $MgUser.Id -ExportPath $groupExportPath
 
 # Step 8: Remove Licenses
 Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
-$licensePath = Join-Path $localExportPath "$($User)_License_Id.csv"
+$licensePath = Join-Path $localExportPath "$($User)_EntraLicense.csv"
 Remove-UserLicenses -UserId $UserFromAD.UserPrincipalName -ExportPath $licensePath
 
 # Step 9: Remove from Zoom
