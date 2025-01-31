@@ -2,18 +2,18 @@
 
 <#
 .SYNOPSIS
-    Creates a new user based on a template user in Active Directory and Microsoft 365.
+    Handles Office 365/AD tasks during user termination.
 
 .DESCRIPTION
-    This script creates a new user account by copying attributes and group memberships
-    from an existing template user. It handles both on-premises AD and Microsoft 365 setup.
+    This script automates the termination process by handling both Active Directory
+    and Microsoft 365 tasks including group removal, license removal, and mailbox management.
 
     The script will display a GUI window to collect:
-    - New user's full name
-    - Template user to copy from
-    - Phone number
-    - Required license selection
-    - Optional ancillary licenses
+    - User to terminate (email)
+    - Mailbox access delegation
+    - Email forwarding settings
+    - OneDrive access delegation
+    - OneDrive read-only setting
 
     IMPORTANT: This script must be run from the Primary Domain Controller with AD Connect installed.
 
@@ -21,28 +21,19 @@
     The config file should be placed at: C:\ProgramData\CompassScripts\config.json
 
 .EXAMPLE
-    .\Invoke-MgNewUserRequest.ps1
+    .\Invoke-MgUserTermination.ps1
 
     This will launch the GUI window to collect the required information.
 
 .NOTES
     Author: Chris Williams
-    Created: 2022-03-02
-    Last Modified: 2025-01-24
+    Created: 2021-12-20
+    Last Modified: 2025-01-31
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
-    3.1.0        2025-01-25  Password System Update:
-                          - Replaced New-SecureRandomPassword with New-ReadablePassword
-                          - Added human-readable password generation using word list
-                          - Added interactive password acceptance/rejection
-                          - Added GitHub wordlist integration
-                          - Added support for custom word lists
-                          - Added configurable word count (2-20 words)
-                          - Added spaces/no-spaces password formatting options
-
     3.0.0        2025-01-20  Major Rework:
                           - Complete script reorganization and optimization
                           - Optimized UI spacing and element alignment
@@ -52,39 +43,39 @@
                           - Added progress tracking and status messaging
                           - Added Zoom phone onboarding
 
-    2.1.0        2024-10-15  Feature Update:
-                          - Added BookWithMeId validation
-                          - Enhanced AD Sync loop handling
+    2.1.0        2024-11-25  Feature Update:
                           - Reworked GUI interface
-                          - Added QuickEdit and InsertMode functions
-                          - Added SMTP duplicate checking
+                          - Added QuickEdit and InsertMode management
                           - Removed KnowBe4 SCIM integration per SecurePath Team
                           - Added Email Forwarding functionality - KnowBe4 Notification
 
-    2.0.0        2024-05-08  Major Feature Update:
-                          - Added input box system
-                          - Added EntraID P2 license checkbox
-                          - Enhanced UI boxes for variables
-                          - Added KB4 email delivery
-                          - Added MeetWithMeId and AD properties
+    2.0.0        2024-07-15  Major Feature Update:
+                          - Added GUI input system
+                          - Enhanced UI for variable collection
+                          - Added KB4 offboarding integration
+                          - Added OneDrive read-only functionality
                           - Updated KnowBe4 SCIM integration
-                          - Added template user validation
+                          - Added directory role management
 
-    1.2.0        2024-02-12  Feature Updates:
-                          - Enhanced license display output
-                          - Improved group management functions
-                          - Added KnowBe4 SCIM integration
+    1.2.0        2023-02-12  Feature Updates:
+                          - Enhanced license management
+                          - Improved group handling
+                          - Added KnowBe4 integration
+                          - Enhanced group function cleanup
+                          - Added OneDrive access management
 
-    1.1.0        2022-06-27  Feature Updates:
-                          - Added duplicate attribute checking
-                          - Added fax attributes copying
-                          - Enhanced group lookup and management
-                          - Added AD sync validation
+    1.1.0        2022-06-27  Enhancement Update:
+                          - Added group and license exports
+                          - Improved user management functions
+                          - Enhanced manager removal process
+                          - Fixed group member removal
+                          - Added sign-in revocation
 
-    1.0.0        2022-03-02  Initial Release:
-                          - Basic user creation functionality
-                          - Template user copying
-                          - Group membership handling
+    1.0.0        2021-12-20  Initial Release:
+                          - Basic termination functionality
+                          - AD user management
+                          - Group removal
+                          - License removal
     ------------------------------------------------------------------------------
 #>
 
@@ -104,39 +95,39 @@ function Set-ConsoleProperties {
     )
 
     $signature = @'
-    using System;
-    using System.Runtime.InteropServices;
+        using System;
+        using System.Runtime.InteropServices;
 
-    public static class ConsoleMode {
-        private const uint ENABLE_QUICK_EDIT = 0x0040;
-        private const uint ENABLE_INSERT_MODE = 0x0020;
-        private const int STD_INPUT_HANDLE = -10;
+        public static class ConsoleMode {
+            private const uint ENABLE_QUICK_EDIT = 0x0040;
+            private const uint ENABLE_INSERT_MODE = 0x0020;
+            private const int STD_INPUT_HANDLE = -10;
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetStdHandle(int nStdHandle);
+            [DllImport("kernel32.dll", SetLastError = true)]
+            private static extern IntPtr GetStdHandle(int nStdHandle);
 
-        [DllImport("kernel32.dll")]
-        private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+            [DllImport("kernel32.dll")]
+            private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
 
-        [DllImport("kernel32.dll")]
-        private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+            [DllImport("kernel32.dll")]
+            private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
 
-        public static void SetMode(bool enableQuickEdit, bool enableInsert) {
-            IntPtr handle = GetStdHandle(STD_INPUT_HANDLE);
-            uint mode;
+            public static void SetMode(bool enableQuickEdit, bool enableInsert) {
+                IntPtr handle = GetStdHandle(STD_INPUT_HANDLE);
+                uint mode;
 
-            if (!GetConsoleMode(handle, out mode)) {
-                throw new Exception("Failed to get console mode");
-            }
+                if (!GetConsoleMode(handle, out mode)) {
+                    throw new Exception("Failed to get console mode");
+                }
 
-            mode = enableQuickEdit ? mode | ENABLE_QUICK_EDIT : mode & ~ENABLE_QUICK_EDIT;
-            mode = enableInsert ? mode | ENABLE_INSERT_MODE : mode & ~ENABLE_INSERT_MODE;
+                mode = enableQuickEdit ? mode | ENABLE_QUICK_EDIT : mode & ~ENABLE_QUICK_EDIT;
+                mode = enableInsert ? mode | ENABLE_INSERT_MODE : mode & ~ENABLE_INSERT_MODE;
 
-            if (!SetConsoleMode(handle, mode)) {
-                throw new Exception("Failed to set console mode");
+                if (!SetConsoleMode(handle, mode)) {
+                    throw new Exception("Failed to set console mode");
+                }
             }
         }
-    }
 '@
 
     try {
@@ -166,7 +157,7 @@ $loadingChars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 $i = 0
 $loadingJob = Start-Job -ScriptBlock { while ($true) { Start-Sleep -Milliseconds 100 } }
 
-Write-Host "`n  Initializing New User Creation Script..." -ForegroundColor Cyan
+Write-Host "`n  Initializing User Termination Script..." -ForegroundColor Cyan
 
 Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Loading core components..." -NoNewline -ForegroundColor Yellow
 $ErrorActionPreference = 'Stop'
@@ -180,18 +171,18 @@ Write-Host "`r  [✓] Core components loaded" -ForegroundColor Green
 Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
 $progressSteps = @(
     @{ Number = 1; Name = "Initialization"; Description = "Loading configuration and connecting services" }
-    @{ Number = 2; Name = "User Input"; Description = "Gathering new user details" }
-    @{ Number = 3; Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
-    @{ Number = 4; Name = "New User AD Creation"; Description = "Creating user in Active Directory" }
-    @{ Number = 5; Name = "AD Group Copy"; Description = "Copying AD group memberships" }
-    @{ Number = 6; Name = "Azure Sync"; Description = "Syncing to Azure AD" }
-    @{ Number = 7; Name = "License Setup"; Description = "Assigning licenses" }
-    @{ Number = 8; Name = "Entra Group Copy"; Description = "Copying Entra group memberships" }
-    @{ Number = 9; Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
-    @{ Number = 10; Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
-    @{ Number = 11; Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
-    @{ Number = 12; Name = "Processing"; Description = "Processing" }
-    @{ Number = 13; Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
+    @{ Number = 2; Name = "User Input"; Description = "Gathering termination details" }
+    @{ Number = 3; Name = "AD Tasks"; Description = "Disabling user in Active Directory" }
+    @{ Number = 4; Name = "Session Cleanup"; Description = "Removing user sessions and devices" }
+    @{ Number = 5; Name = "Exchange Tasks"; Description = "Convert to SharedMailbox and setting forwarding/grant acces" }
+    @{ Number = 6; Name = "Directory Roles"; Description = "Removing from directory roles" }
+    @{ Number = 7; Name = "Group Removal"; Description = "Removing and exporting Entra/Exchange groups" }
+    @{ Number = 8; Name = "License Removal"; Description = "Removing and exporting Entra licenses" }
+    @{ Number = 9; Name = "Remove Zoom SSO"; Description = "Removing user from Zoom SSO" }
+    @{ Number = 10; Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
+    @{ Number = 11; Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
+    @{ Number = 12; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
+    @{ Number = 13; Name = "Final Steps"; Description = "Running AD sync and finalizing" }
 )
 Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
@@ -214,10 +205,10 @@ function Write-ProgressStep {
     # Guard against division by zero or missing step number
     if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
         Write-StatusMessage -Message "Step $StepName - $Status" -Type INFO
-        Write-Progress -Activity "New User Creation" -Status $Status
+        Write-Progress -Activity "User Termination" -Status $Status
     } else {
         Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $Status" -Type INFO
-        Write-Progress -Activity "New User Creation" -Status $Status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
+        Write-Progress -Activity "User Termination" -Status $Status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
     }
 }
 
@@ -753,29 +744,25 @@ function Send-GraphMailMessage {
 
 #Region Custom Functions
 
-function Get-NewUserRequestInput {
+function Get-UserTerminationInput {
     <#
-        .SYNOPSIS
-        Shows a GUI window for creating a new user request.
+    .SYNOPSIS
+    Shows a GUI window for processing a user termination request.
 
-        .DESCRIPTION
-        Displays a WPF window that collects information needed to create a new user,
-        including user details, mobile number, and license selections.
+    .DESCRIPTION
+    Displays a WPF window that collects information needed to terminate a user,
+    including delegation of access rights and mailbox settings.
 
-        .OUTPUTS
-        [PSCustomObject] Returns a custom object with the following properties:
-            InputNewUser           : [string] The new user's display name (First Last format)
-            InputNewMobile        : [string] Formatted mobile number or null if not provided
-            InputUserToCopy       : [string] Template user's display name to copy permissions from
-            InputRequiredLicense  : [hashtable] Selected required license with properties:
-                - SkuId          : [string] The license SKU ID
-                - DisplayName    : [string] The friendly name of the license
-            InputAncillaryLicenses: [array] Array of selected additional licenses, each containing:
-                - SkuId          : [string] The license SKU ID
-                - DisplayName    : [string] The friendly name of the license
-            TestModeEnabled       : [bool] Whether test mode is enabled
-        Returns $null if the user cancels the operation.
-        #>
+    .OUTPUTS
+    [PSCustomObject] Returns a custom object with the following properties:
+        InputUser               : [string] Email address of the user to terminate
+        InputUserFullControl    : [string] Email of user to receive full mailbox control (empty if not specified)
+        InputUserFWD           : [string] Email address for mail forwarding (empty if not specified)
+        InputUserOneDriveAccess: [string] Email of user to receive OneDrive access (empty if not specified)
+        SetOneDriveReadOnly    : [bool] Whether to set OneDrive as read-only
+        TestModeEnabled       : [bool] Whether test mode is enabled
+    Returns $null if the user cancels the operation.
+    #>
 
     # 1. Add required assemblies
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
@@ -932,35 +919,10 @@ function Get-NewUserRequestInput {
         return $checkbox
     }
 
-    function New-FormComboBox {
-        param (
-            [string]$ToolTip,
-            [string]$Margin = "0,0,0,10",
-            [string]$Padding = "5,3,5,3",
-            [string]$DisplayMemberPath
-        )
-        $comboBox = New-Object System.Windows.Controls.ComboBox
-        $comboBox.Margin = $Margin
-        $comboBox.Padding = $Padding
-        $comboBox.ToolTip = $ToolTip
-        if ($DisplayMemberPath) {
-            $comboBox.DisplayMemberPath = $DisplayMemberPath
-        }
-        return $comboBox
-    }
-
     # 3. Validation Helper Functions
-    function Test-DisplayName {
-        param ([string]$DisplayName)
-        return $DisplayName -match '^[A-Za-z]+ [A-Za-z]+$'
-    }
-
-    function Format-MobileNumber {
-        param ([string]$MobileNumber)
-        $digits = -join ($MobileNumber -replace '\D', '')
-        if ($digits.Length -eq 10) {
-            return "($($digits.Substring(0, 3))) $($digits.Substring(3, 3))-$($digits.Substring(6, 4))"
-        }
+    function Test-EmailAddress {
+        param ([string]$Email)
+        return $Email -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     }
 
     function Show-ValidationError {
@@ -971,73 +933,15 @@ function Get-NewUserRequestInput {
         [System.Windows.MessageBox]::Show($Message, $Title, [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
     }
 
-    # 4. License Processing Functions
-    function Get-LicenseDisplayName {
-        param ([string]$SkuPartNumber)
-        $displayName = switch -Regex ($SkuPartNumber) {
-            "POWERAUTOMATE_ATTENDED_RPA" { "Power Automate Premium" }
-            "PROJECT_MADEIRA_PREVIEW_IW_SKU" { "Dynamics 365 Business Central for IWs" }
-            "PROJECT_PLAN3_DEPT" { "Project Plan 3 (for Department)" }
-            "FLOW_FREE" { "Microsoft Power Automate Free" }
-            "WINDOWS_STORE" { "Windows Store for Business" }
-            "RMSBASIC" { "Rights Management Service Basic Content Protection" }
-            "RIGHTSMANAGEMENT_ADHOC" { "Rights Management Adhoc" }
-            "POWERAPPS_VIRAL" { "Microsoft Power Apps Plan 2 Trial" }
-            "POWERAPPS_PER_USER" { "Power Apps Premium" }
-            "POWERAPPS_DEV" { "Microsoft PowerApps for Developer" }
-            "PHONESYSTEM_VIRTUALUSER" { "Microsoft Teams Phone Resource Account" }
-            "MICROSOFT_BUSINESS_CENTER" { "Microsoft Business Center" }
-            "MCOPSTNC" { "Communications Credits" }
-            "MCOPSTN1" { "Skype for Business PSTN Domestic Calling" }
-            "MEETING_ROOM" { "Microsoft Teams Rooms Standard" }
-            "MCOMEETADV" { "Microsoft 365 Audio Conferencing" }
-            "CCIBOTS_PRIVPREV_VIRAL" { "Power Virtual Agents Viral Trial" }
-            "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
-            "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
-            "SPE_E3" { "Microsoft 365 E3" }
-            "SPB" { "Microsoft 365 Business Premium" }
-            "ENTERPRISEPACK" { "Office 365 E3" }
-            "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
-            "PROJECT_P1" { "Project Plan 1" }
-            "PROJECTPROFESSIONAL" { "Project Plan 3" }
-            "VISIOCLIENT" { "Visio Plan 2" }
-            "Microsoft_Teams_Audio_Conferencing_select_dial_out" { "Microsoft Teams Audio Conferencing with dial-out to USA/CAN" }
-            "POWER_BI_PRO" { "Power BI Pro" }
-            "Microsoft_365_Copilot" { "Microsoft 365 Copilot" }
-            "Microsoft_Teams_Premium" { "Microsoft Teams Premium" }
-            "MCOEV" { "Microsoft Teams Phone Standard" }
-            "POWER_BI_STANDARD" { "Power BI Standard" }
-            "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
-            default { $SkuPartNumber }
-        }
-        return $displayName
-    }
-
-    function Get-FormattedLicenseInfo {
-        param ([array]$Skus)
-        return $Skus | ForEach-Object {
-            $available = $_.PrepaidUnits - $_.ConsumedUnits
-            $SkuDisplayName = Get-LicenseDisplayName $_.SkuPartNumber
-            if ([string]::IsNullOrEmpty($SkuDisplayName)) {
-                $SkuDisplayName = $_.SkuPartNumber
-            }
-            @{
-                DisplayName = "$($SkuDisplayName) (Available: $available)"
-                SkuId       = $_.SkuId
-                SortName    = $SkuDisplayName
-            }
-        } | Sort-Object { $_.SortName }
-    }
-
-    # 5. Event Handlers
-    $Script:inputGotFocusHandler = {
+    # 4. Event Handlers
+    $Script:emailGotFocusHandler = {
         if ($this.Text -eq $this.Tag) {
             $this.Text = ""
             $this.Foreground = 'Black'
         }
     }
 
-    $Script:inputLostFocusHandler = {
+    $Script:emailLostFocusHandler = {
         if ([string]::IsNullOrWhiteSpace($this.Text) -or $this.Text -eq $this.Tag) {
             $this.Text = $this.Tag
             $this.Foreground = 'Gray'
@@ -1045,38 +949,17 @@ function Get-NewUserRequestInput {
             $this.BorderThickness = 1
             return
         }
-        switch -Regex ($this.Name) {
-            'newUser|userToCopy' {
-                if (-not (Test-DisplayName $this.Text)) {
-                    $this.BorderBrush = 'Red'
-                    $this.BorderThickness = 2
-                } else {
-                    $this.BorderBrush = $null
-                    $this.BorderThickness = 1
-                }
-                break
-            }
-            'mobile' {
-                if ($this.Text -ne $this.Tag) {
-                    $formattedNumber = Format-MobileNumber $this.Text
-                    if ($null -eq $formattedNumber) {
-                        $this.BorderBrush = 'Red'
-                        $this.BorderThickness = 2
-                    } else {
-                        $this.BorderBrush = $null
-                        $this.BorderThickness = 1
-                        if (-not $bypassFormattingCheckBox.IsChecked) {
-                            $this.Text = $formattedNumber
-                        }
-                    }
-                }
-                break
-            }
+        if (-not (Test-EmailAddress -Email $this.Text)) {
+            $this.BorderBrush = 'Red'
+            $this.BorderThickness = 2
+        } else {
+            $this.BorderBrush = $null
+            $this.BorderThickness = 1
         }
     }
 
-    # 6. Input Control Initialization
-    function Initialize-InputTextBox {
+    # 5. Input Control Initialization
+    function Initialize-EmailTextBox {
         param (
             [string]$PlaceholderText,
             [string]$ToolTipText,
@@ -1093,160 +976,74 @@ function Get-NewUserRequestInput {
         $textBox.Foreground = 'Gray'
         $textBox.ToolTip = $ToolTipText
 
-        $textBox.Add_GotFocus($Script:inputGotFocusHandler)
-        $textBox.Add_LostFocus($Script:inputLostFocusHandler)
+        $textBox.Add_GotFocus($Script:emailGotFocusHandler)
+        $textBox.Add_LostFocus($Script:emailLostFocusHandler)
 
         return $textBox
     }
 
-    # 7. Main UI Creation and Logic
-    # Get license information
-    $skus = Get-MgSubscribedSku | Select-Object SkuId, SkuPartNumber, ConsumedUnits, @{
-        Name = 'PrepaidUnits'; Expression = { $_.PrepaidUnits.Enabled }
-    }
-    $licenseInfo = Get-FormattedLicenseInfo -Skus $skus
-
-    # Define required and ignored licenses
-    $requiredLicenses = @(
-        "Exchange Online (Plan 1)",
-        "Office 365 E3",
-        "Microsoft 365 Business Basic",
-        "Microsoft 365 E3",
-        "Microsoft 365 Business Premium"
-    )
-
-    $ignoredLicenses = @(
-        "Microsoft Teams Rooms Standard",
-        "Microsoft Teams Phone Standard",
-        "Power Automate Premium",
-        "Power Apps Premium",
-        "Power BI Pro",
-        "Power BI Standard",
-        "Microsoft 365 Lighthouse",
-        "Rights Management Service Basic Content Protection",
-        "Communications Credits",
-        "Rights Management Adhoc",
-        "Power Virtual Agents Viral Trial",
-        "Windows Store for Business",
-        "Skype for Business PSTN Domestic Calling",
-        "Microsoft Business Center",
-        "Microsoft Teams Phone Resource Account",
-        "Microsoft PowerApps for Developer",
-        "Microsoft Power Apps Plan 2 Trial",
-        "Microsoft Power Automate Free",
-        "Microsoft_Copilot_for_Finance_trial",
-        "STREAM",
-        "Project Plan 3 (for Department)",
-        "Dynamics 365 Business Central for IWs"
-    )
-
+    # 6. Main UI Creation and Logic
     # Create window and main containers
-    $window = New-FormWindow -Title "New User Request" -Height 800
+    $window = New-FormWindow -Title "User Termination Request" -Height 530
     $scrollViewer = New-FormScrollViewer
     $mainPanel = New-MainPanel -Margin '10'
     $scrollViewer.Content = $mainPanel
     $window.Content = $scrollViewer
 
     # Add header
-    $mainPanel.Children.Add((New-HeaderPanel -Text "Create New User Request`nPlease fill in all required fields marked with *"))
+    $mainPanel.Children.Add((New-HeaderPanel -Text "User Termination Request`nPlease fill in all required fields marked with *"))
 
-    # New User section
-    $newUserSection = New-FormGroupBox -Header "New User Information"
-    $newUserSection.Stack.Children.Add((New-FormLabel -Content "New User Name (First Last) *"))
-    $newUserTextBox = Initialize-InputTextBox `
-        -Name "newUser" `
-        -PlaceholderText "Enter first and last name" `
-        -ToolTipText "Enter the full name of the new user (e.g., John Smith)"
-    $newUserSection.Stack.Children.Add($newUserTextBox)
-    $mainPanel.Children.Add($newUserSection.Group)
+    # Create user termination group
+    $termSection = New-FormGroupBox -Header "User Information"
+    $termSection.Stack.Children.Add((New-FormLabel -Content "User to Terminate (Email) *"))
+    $txtUserToTerm = Initialize-EmailTextBox `
+        -Name "userToTerm" `
+        -PlaceholderText "Enter user's email address" `
+        -ToolTipText "Enter the email address of the user to be terminated"
+    $termSection.Stack.Children.Add($txtUserToTerm)
+    $mainPanel.Children.Add($termSection.Group)
 
-    # Template User section
-    $copyUserSection = New-FormGroupBox -Header "Template User Information"
-    $copyUserSection.Stack.Children.Add((New-FormLabel -Content "User To Copy (First Last) *"))
-    $userToCopyTextBox = Initialize-InputTextBox `
-        -Name "userToCopy" `
-        -PlaceholderText "Enter template user's name" `
-        -ToolTipText "Enter the name of an existing user whose permissions should be copied"
-    $copyUserSection.Stack.Children.Add($userToCopyTextBox)
-    $mainPanel.Children.Add($copyUserSection.Group)
+    # Create access delegation group
+    $delegateSection = New-FormGroupBox -Header "Access Delegation"
 
-    # Mobile section
-    $mobileSection = New-FormGroupBox -Header "Contact Information"
-    $mobileSection.Stack.Children.Add((New-FormLabel -Content "Mobile Number"))
-    $mobileTextBox = Initialize-InputTextBox `
-        -Name "mobile" `
-        -PlaceholderText "Enter 10-digit mobile number" `
-        -ToolTipText "Enter a 10-digit mobile number (e.g., 1234567890)"
-    $mobileSection.Stack.Children.Add($mobileTextBox)
+    # OneDrive Access
+    $delegateSection.Stack.Children.Add((New-FormLabel -Content "Grant OneDrive Access To (Email):"))
+    $txtOneDriveAccess = Initialize-EmailTextBox `
+        -Name "oneDriveAccess" `
+        -PlaceholderText "Enter delegate's email address" `
+        -ToolTipText "Enter the email of the person who should receive OneDrive access"
+    $delegateSection.Stack.Children.Add($txtOneDriveAccess)
 
-    $bypassPanel = New-FormDockPanel -Margin "0,0,0,5"
-    $bypassFormattingCheckBox = New-FormCheckBox `
-        -Content "Bypass Mobile Number Formatting" `
-        -ToolTip "Check this box to skip automatic formatting of the mobile number" `
-        -Margin "0,5,0,5"
-    $bypassFormattingCheckBox.VerticalAlignment = 'Center'
-    $bypassPanel.Children.Add($bypassFormattingCheckBox)
-    $mobileSection.Stack.Children.Add($bypassPanel)
-    $mainPanel.Children.Add($mobileSection.Group)
+    # Mailbox Control
+    $delegateSection.Stack.Children.Add((New-FormLabel -Content "Grant Mailbox Full Control To (Email):"))
+    $txtMailboxControl = Initialize-EmailTextBox `
+        -Name "mailboxControl" `
+        -PlaceholderText "Enter delegate's email address" `
+        -ToolTipText "Enter the email of the person who should receive mailbox access"
+    $delegateSection.Stack.Children.Add($txtMailboxControl)
 
-    # Required License Section
-    $requiredSection = New-FormGroupBox -Header "Required License (Select One) *"
-    $requiredComboBox = New-FormComboBox `
-        -ToolTip "Select one of the required base licenses for the user" `
-        -DisplayMemberPath "DisplayName"
+    # Forward Mailbox
+    $delegateSection.Stack.Children.Add((New-FormLabel -Content "Forward Mailbox To (Email):"))
+    $txtForwardMailbox = Initialize-EmailTextBox `
+        -Name "forwardMailbox" `
+        -PlaceholderText "Enter forward-to email address" `
+        -ToolTipText "Enter the email address where future emails should be forwarded"
+    $delegateSection.Stack.Children.Add($txtForwardMailbox)
 
-    # Create a custom object for each required license
-    foreach ($license in $licenseInfo) {
-        foreach ($reqLicense in $requiredLicenses) {
-            if ($license.DisplayName -like "*$reqLicense*") {
-                $item = [PSCustomObject]@{
-                    DisplayName = $license.DisplayName
-                    SkuId       = $license.SkuId
-                }
-                $requiredComboBox.Items.Add($item)
-            }
-        }
-    }
+    # OneDrive Read-Only option
+    $oneDrivePanel = New-FormDockPanel -Margin "0,0,0,5"
 
-    $requiredSection.Stack.Children.Add($requiredComboBox)
-    $mainPanel.Children.Add($requiredSection.Group)
+    $chkOneDriveReadOnly = New-FormCheckBox `
+        -Content "Set OneDrive as Read-Only" `
+        -ToolTip "Check to make the OneDrive content read-only" `
+        -Margin "10,0,0,0"
 
-    # Ancillary Licenses Section
-    $ancillarySection = New-FormGroupBox -Header "Ancillary Licenses"
-    $scrollingPanel = New-ScrollingStackPanel -MaxHeight 200
-    $licensesStack = $scrollingPanel.StackPanel
+    $oneDrivePanel.Children.Add($chkOneDriveReadOnly)
+    $delegateSection.Stack.Children.Add($oneDrivePanel)
 
-    $SkuCheckBoxes = @()
-    foreach ($license in $licenseInfo) {
-        # Skip licenses that are in the required licenses list
-        $isRequired = $false
-        foreach ($reqLicense in $requiredLicenses) {
-            if ($license.DisplayName -like "*$reqLicense*") {
-                $isRequired = $true
-                break
-            }
-        }
-        $isIgnored = $false
-        foreach ($ignoredLicense in $ignoredLicenses) {
-            if ($license.DisplayName -like "*$ignoredLicense*") {
-                $isIgnored = $true
-                break
-            }
-        }
-        if (-not $isRequired -and -not $isIgnored) {
-            $skucb = New-FormCheckBox -Content $license.DisplayName -ToolTip $license.SkuId
-            $skucb.Tag = $license.SkuId
-            if ($license.DisplayName -like "*Microsoft Entra ID P2*") {
-                $skucb.IsChecked = $true
-            }
-            $SkuCheckBoxes += $skucb
-            $licensesStack.Children.Add($skucb)
-        }
-    }
-    $ancillarySection.Group.Content = $scrollingPanel.ScrollViewer
-    $mainPanel.Children.Add($ancillarySection.Group)
+    $mainPanel.Children.Add($delegateSection.Group)
 
-    # Create and add OK and Cancel buttons
+    # Create buttons
     $buttonPanel = New-ButtonPanel -Margin "0,10,0,0"
 
     # Add test mode checkbox to button panel
@@ -1259,68 +1056,25 @@ function Get-NewUserRequestInput {
     $buttonPanel.Children.Add($testModeButton)
 
     $okButton = New-FormButton -Content "OK" -Margin "0,0,10,0" -ClickHandler {
-        # Validate New User input
-        if (-not $newUserTextBox.Text) {
-            Show-ValidationError -Message "New User is a mandatory field. Please enter a valid Display Name."
-            return
-        }
-        if (-not (Test-DisplayName $newUserTextBox.Text)) {
-            Show-ValidationError -Message "Invalid format for New User. Please use 'First Last' name format."
+        # Validate required fields first
+        if (-not $txtUserToTerm.Text -or $txtUserToTerm.Text -eq $txtUserToTerm.Tag -or -not (Test-EmailAddress -Email $txtUserToTerm.Text)) {
+            Show-ValidationError -Message "Invalid or missing email for required field: User to Terminate"
             return
         }
 
-        # Validate User To Copy input
-        if (-not $userToCopyTextBox.Text) {
-            Show-ValidationError -Message "User To Copy is a mandatory field. Please enter a Display Name."
-            return
-        }
-        if (-not (Test-DisplayName $userToCopyTextBox.Text)) {
-            Show-ValidationError -Message "Invalid format for User To Copy. Please use 'First Last' name format."
-            return
+        # Validate optional fields if they have content
+        $optionalTextBoxes = @{
+            'OneDrive Access' = $txtOneDriveAccess
+            'Mailbox Control' = $txtMailboxControl
+            'Forward Mailbox' = $txtForwardMailbox
         }
 
-        # Validate Mobile Number
-        if ($mobileTextBox.Text -ne $mobileTextBox.Tag -and -not $bypassFormattingCheckBox.IsChecked) {
-            $formattedNumber = Format-MobileNumber $mobileTextBox.Text
-            if ($null -eq $formattedNumber) {
-                Show-ValidationError -Message "Invalid mobile number format. Please enter a valid 10-digit mobile number."
+        foreach ($field in $optionalTextBoxes.GetEnumerator()) {
+            if ($field.Value.Text -ne $field.Value.Tag -and -not (Test-EmailAddress -Email $field.Value.Text)) {
+                Show-ValidationError -Message "Invalid email format for: $($field.Key)"
                 return
             }
         }
-
-        # Validate required license selection
-        if ($null -eq $requiredComboBox.SelectedItem) {
-            Show-ValidationError -Message "Please select a required license." -Title "Required License Missing"
-            return
-        }
-
-        # Check license availability
-        if ($requiredComboBox.SelectedItem.DisplayName -match "Available: (\d+)") {
-            $availableCount = [int]$Matches[1]
-            if ($availableCount -eq 0) {
-                $licenseName = $requiredComboBox.SelectedItem.DisplayName -replace ' \(Available: \d+\)$', ''
-                Show-ValidationError -Message "$licenseName has no licenses available." -Title "No Available Licenses"
-                return
-            }
-        }
-
-        # Check ancillary licenses availability
-        $selectedCheckboxes = $SkuCheckBoxes | Where-Object { $_.IsChecked }
-        foreach ($cb in $selectedCheckboxes) {
-            if ($cb.Content -match "Available: (\d+)") {
-                $availableCount = [int]$Matches[1]
-                if ($availableCount -eq 0) {
-                    $licenseName = $cb.Content -replace ' \(Available: \d+\)$', ''
-                    Show-ValidationError -Message "$licenseName has no licenses available." -Title "No Available Licenses"
-                    return
-                }
-            }
-        }
-
-        # Get selected licenses
-        $script:selectedLicenses = @()
-        $script:selectedLicenses += $requiredComboBox.SelectedItem.SkuId
-        $script:selectedLicenses += ($SkuCheckBoxes | Where-Object { $_.IsChecked } | ForEach-Object { $_.Tag })
 
         $window.DialogResult = $true
         $window.Close()
@@ -1335,714 +1089,525 @@ function Get-NewUserRequestInput {
 
     $mainPanel.Children.Add($buttonPanel)
 
-    # Show the window
+    # Show the window and return results
     $result = $window.ShowDialog()
-
-    # Initialize formattedMobile variable
-    $formattedMobile = $null
-    if ($mobileTextBox.Text -ne $mobileTextBox.Tag) {
-        # Only process if not placeholder text
-        if (-not $bypassFormattingCheckBox.IsChecked) {
-            $formattedMobile = Format-MobileNumber $mobileTextBox.Text
-        } else {
-            $formattedMobile = $mobileTextBox.Text  # Use the unformatted mobile number
-        }
-    }
 
     if ($result -eq $true) {
         return @{
-            InputNewUser           = $newUserTextBox.Text
-            InputNewMobile         = $formattedMobile
-            InputUserToCopy        = $userToCopyTextBox.Text
-            InputRequiredLicense   = @{
-                SkuId       = $requiredComboBox.SelectedItem.SkuId
-                DisplayName = $requiredComboBox.SelectedItem.DisplayName
-            }
-            InputAncillaryLicenses = ($SkuCheckBoxes |
-                Where-Object { $_.IsChecked } |
-                ForEach-Object {
-                    @{
-                        SkuId       = $_.Tag
-                        DisplayName = $_.Content
-                    }
-                })
-            TestModeEnabled        = ($testModeButton.IsChecked -eq $true)
+            InputUser               = $txtUserToTerm.Text
+            InputUserFullControl    = if ($txtMailboxControl.Text -eq $txtMailboxControl.Tag) { "" } else { $txtMailboxControl.Text }
+            InputUserFWD            = if ($txtForwardMailbox.Text -eq $txtForwardMailbox.Tag) { "" } else { $txtForwardMailbox.Text }
+            InputUserOneDriveAccess = if ($txtOneDriveAccess.Text -eq $txtOneDriveAccess.Tag) { "" } else { $txtOneDriveAccess.Text }
+            SetOneDriveReadOnly     = $chkOneDriveReadOnly.IsChecked
+            TestModeEnabled         = ($testModeButton.IsChecked -eq $true)
         }
     } else {
         return $null
     }
 }
 
-function Get-TemplateUser {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [string]$UserToCopy
-    )
-
-    try {
-        Write-StatusMessage -Message "Getting template user details for: $UserToCopy" -Type INFO
-
-        $adUserParams = @{
-            Filter      = "DisplayName -eq '$UserToCopy'"
-            Properties  = @(
-                'Company',
-                'Title',
-                'Manager',
-                'physicalDeliveryOfficeName',
-                'Department',
-                'Description'.
-                'facsimileTelephoneNumber',
-                'l', # l is for Location because Microsoft AD attributes are stupid
-                'c', # c is for Country because Microsoft AD attributes are stupid
-                'wWWHomePage'
-            )
-            ErrorAction = 'Stop'
-        }
-
-        $templateUser = Get-ADUser @adUserParams
-
-        # Check for null or multiple users
-        if ($null -eq $templateUser) {
-            Write-StatusMessage -Message "Could not find user $UserToCopy in AD to copy from" -Type ERROR
-            Exit-Script -Message "Template user not found: $UserToCopy" -ExitCode UserNotFound
-        }
-
-        if ($templateUser.Count -gt 1) {
-            Write-StatusMessage -Message "Found multiple users with DisplayName: $UserToCopy" -Type ERROR
-            Exit-Script -Message "Multiple template users found - please check AD for duplicate DisplayName attributes" -ExitCode DuplicateUser
-        }
-
-        Write-StatusMessage -Message "Successfully retrieved template user details" -Type OK
-        return $templateUser
-
-    } catch {
-        Write-StatusMessage -Message "Failed to get template user: $_" -Type ERROR
-        Exit-Script -Message "Critical error getting template user" -ExitCode GeneralError
-    }
-}
-
-function New-UserProperties {
+function Get-TerminationPrerequisites {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$NewUser,
+        [string]$User,
 
-        [Parameter(Mandatory)]
-        [string]$SourceUserUPN
+        [Parameter()]
+        [string]$UserPropertiesPath,
+
+        [Parameter()]
+        [string]$ADGroupsPath
     )
 
-    function New-DuplicatePromptForm {
-        [CmdletBinding()]
-        param(
-            [Parameter(Mandatory)]
-            [string]$Title,
-
-            [Parameter(Mandatory)]
-            [string]$ExistingValue,
-
-            [Parameter(Mandatory)]
-            [string]$PromptText
-        )
-
-        try {
-            Add-Type -AssemblyName System.Windows.Forms
-
-            $form = New-Object System.Windows.Forms.Form
-            $form.Text = $Title
-            $form.Size = New-Object System.Drawing.Size(450, 210)
-            $form.StartPosition = "CenterScreen"
-
-            $label = New-Object System.Windows.Forms.Label
-            $label.Location = New-Object System.Drawing.Point(10, 20)
-            $label.Size = New-Object System.Drawing.Size(430, 50)
-            $label.Text = $PromptText
-            $form.Controls.Add($label)
-
-            $textBox = New-Object System.Windows.Forms.TextBox
-            $textBox.Location = New-Object System.Drawing.Point(10, 70)
-            $textBox.Size = New-Object System.Drawing.Size(410, 20)
-            $textBox.Text = $ExistingValue
-            $form.Controls.Add($textBox)
-
-            $okButton = New-Object System.Windows.Forms.Button
-            $okButton.Location = New-Object System.Drawing.Point(100, 120)
-            $okButton.Size = New-Object System.Drawing.Size(75, 23)
-            $okButton.Text = "OK"
-            $okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
-            $form.Controls.Add($okButton)
-
-            $cancelButton = New-Object System.Windows.Forms.Button
-            $cancelButton.Location = New-Object System.Drawing.Point(200, 120)
-            $cancelButton.Size = New-Object System.Drawing.Size(75, 23)
-            $cancelButton.Text = "Cancel"
-            $cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-            $form.Controls.Add($cancelButton)
-
-            $form.AcceptButton = $okButton
-            $form.CancelButton = $cancelButton
-
-            return $form
-        } catch {
-            Write-StatusMessage -Message "Failed to create form: $_" -Type ERROR
-            throw
-        }
-    }
-
     try {
-        Write-StatusMessage -Message "Generating properties for new user: $NewUser" -Type INFO
+        # Find user in AD with more flexible search
+        Write-StatusMessage -Message "Attempting to find $User in Active Directory" -Type 'INFO'
 
-        # Split the new user name
-        $nameParts = $NewUser -split ' '
-        if ($nameParts.Count -lt 2) {
-            Write-StatusMessage -Message "Invalid user name format: Must include first and last name" -Type ERROR
-            Exit-Script -Message "New user name must include first and last name" -ExitCode GeneralError
+        # Try exact UPN match first
+        $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
+
+        # If no exact UPN match, try email match
+        if (-not $UserFromAD) {
+            $UserFromAD = Get-ADUser -Filter "mail -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
         }
 
-        try {
-            # Get domain from source user
-            $domain = $SourceUserUPN -replace '.+?(?=@)'
-            if ([string]::IsNullOrEmpty($domain)) {
-                Write-StatusMessage -Message "Failed to extract domain from source user" -Type ERROR
-                Exit-Script -Message "Invalid source user domain" -ExitCode GeneralError
-            }
+        # If still no match, try partial matches
+        if (-not $UserFromAD) {
+            $partialMatches = Get-ADUser -Filter "userPrincipalName -like '*$User*' -or mail -like '*$User*' -or displayName -like '*$User*'" `
+                -Properties MemberOf, UserPrincipalName, Mail, DisplayName
 
-            # Parse name parts using original logic
-            $firstName = $nameParts[-2]  # Second to last part
-            $lastName = $nameParts[-1]   # Last part
-            $displayName = $NewUser
-
-            # Generate initial samAccountName and email
-            $samAccountName = (($NewUser -replace '(?<=.{1}).+') + ($lastName)).ToLower()
-            $email = ($samAccountName + $domain).ToLower()
-
-            # Check for duplicate samAccountName in AD
-            if (Get-ADUser -Filter "SamAccountName -eq '$samAccountName'" -ErrorAction SilentlyContinue) {
-                Write-StatusMessage -Message "SamAccountName $samAccountName already exists" -Type WARN
-
-                # For SAM account name prompt:
-                $formDuplicateSam = New-DuplicatePromptForm `
-                    -Title "Duplicate SAM Account Name" `
-                    -ExistingValue $samAccountName `
-                    -PromptText "SAM account name '$samAccountName' already exists.`nPlease enter a different SAM account name:"
-
-                $resultSam = $formDuplicateSam.ShowDialog()
-
-                if ($resultSam -eq [System.Windows.Forms.DialogResult]::OK) {
-                    $samAccountName = $textBox.Text
-                    # Verify the new samAccountName is unique
-                    if (Get-ADUser -Filter "SamAccountName -eq '$samAccountName'" -ErrorAction SilentlyContinue) {
-                        Write-StatusMessage -Message "New SamAccountName $samAccountName is also in use" -Type ERROR
-                        Exit-Script -Message "Unable to generate unique SamAccountName" -ExitCode DuplicateUser
+            if ($partialMatches) {
+                if ($partialMatches.Count -gt 1) {
+                    Write-StatusMessage -Message "Multiple matching users found:" -Type 'WARN'
+                    $index = 0
+                    $partialMatches | ForEach-Object {
+                        Write-Host "`n[$index] DisplayName: $($_.DisplayName)"
+                        Write-Host "    UPN: $($_.UserPrincipalName)"
+                        Write-Host "    Email: $($_.Mail)"
+                        $index++
                     }
-                    Write-StatusMessage -Message "Using custom SamAccountName: $samAccountName" -Type OK
-                    # Update email with new samAccountName
-                    $email = ($samAccountName + $domain).ToLower()
-                } else {
-                    Write-StatusMessage -Message "User cancelled SAM account name selection" -Type WARN
-                    Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
-                }
-            }
 
-            # Check for existing mailbox
-            try {
-                $mailbox = Get-Mailbox -Filter "EmailAddresses -like '*$email*'" -ErrorAction Stop
-                if ($mailbox) {
-                    Write-StatusMessage -Message "Email address $email (or similar) already exists for mailbox: $($mailbox.UserPrincipalName)" -Type WARN
-
-                    # For email prompt:
-                    $formDuplicateEmail = New-DuplicatePromptForm `
-                        -Title "Duplicate Email Address" `
-                        -ExistingValue $email `
-                        -PromptText "Email address '$email' already exists.`nPlease enter a different email address:"
-
-                    $resultEmail = $formDuplicateEmail.ShowDialog()
-
-                    if ($resultEmail -eq [System.Windows.Forms.DialogResult]::OK) {
-                        $email = $textBox.Text
-                        # Verify the new email is unique
-                        try {
-                            $checkMailbox = Get-Mailbox -Filter "EmailAddresses -like '*$email*'" -ErrorAction Stop
-                            if ($checkMailbox) {
-                                Write-StatusMessage -Message "New email address $email is also in use by: $($checkMailbox.displayName)" -Type ERROR
-                                Exit-Script -Message "Unable to generate unique email address" -ExitCode DuplicateUser
-                            }
-                        } catch [Microsoft.Exchange.Management.RestApiClient.RestApiException] {
-                            Write-StatusMessage -Message "Using custom email address: $email" -Type OK
+                    do {
+                        $selection = Read-Host "`nEnter the number of the correct user or 'exit' to cancel"
+                        if ($selection -eq 'exit') {
+                            Exit-Script -Message "User cancelled the operation" -ExitCode Cancelled
                         }
-                    } else {
-                        Write-StatusMessage -Message "User cancelled email address selection" -Type WARN
-                        Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
-                    }
-                }
-            } catch [Microsoft.Exchange.Management.RestApiClient.RestApiException] {
-                # This is expected - mailbox should not exist
-                Write-StatusMessage -Message "Exchange validation passed - mailbox does not exist" -Type OK
-            }
+                    } while ($selection -notmatch '^\d+$' -or [int]$selection -ge $partialMatches.Count)
 
-            Write-StatusMessage -Message "Successfully generated user properties" -Type OK
-            return @{
-                FirstName      = $firstName
-                LastName       = $lastName
-                DisplayName    = $displayName
-                Email          = $email
-                SamAccountName = $samAccountName
-            }
-        } catch {
-            Write-StatusMessage -Message "Failed to generate user properties: $_" -Type ERROR
-            Exit-Script -Message "Failed to generate user properties" -ExitCode GeneralError
-        }
-    } catch {
-        Write-StatusMessage -Message "Critical error in New-UserProperties: $_" -Type ERROR
-        Exit-Script -Message "Critical error generating user properties" -ExitCode GeneralError
-    }
-}
-
-function New-ReadablePassword {
-    <#
-    .SYNOPSIS
-        Generates a human-readable password using random words and special characters.
-
-    .DESCRIPTION
-        Creates a memorable password by combining random words from a curated wordlist with special characters
-        and numbers. Allows user to accept or reject generated passwords. Returns both plain text and SecureString versions.
-
-    .PARAMETER WordCount
-        Number of words to use in the password (2-20). Default is 3.
-
-    .PARAMETER AddSpaces
-        Adds spaces between words in the final password.
-
-    .PARAMETER WordListPath
-        Optional path to a custom wordlist file. If not provided, uses default GitHub wordlist.
-
-    .PARAMETER GitHubToken
-        GitHub Personal Access Token for accessing private word list repository.
-
-    .EXAMPLE
-        $password = New-ReadablePassword -GitHubToken "your-github-pat"
-        # Prompts user with generated password like: "Mountain7$ Forest#2 Lake"
-
-    .NOTES
-        Name: New-ReadablePassword
-        Author: Chris Williams
-        Version: 1.0.0
-        DateCreated: 2025-Jan-25
-    #>
-
-    [CmdletBinding()]
-    [OutputType([PSCustomObject])]
-    param(
-        [ValidateRange(2, 20)]
-        [int]$WordCount = 3,
-        [switch]$AddSpaces,
-        [string]$WordListPath,
-        [Parameter(Mandatory)]
-        [string]$GitHubToken
-    )
-
-    try {
-        Write-StatusMessage -Message "Generating secure word-based password" -Type INFO
-
-        do {
-            # Get word list
-            $FullList = if ($WordListPath -and (Test-Path $WordListPath)) {
-                Get-Content $WordListPath
-            } else {
-                $headers = @{
-                    "Authorization" = "token $GitHubToken"
-                    "Accept" = "application/json"
-                }
-                (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ryanchrisw/CompassDeploy/refs/heads/main/Wordlist/wordlist" -Headers $headers).Content.Trim().split("`n")
-            }
-
-            # Group words by length
-            $WordsByLength = $FullList | Group-Object Length -AsHashTable
-
-            # Select appropriate word lengths based on count
-            $WordList = switch ($WordCount) {
-                { $_ -le 3 } { $WordsByLength[7] + $WordsByLength[8] + $WordsByLength[9] }
-                4 { $WordsByLength[4..7] | ForEach-Object { $_ } }
-                5 { $WordsByLength[4..6] | ForEach-Object { $_ } }
-                default { $WordsByLength[3..5] | ForEach-Object { $_ } }
-            }
-
-            # Generate password
-            $SpecialChars = [char[]]((33,35) + (36..38) + (40..46) + (60..62) + (64))
-            $Numbers = [char[]](48..57)
-
-            $Password = 1..$WordCount | ForEach-Object {
-                if ($_ -eq $WordCount) {
-                    $WordList | Get-Random
+                    $UserFromAD = Get-ADUser -Identity $partialMatches[$selection].DistinguishedName -Properties MemberOf
                 } else {
-                    "$($WordList | Get-Random)$([char[]]($SpecialChars + $Numbers) | Get-Random)"
+                    $UserFromAD = Get-ADUser -Identity $partialMatches[0].DistinguishedName -Properties MemberOf
                 }
             }
-
-            $plainPassword = if ($AddSpaces) { $Password -join ' ' } else { $Password -join '' }
-
-            # Display password and get confirmation
-            Write-Host "`nGenerated Password: $plainPassword" -ForegroundColor Cyan
-            $response = Read-Host "Accept this password? (y/n)"
-
-        } while ($response -ne 'y')
-
-        Write-StatusMessage -Message "Password accepted" -Type OK
-        return @{
-            PlainPassword  = $plainPassword
-            SecurePassword = ConvertTo-SecureString -String $plainPassword -AsPlainText -Force
         }
-    }
-    catch {
-        Write-StatusMessage -Message "Critical error in password generation: $_" -Type ERROR
-        Exit-Script -Message "Critical password generation failure" -ExitCode GeneralError
-    }
-}
 
-function Confirm-UserCreation {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [ValidateNotNull()]
-        [hashtable]$NewUserProperties,
+        if (-not $UserFromAD) {
+            Exit-Script -Message "Could not find user $User in Active Directory" -ExitCode UserNotFound
+        }
 
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$DestinationOU,
+        # Find Disabled Users OU
+        Write-StatusMessage -Message "Attempting to find Disabled users OU" -Type 'INFO'
+        $DisabledOUs = @(Get-ADOrganizationalUnit -Filter 'Name -like "*disabled*"')
 
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$TemplateUser,
+        if ($DisabledOUs.count -gt 0) {
+            # Set the destination OU to the first one found
+            $DestinationOU = $DisabledOUs[0].DistinguishedName
 
-        [Parameter(Mandatory)]
-        [string]$Password
-    )
+            # Try to find user specific OU
+            foreach ($OU in $DisabledOUs) {
+                if ($OU.DistinguishedName -like '*user*') {
+                    $DestinationOU = $OU.DistinguishedName
+                }
+            }
+        } else {
+            Exit-Script -Message "Could not find disabled OU in Active Directory" -ExitCode GeneralError
+        }
 
-    try {
-        Write-StatusMessage -Message "Preparing user creation summary" -Type INFO
+        # Find user in Azure/Exchange
+        Write-StatusMessage -Message "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" -Type 'INFO'
+        try {
+            $365Mailbox = Get-Mailbox -Identity $UserFromAD.UserPrincipalName -ErrorAction Stop
+            $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName -Property Id, Mail, DisplayName, Department | Select-Object Id, Mail, DisplayName, Department -ErrorAction Stop
+        } catch {
+            Exit-Script -Message "Could not find user in Exchange/Azure: $_" -ExitCode UserNotFound
+        }
 
-        # Build summary with consistent formatting
-        $summary = @"
-New User Details:
-----------------
-- Display Name    = $($NewUserProperties.DisplayName)
-- Email Address   = $($NewUserProperties.Email)
-- Password        = $Password
-- First Name      = $($NewUserProperties.FirstName)
-- Last Name       = $($NewUserProperties.LastName)
-- SamAccountName  = $($NewUserProperties.SamAccountName)
-- Destination OU  = $DestinationOU
-- Template User   = $TemplateUser
+        # Get user confirmation
+        $confirmMessage = @"
+The user below will be disabled:
+Display Name = $($UserFromAD.Name)
+UserPrincipalName = $($UserFromAD.UserPrincipalName)
+Mailbox name =  $($365Mailbox.DisplayName)
+Azure name = $($MgUser.DisplayName)
+Destination OU = $($DestinationOU)
+
+Continue? (Y/N)
 "@
+        $Confirmation = Read-Host -Prompt $confirmMessage
 
-        # Display summary and get confirmation
-        Write-StatusMessage -Message $summary -Type SUMMARY
-        Write-StatusMessage -Message "Please review the details above carefully" -Type WARN
-        $confirmation = Read-Host "Do you want to proceed with user creation? (Y/N)"
-
-        if ($confirmation.ToUpper() -ne 'Y') {
-            Write-StatusMessage -Message "User creation cancelled." -Type WARN
-            Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
+        if ($Confirmation -ne 'y') {
+            Exit-Script -Message "User termination cancelled by user. Did not enter 'Y'" -ExitCode Cancelled
         }
 
-        Write-StatusMessage -Message "User creation confirmed." -Type OK
+        # After confirmation, export properties and groups if paths provided
+        if ($UserPropertiesPath -or $ADGroupsPath) {
+            try {
+                # Export user properties
+                if ($UserPropertiesPath) {
+                    Write-StatusMessage -Message "Exporting user properties" -Type INFO
+                    $propertyList = @(
+                        'displayName',
+                        'SamAccountName',
+                        'UserPrincipalName',
+                        'mail',
+                        'proxyAddresses',
+                        'company',
+                        'Title',
+                        'Manager',
+                        'physicalDeliveryOfficeName',
+                        'Department',
+                        'l',
+                        'c',
+                        'facsimileTelephoneNumber',
+                        'mobile',
+                        'telephoneNumber',
+                        'DistinguishedName',
+                        'extensionAttribute1',
+                        'extensionAttribute2',
+                        'extensionAttribute3',
+                        'extensionAttribute4',
+                        'extensionAttribute5',
+                        'extensionAttribute6',
+                        'extensionAttribute7',
+                        'extensionAttribute8',
+                        'extensionAttribute9',
+                        'extensionAttribute10',
+                        'extensionAttribute11',
+                        'extensionAttribute12',
+                        'extensionAttribute13',
+                        'extensionAttribute14',
+                        'extensionAttribute15'
+                    )
+                    $userProperties = Get-ADUser -Identity $UserFromAD.SamAccountName -Properties $propertyList
+                    $userProperties | Select-Object $propertyList | Export-Csv -Path $UserPropertiesPath -NoTypeInformation
+                    Write-StatusMessage -Message "Exported user properties to: $UserPropertiesPath" -Type OK
+                }
+
+                # Export group memberships
+                if ($ADGroupsPath) {
+                    Write-StatusMessage -Message "Exporting group memberships" -Type INFO
+                    $groups = $UserFromAD.MemberOf | ForEach-Object {
+                        Get-ADGroup -Identity $_ -Properties Name, Description, GroupCategory, GroupScope |
+                            Select-Object Name, Description, GroupCategory, GroupScope, DistinguishedName
+                    }
+                    $groups | Export-Csv -Path $ADGroupsPath -NoTypeInformation
+                    Write-StatusMessage -Message "Exported group memberships to: $ADGroupsPath" -Type OK
+                }
+            }
+            catch {
+                Write-StatusMessage -Message "Failed to export user data: $_" -Type ERROR
+            }
+        }
+
+        # Return all the collected information
+        return @{
+            UserFromAD    = $UserFromAD
+            DestinationOU = $DestinationOU
+            Mailbox       = $365Mailbox
+            MgUser        = $MgUser
+            UserPropertiesPath = $UserPropertiesPath
+            ADGroupsPath = $ADGroupsPath
+        }
 
     } catch {
-        Write-StatusMessage -Message "Error during user creation confirmation: $_" -Type ERROR
-        Exit-Script -Message "Failed to confirm user creation" -ExitCode GeneralError
+        Exit-Script -Message "Failed to validate termination prerequisites: $_" -ExitCode UserNotFound
     }
 }
 
-function New-ADUserFromTemplate {
-    [CmdletBinding(SupportsShouldProcess)]
-    param (
+function Disable-ADUser {
+    [CmdletBinding()]
+    param(
         [Parameter(Mandatory)]
-        [hashtable]$NewUser,
-
-        [Parameter(Mandatory)]
-        [Microsoft.ActiveDirectory.Management.ADUser]$SourceUser,
-
-        [Parameter(Mandatory)]
-        [string]$Phone,
-
-        [Parameter(Mandatory)]
-        [System.Security.SecureString]$Password,
+        [Microsoft.ActiveDirectory.Management.ADUser]
+        $UserFromAD,
 
         [Parameter(Mandatory)]
         [string]$DestinationOU
     )
 
     try {
-        Write-StatusMessage -Message "Preparing to create new AD user: $($NewUser.DisplayName)" -Type INFO
+        Write-StatusMessage -Message "Performing Active Directory Steps" -Type INFO
 
-        $newUserParams = @{
-            Name              = "$($NewUser.FirstName) $($NewUser.LastName)"
-            SamAccountName    = $NewUser.SamAccountName
-            UserPrincipalName = $NewUser.Email
-            EmailAddress      = $NewUser.Email
-            DisplayName       = $NewUser.DisplayName
-            GivenName         = $NewUser.FirstName
-            Surname           = $NewUser.LastName
-            MobilePhone       = $Phone
-            OtherAttributes   = @{
-                'proxyAddresses' = "SMTP:$($NewUser.Email)"
+        # Modify the AD user account
+        try {
+            $SetADUserParams = @{
+                Identity    = $UserFromAD.SamAccountName
+                Description = "Disabled on $(Get-Date -Format 'FileDate')"
+                Enabled     = $False
+                Replace     = @{msExchHideFromAddressLists = $true }
+                Clear       = @(
+                    'company',
+                    'Title',
+                    'Manager',
+                    'physicalDeliveryOfficeName',
+                    'Department',
+                    'facsimileTelephoneNumber',
+                    'l', # l is for Location because Microsoft AD attributes are stupid
+                    'c', # c is for Country because Microsoft AD attributes are stupid
+                    'wWWHomePage'
+                    'mobile',
+                    'telephoneNumber',
+                    'extensionAttribute1',
+                    'extensionAttribute2',
+                    'extensionAttribute3',
+                    'extensionAttribute4',
+                    'extensionAttribute5',
+                    'extensionAttribute6',
+                    'extensionAttribute7',
+                    'extensionAttribute8',
+                    'extensionAttribute9',
+                    'extensionAttribute10',
+                    'extensionAttribute11',
+                    'extensionAttribute12',
+                    'extensionAttribute13',
+                    'extensionAttribute14',
+                    'extensionAttribute15'
+                )
             }
-            AccountPassword   = $Password
-            Path              = $DestinationOU
-            Instance          = $SourceUser
-            Enabled           = $true
-            ErrorAction       = 'Stop'
+
+            Set-ADUser @SetADUserParams -ErrorAction Stop
+            Write-StatusMessage -Message "User account disabled and attributes cleared" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to disable user account" -Type ERROR
+            throw
         }
 
-        if ($PSCmdlet.ShouldProcess($UserProperties.DisplayName, "Create new AD user")) {
+        # Remove user from all AD groups
+        foreach ($group in $UserFromAD.MemberOf) {
+            Write-StatusMessage -Message "Removing user from group: $($group)" -Type INFO
             try {
-                Write-StatusMessage -Message "Creating new AD user..." -Type INFO
-                New-ADUser @newUserParams
-                Write-StatusMessage -Message "AD user created successfully" -Type OK
+                Remove-ADGroupMember -Identity $group -Members $UserFromAD.SamAccountName -Confirm:$false -ErrorAction Stop
+                Write-StatusMessage -Message "Successfully removed from group: $($group)" -Type OK
             } catch {
-                Write-StatusMessage -Message "Failed to create AD user: $_" -Type ERROR
-                Exit-Script -Message "AD user creation failed" -ExitCode GeneralError
+                Write-StatusMessage -Message "Failed to remove from AD group: $group" -Type ERROR
             }
+        }
+        Write-StatusMessage -Message "User removed from all AD groups" -Type OK
+
+        # Move user to disabled OU
+        Write-StatusMessage -Message "Moving user to Disabled OU" -Type INFO
+        try {
+            $UserFromAD | Move-ADObject -TargetPath $DestinationOU -ErrorAction Stop
+            Write-StatusMessage -Message "Successfully moved user to disabled OU" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to move user to disabled OU" -Type ERROR
+            throw
         }
     } catch {
-        Write-StatusMessage -Message "Critical error in New-ADUserFromTemplate: $_" -Type ERROR
-        Exit-Script -Message "Critical error during AD user creation" -ExitCode GeneralError
+        Write-StatusMessage -Message "Critical error in Disable-ADUser" -Type ERROR
+        throw
     }
 }
 
-function Copy-UserADGroups {
+function Remove-UserSessions {
     [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$SourceUser,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$TargetUser
-    )
-
-    try {
-        Write-StatusMessage -Message "Copying AD group memberships from $SourceUser to $TargetUser" -Type INFO
-
-        # Get source user and their groups
-        try {
-            $sourceGroups = Get-ADUser -Filter "DisplayName -eq '$SourceUser'" -Properties MemberOf -ErrorAction Stop
-            if (-not $sourceGroups) {
-                Write-StatusMessage -Message "Source user not found: $SourceUser" -Type ERROR
-                return
-            }
-            Write-StatusMessage -Message "Found source user with $($sourceGroups.MemberOf.Count) groups" -Type INFO
-        } catch {
-            Write-StatusMessage -Message "Failed to get source user groups: $_" -Type ERROR
-            return
-        }
-
-        # Get target user
-        try {
-            $getTargetUser = Get-ADUser -Filter "DisplayName -eq '$TargetUser'" -Properties MemberOf -ErrorAction Stop
-            if (-not $getTargetUser) {
-                Write-StatusMessage -Message "Target user not found: $TargetUser" -Type ERROR
-                return
-            }
-            Write-StatusMessage -Message "Found target user" -Type INFO
-        } catch {
-            Write-StatusMessage -Message "Failed to get target user: $_" -Type ERROR
-            return
-        }
-
-        # Calculate groups to add (groups source has that target doesn't)
-        $groupsToAdd = $sourceGroups.MemberOf | Where-Object { $getTargetUser.MemberOf -notcontains $_ }
-
-        if (-not $groupsToAdd) {
-            Write-StatusMessage -Message "No new groups to add - target user already has all source groups" -Type OK
-            return
-        }
-
-        Write-StatusMessage -Message "Adding $($groupsToAdd.Count) groups to  $TargetUser" -Type INFO
-
-        # Add groups with individual error handling
-        $successCount = 0
-        foreach ($group in $groupsToAdd) {
-            try {
-                Add-ADGroupMember -Identity $group -Members $getTargetUser -ErrorAction Stop
-                Write-StatusMessage -Message "Added to group: $((Get-ADGroup $group).Name)" -Type OK
-                $successCount++
-            } catch {
-                Write-StatusMessage -Message "Failed to add to group $((Get-ADGroup $group).Name): $_" -Type WARN
-            }
-        }
-
-        # Final status check
-        if ($successCount -eq $groupsToAdd.Count) {
-            Write-StatusMessage -Message "Successfully added all $successCount groups" -Type OK
-        } else {
-            Write-StatusMessage -Message "Added $successCount of $($groupsToAdd.Count) groups - some assignments failed" -Type WARN
-        }
-
-    } catch {
-        Write-StatusMessage -Message "Error in Copy-UserADGroups: $_" -Type ERROR
-    }
-}
-
-function Wait-ForADUserSync {
-    [CmdletBinding()]
-    [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory)]
-        [string]$UserEmail,
-
-        [Parameter()]
-        [int]$MaxRetries = 5,
-
-        [Parameter()]
-        [int]$RetryIntervalSeconds = 30,
-
-        [Parameter()]
-        [int]$InitialWaitSeconds = 30,
-
-        [Parameter()]
-        [int]$SyncTimeout = 300  # 5 minutes default
+        [string]$UserPrincipalName
     )
 
-    Write-StatusMessage -Message "Starting AD sync process for $UserEmail" -Type INFO
-    $syncStartTime = Get-Date
-
     try {
-        # Initial wait before starting sync
-        Write-StatusMessage -Message "Waiting $InitialWaitSeconds seconds before starting sync..." -Type INFO
-        Start-Sleep -Seconds $InitialWaitSeconds
-
-        # Start AD sync with retry logic
-        $syncStarted = $false
-        for ($i = 1; $i -le 3; $i++) {
-            try {
-                Write-StatusMessage -Message "Attempting to start AD sync (Attempt $i of 3)" -Type INFO
-                Import-Module -Name ADSync -UseWindowsPowerShell -WarningAction:SilentlyContinue -ErrorAction Stop
-                $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
-                $syncStarted = $true
-                Write-StatusMessage -Message "AD sync started successfully" -Type OK
-                break
-            } catch {
-                Write-StatusMessage -Message "Sync attempt $i failed: $_" -Type WARN
-                if ($i -eq 3) {
-                    Write-StatusMessage -Message "Failed to start AD sync after 3 attempts" -Type ERROR
-                    Exit-Script -Message "AD sync failed to start" -ExitCode GeneralError
-                }
-                Start-Sleep -Seconds 5
-            }
+        # Revoke all sessions
+        Write-StatusMessage -Message "Revoking all user signed in sessions" -Type INFO
+        try {
+            Revoke-MgUserSignInSession -UserId $UserPrincipalName -ErrorAction Stop
+            Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to revoke user sessions" -Type ERROR
         }
 
-        # Monitor sync progress
-        $retryCount = 0
-        do {
-            try {
-                # Check timeout
-                $elapsed = ((Get-Date) - $syncStartTime).TotalSeconds
-                if ($elapsed -ge $SyncTimeout) {
-                    Write-StatusMessage -Message "Sync timeout after $($elapsed.ToString('F0')) seconds" -Type ERROR
-                    Exit-Script -Message "AD sync timeout" -ExitCode GeneralError
-                }
+        # Remove authentication methods
+        Write-StatusMessage -Message "Removing user authentication methods" -Type INFO
+        try {
+            $authMethods = Get-MgUserAuthenticationMethod -UserId $UserPrincipalName -ErrorAction Stop
 
-                # Check sync status
-                $syncStatus = Get-ADSyncScheduler
-                if ($syncStatus.SyncCycleInProgress) {
-                    Write-StatusMessage -Message "Sync in progress... ($($elapsed.ToString('F0')) seconds elapsed)" -Type INFO
-                    Start-Sleep -Seconds 10
-                    continue
-                }
+            foreach ($authMethod in $authMethods) {
+                $authType = $authMethod.AdditionalProperties.'@odata.type'
 
-                # Try to get user
-                Write-StatusMessage -Message "Checking for user in Azure AD..." -Type INFO
-                $user = Get-MgUser -UserId $UserEmail -Property Id, Mail, DisplayName, Department | Select-Object Id, Mail, DisplayName, Department -ErrorAction Stop
-                if ($user) {
-                    Write-StatusMessage -Message "User $UserEmail successfully synced to Azure AD" -Type OK
-                    return $user
+                try {
+                    switch ($authType) {
+                        "#microsoft.graph.passwordAuthenticationMethod" {
+                            continue
+                        }
+                        "#microsoft.graph.phoneAuthenticationMethod" {
+                            Remove-MgUserAuthenticationPhoneMethod -UserId $UserPrincipalName -PhoneAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Phone Authentication Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod" {
+                            Remove-MgUserAuthenticationWindowsHelloForBusinessMethod -UserId $UserPrincipalName -WindowsHelloForBusinessAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Windows Hello for Business Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod" {
+                            Remove-MgUserAuthenticationMicrosoftAuthenticatorMethod -UserId $UserPrincipalName -MicrosoftAuthenticatorAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Microsoft Authenticator Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.fido2AuthenticationMethod" {
+                            Remove-MgUserAuthenticationFido2Method -UserId $UserPrincipalName -Fido2AuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed FIDO2 Authenticator Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.softwareOathAuthenticationMethod" {
+                            Remove-MgUserAuthenticationSoftwareOathMethod -UserId $UserPrincipalName -SoftwareOathAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Software Oath Method: $($authMethod.Id)" -Type OK
+                        }
+                        "#microsoft.graph.temporaryAccessPassAuthenticationMethod" {
+                            Remove-MgUserAuthenticationTemporaryAccessPassMethod -UserId $UserPrincipalName -TemporaryAccessPassAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Write-StatusMessage -Message "Removed Temporary Access Pass Method: $($authMethod.Id)" -Type OK
+                        }
+                        default {
+                            Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type ERROR
+                        }
+                    }
+                } catch {
+                    Write-StatusMessage -Message "Failed to remove authentication method $($authMethod.Id) of type $authType" -Type ERROR
                 }
-
-            } catch {
-                $retryCount++
-                if ($retryCount -ge $MaxRetries) {
-                    Write-StatusMessage -Message "Max retry attempts ($MaxRetries) reached" -Type ERROR
-                    Exit-Script -Message "Failed to verify user sync after maximum retries" -ExitCode UserNotFound
-                }
-                Write-StatusMessage -Message "Retry $($retryCount) of $($MaxRetries): User not found in Azure AD yet" -Type WARN
-                Start-Sleep -Seconds $RetryIntervalSeconds
             }
-        } while ($true)
+        } catch {
+            Write-StatusMessage -Message "Failed to get user authentication methods" -Type ERROR
+        }
+
+        # Remove Mobile Devices
+        Write-StatusMessage -Message "Removing all mobile devices" -Type INFO
+        try {
+            $mobileDevices = Get-MobileDevice -Mailbox $UserPrincipalName -ErrorAction Stop
+            foreach ($mobileDevice in $mobileDevices) {
+                Write-StatusMessage -Message "Removing mobile device: $($mobileDevice.Id)" -Type INFO
+                try {
+                    Remove-MobileDevice -Identity $mobileDevice.Id -Confirm:$false -ErrorAction Stop
+                    Write-StatusMessage -Message "Successfully removed mobile device: $($mobileDevice.Id)" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to remove mobile device $($mobileDevice.Id)" -Type ERROR
+                }
+            }
+        } catch {
+            Write-StatusMessage -Message "Failed to get mobile devices" -Type ERROR
+        }
+
+        # Disable Azure AD devices
+        try {
+            $termUserDevices = Get-MgUserRegisteredDevice -UserId $UserPrincipalName -ErrorAction Stop
+            foreach ($termUserDevice in $termUserDevices) {
+                Write-StatusMessage -Message "Disabling registered device: $($termUserDevice.Id)" -Type INFO
+                try {
+                    Update-MgDevice -DeviceId $termUserDevice.Id -BodyParameter @{ AccountEnabled = $false } -ErrorAction Stop
+                    Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.Id)" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to disable device $($termUserDevice.Id)" -Type ERROR
+                }
+            }
+        } catch {
+            Write-StatusMessage -Message "Failed to get registered devices" -Type ERROR
+        }
 
     } catch {
-        Write-StatusMessage -Message "Critical error during AD sync process: $_" -Type ERROR
-        Exit-Script -Message "AD sync process failed" -ExitCode GeneralError
+        Write-StatusMessage -Message "Critical error in Remove-UserSessions" -Type ERROR
+        throw
     }
 }
 
-function Set-UserLicenses {
+function Set-TerminatedMailbox {
     [CmdletBinding()]
-    param (
+    param(
         [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
-        $User,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [object[]]$License,
+        $Mailbox,
 
         [Parameter()]
-        [switch]$Required
+        [string]$ForwardingAddress,
+
+        [Parameter()]
+        [string]$GrantAccessTo
     )
 
     try {
-        $licenseType = if ($Required) { "required" } else { "ancillary" }
-        Write-StatusMessage -Message "Starting $licenseType license assignment for user: $($User.displayName)" -Type INFO
+        # Disable mailbox forwarding
+        Write-StatusMessage -Message "Disabling existing mailbox forwarding" -Type INFO
+        try {
+            Set-Mailbox -Identity $Mailbox.Identity -ForwardingAddress $null -ForwardingSmtpAddress $null -ErrorAction Stop
+            Write-StatusMessage -Message "Successfully disabled existing forwarding" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to disable existing mailbox forwarding" -Type ERROR
+        }
 
-        foreach ($lic in $License) {
+        # Change mailbox to shared
+        Write-StatusMessage -Message "Converting to shared mailbox" -Type INFO
+        try {
+            Set-Mailbox -Identity $Mailbox.Identity -Type Shared -ErrorAction Stop
+            Write-StatusMessage -Message "Successfully converted to shared mailbox" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to convert to shared mailbox" -Type ERROR
+        }
+
+        # Set forwarding if specified
+        if ($ForwardingAddress) {
             try {
-                Write-StatusMessage -Message "Assigning license: $($lic.DisplayName)" -Type INFO
+                $forwardUser = Get-Mailbox $ForwardingAddress -ErrorAction Stop
+                Write-StatusMessage -Message "Setting up forwarding to $($forwardUser.PrimarySmtpAddress)" -Type INFO
 
-                $null = Set-MgUserLicense -UserId $User.Id `
-                    -AddLicenses @{SkuId = $($lic.SkuId) } `
-                    -RemoveLicenses @() `
-                    -ErrorAction Stop
-
-                Write-StatusMessage -Message "Successfully assigned license: $($lic.DisplayName)" -Type OK
-            } catch {
-                if ($Required) {
-                    Write-StatusMessage -Message "Failed to assign license $($lic.DisplayName): $_" -Type ERROR
-                    Exit-Script -Message "Required license assignment failed" -ExitCode GeneralError
-                } else {
-                    Write-StatusMessage -Message "Failed to assign license $($lic.DisplayName): $_" -Type WARN
+                $mailboxParams = @{
+                    Identity                   = $Mailbox.Identity
+                    ForwardingAddress          = $ForwardingAddress
+                    DeliverToMailboxAndForward = $False
+                    ErrorAction                = 'Stop'
                 }
+
+                Set-Mailbox @mailboxParams
+                Write-StatusMessage -Message "Successfully set up mail forwarding" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to set up mail forwarding" -Type ERROR
+            }
+        }
+
+        # Grant access if specified
+        if ($GrantAccessTo) {
+            try {
+                $accessUser = Get-Mailbox $GrantAccessTo -ErrorAction Stop
+                Write-StatusMessage -Message "Granting full access to $($accessUser.PrimarySmtpAddress)" -Type INFO
+
+                $mailboxPermissionParams = @{
+                    Identity        = $Mailbox.Identity
+                    User            = $GrantAccessTo
+                    AccessRights    = 'FullAccess'
+                    InheritanceType = 'All'
+                    AutoMapping     = $true
+                    ErrorAction     = 'Stop'
+                }
+
+                $null = Add-MailboxPermission @mailboxPermissionParams
+                Write-StatusMessage -Message "Successfully granted full access permissions" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to grant mailbox permissions" -Type ERROR
             }
         }
     } catch {
-        if ($Required) {
-            Write-StatusMessage -Message "Error in Set-UserLicenses: $_" -Type ERROR
-            Exit-Script -Message "Critical error during license assignment" -ExitCode GeneralError
-        } else {
-            Write-StatusMessage -Message "Error in Set-UserLicenses: $_" -Type WARN
-        }
+        Write-StatusMessage -Message "Critical error in Set-TerminatedMailbox" -Type ERROR
+        throw
     }
 }
 
-function Copy-UserEntraGroups {
+function Remove-UserFromEntraDirectoryRoles {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
-        $SourceUser,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
-        $TargetUser
+        [string]$UserId
     )
 
     try {
-        Write-StatusMessage -Message "Starting group membership copy from $($SourceUser.DisplayName) to $($TargetUser.DisplayName)" -Type INFO
+        Write-StatusMessage -Message "Checking for directory role memberships..." -Type INFO
 
+        try {
+            # Get all directory roles the user is a member of
+            $directoryRoles = Get-MgUserMemberOf -UserId $UserId -ErrorAction Stop |
+            Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.directoryRole' }
+
+            if (-not $directoryRoles) {
+                Write-StatusMessage -Message "User is not a member of any directory roles" -Type INFO
+                return
+            }
+
+            Write-StatusMessage -Message "Found $($directoryRoles.Count) directory role(s)" -Type INFO
+
+            foreach ($role in $directoryRoles) {
+                try {
+                    $roleId = $role.Id
+                    $roleName = $role.AdditionalProperties.displayName
+
+                    Write-StatusMessage -Message "Removing from role: $roleName" -Type INFO
+                    Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $roleId -DirectoryObjectId $UserId -ErrorAction Stop
+                    Write-StatusMessage -Message "Successfully removed from role: $roleName" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to remove from role $roleName" -Type ERROR
+                }
+            }
+        } catch {
+            Write-StatusMessage -Message "Failed to get directory roles" -Type ERROR
+            throw
+        }
+    } catch {
+        Write-StatusMessage -Message "Critical error in Remove-UserFromDirectoryRoles" -Type ERROR
+        throw
+    }
+}
+
+function Remove-UserFromEntraGroups {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$userId,
+
+        [Parameter()]
+        [string]$ExportPath
+    )
+
+    try {
         # Define filter parameters
         $filterParams = @{
             FilterScript = {
@@ -2055,213 +1620,243 @@ function Copy-UserEntraGroups {
             }
         }
 
-        # Define select parameters
+        # Define select parameters with a custom groupType classification
         $selectParams = @{
             Property = @(
                 'Id'
                 @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }
                 @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
-                @{n = 'groupType'; e = { $_.AdditionalProperties.groupTypes } }
+                @{n = 'groupType'; e = {
+                        if ($_.AdditionalProperties.securityEnabled -eq $true) {
+                            return "Security"
+                        } elseif ($_.AdditionalProperties.groupTypes -contains "Unified") {
+                            return "Unified"
+                        } else {
+                            return "Distribution"
+                        }
+                    }
+                }
                 @{n = 'securityEnabled'; e = { $_.AdditionalProperties.securityEnabled } }
             )
         }
 
+        Write-StatusMessage -Message "Finding Azure groups" -Type INFO
+
         try {
-            $groups = Get-MgUserMemberOf -UserId $SourceUser.Id -ErrorAction Stop |
+            $All365Groups = Get-MgUserMemberOf -UserId $userId -ErrorAction Stop |
             Where-Object @filterParams |
             Select-Object @selectParams
 
-            if (-not $groups) {
-                Write-StatusMessage -Message "Source user has no groups to copy" -Type INFO
-                return
+            Write-StatusMessage -Message "Found $($All365Groups.Count) groups to process" -Type INFO
+
+            # Export groups if path provided
+            if ($ExportPath) {
+                try {
+                    $All365Groups | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
+                    Write-StatusMessage -Message "Exported user groups to: $ExportPath" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to export user groups" -Type ERROR
+                }
             }
 
-            Write-StatusMessage -Message "Found $($groups.Count) groups to copy" -Type INFO
+            foreach ($365Group in $All365Groups) {
+                Write-StatusMessage -Message "Processing group: $($365Group.DisplayName)" -Type INFO
 
-            foreach ($group in $groups) {
                 try {
-                    if ($group.securityEnabled -eq 'True' -or $group.groupType -eq 'Unified') {
-                        $null = New-MgGroupMember -GroupId $group.Id -DirectoryObjectId $TargetUser.Id -ErrorAction Stop
-                        Write-StatusMessage -Message "Added to Security/Unified Group: $($group.DisplayName)" -Type OK
+                    if ($365Group.securityEnabled -eq $true -or $365Group.groupType -eq 'Unified') {
+                        Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $userId -ErrorAction Stop
+                        Write-StatusMessage -Message "Removed from Security/Unified Group: $($365Group.DisplayName)" -Type OK
                     } else {
-                        $null = Add-DistributionGroupMember -Identity $group.Id -Member $TargetUser.Id -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction Stop
-                        Write-StatusMessage -Message "Added to Distribution Group: $($group.DisplayName)" -Type OK
+                        Remove-DistributionGroupMember -Identity $365Group.Id -Member $userId -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction Stop
+                        Write-StatusMessage -Message "Removed from Distribution Group: $($365Group.DisplayName)" -Type OK
                     }
                 } catch {
-                    Write-StatusMessage -Message "Failed to add to group $($group.DisplayName): $_" -Type WARN
+                    Write-StatusMessage -Message "Failed to remove from group $($365Group.DisplayName)" -Type ERROR
                 }
             }
-
-            Write-StatusMessage -Message "Group membership copy completed" -Type OK
-
         } catch {
-            Write-StatusMessage -Message "Failed to get source user groups: $_" -Type WARN
+            Write-StatusMessage -Message "Failed to get user group memberships" -Type ERROR
+            throw
         }
-
     } catch {
-        Write-StatusMessage -Message "Error in Copy-UserEntraGroups: $_" -Type WARN
+        Write-StatusMessage -Message "Critical error in Remove-UserFromGroups" -Type ERROR
+        throw
     }
 }
 
-function Add-UserToZoom {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
-        $User
-    )
-
-    try {
-
-        $zoom_app_role_name = "Basic"
-
-        $zoom_app_name = "Zoom Workplace Phones"
-
-        # Get Zoom app and sync details
-        try {
-            $zoom_ServicePrincipal = Get-MgServicePrincipal -Filter "displayName eq '$zoom_app_name'" -ErrorAction Stop
-            if (-not $zoom_ServicePrincipal) {
-                Write-StatusMessage -Message "Zoom Service Principal not found" -Type WARN
-                return
-            }
-
-            $zoom_syncJob = Get-MgServicePrincipalSynchronizationJob -ServicePrincipalId $zoom_ServicePrincipal.Id -ErrorAction Stop
-            $zoom_syncJobRuleId = (Get-MgServicePrincipalSynchronizationJobSchema -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_syncJob.Id).SynchronizationRules.Id
-
-            Write-StatusMessage -Message "Retrieved Zoom app details successfully" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to get Zoom app details: $_" -Type WARN
-            return
-        }
-
-        # Assign user to Zoom app
-        try {
-            $params = @{
-                "PrincipalId" = $User.Id
-                "ResourceId"  = $zoom_ServicePrincipal.Id
-                "AppRoleId"   = ($zoom_ServicePrincipal.AppRoles | Where-Object { $_.DisplayName -eq $zoom_app_role_name }).Id
-            }
-
-            $null = New-MgUserAppRoleAssignment -UserId $User.Id -BodyParameter $params -ErrorAction Stop
-            Write-StatusMessage -Message "Successfully assigned Zoom role to user" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to assign Zoom role: $_" -Type WARN
-            return
-        }
-
-        # Start Zoom sync
-        try {
-
-            $params = @{
-                parameters = @(
-                    @{
-                        subjects = @(
-                            @{
-                                objectId       = "$($User.Id)"
-                                objectTypeName = "User"
-                            }
-                        )
-                        ruleId   = $zoom_syncJobRuleId
-                    }
-                )
-            }
-
-            $null = New-MgServicePrincipalSynchronizationJobOnDemand -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_syncJob.Id -BodyParameter $params
-
-            Write-StatusMessage -Message "Successfully started Zoom sync" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to start Zoom sync: $_" -Type WARN
-        }
-
-    } catch {
-        Write-StatusMessage -Message "Error in Add-UserToZoom: $_" -Type WARN
-    }
-}
-
-function Set-UserBookWithMeId {
+function Remove-UserLicenses {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
-        $User,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$SamAccountName,
+        [string]$UserId,
 
         [Parameter()]
-        [int]$MaxRetries = 6,
-
-        [Parameter()]
-        [int]$RetryIntervalSeconds = 30
+        [string]$ExportPath
     )
 
     try {
-        Write-StatusMessage -Message "Configuring BookWithMeId for $($User.displayName)" -Type INFO
+        Write-StatusMessage -Message "Starting license removal process" -Type INFO
 
-        # Get Exchange GUID with retry logic
-        $retryCount = 0
-        $mailbox = $null
-        $success = $false
+        try {
+            # Get and export license details if path provided
+            $licenseDetails = Get-MgUserLicenseDetail -UserId $UserId -ErrorAction Stop |
+            Select-Object SkuPartNumber, SkuId, Id
 
-        do {
+            if ($ExportPath) {
+                try {
+                    $licenseDetails | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
+                    Write-StatusMessage -Message "Exported user licenses to: $ExportPath" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to export user licenses" -Type ERROR
+                }
+            }
+
+            # Define primary licenses that must be removed last
+            $primaryLicenses = @(
+                "O365_BUSINESS_ESSENTIALS"
+                "SPE_E3"
+                "SPB"
+                "EXCHANGESTANDARD"
+            )
+
+            # Step 1: Remove Ancillary Licenses
+            foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -notin $primaryLicenses })) {
+                try {
+                    $null = Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+                    Write-StatusMessage -Message "Removed Ancillary License: $($license.SkuPartNumber)" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to remove Ancillary License $($license.SkuPartNumber)" -Type ERROR
+                }
+            }
+
+            # Step 2: Remove Primary Licenses
+            foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -in $primaryLicenses })) {
+                try {
+                    $null = Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+                    Write-StatusMessage -Message "Removed Primary License: $($license.SkuPartNumber)" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to remove Primary License $($license.SkuPartNumber)" -Type ERROR
+                }
+            }
+        } catch {
+            Write-StatusMessage -Message "Failed to get user licenses" -Type ERROR
+            throw
+        }
+    } catch {
+        Write-StatusMessage -Message "Critical error in Remove-UserLicenses" -Type ERROR
+        throw
+    }
+}
+
+function Remove-UserFromZoom {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$UserId
+    )
+
+    try {
+        Write-StatusMessage -Message "Checking Zoom assignments..." -Type INFO
+        try {
+            $ZoomSSO = Get-MgUserAppRoleAssignment -UserId $UserId -ErrorAction Stop |
+            Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
+
+            if ($ZoomSSO) {
+                try {
+                    Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $ZoomSSO.Id -UserId $UserId -ErrorAction Stop
+                    Write-StatusMessage -Message "Successfully removed user from Zoom Workplace Phones" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to remove Zoom assignment" -Type ERROR
+                }
+            } else {
+                Write-StatusMessage -Message "User is not assigned to Zoom Workplace Phones" -Type INFO
+            }
+        } catch {
+            Write-StatusMessage -Message "Failed to get Zoom assignments" -Type ERROR
+            throw
+        }
+    } catch {
+        Write-StatusMessage -Message "Critical error in Remove-UserFromZoom" -Type ERROR
+        throw
+    }
+}
+
+function Set-TerminatedOneDrive {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$TermUser,
+
+        [Parameter()]
+        [switch]$SetReadOnly,
+
+        [Parameter()]
+        [string]$OneDriveUser
+    )
+
+    # Skip if no actions are requested
+    if (-not $SetReadOnly -and -not $OneDriveUser) {
+        Write-StatusMessage -Message "No OneDrive actions requested. Skipping OneDrive configuration." -Type INFO
+        return
+    }
+
+    try {
+        # Ensure SharePoint connection
+        Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type INFO
+        Connect-ServiceEndpoints -SharePoint
+
+        # Get OneDrive URL
+        Write-StatusMessage -Message "Getting OneDrive URL for $TermUser" -Type INFO
+        $onedriveProps = Get-PnPUserProfileProperty -Account $TermUser -Properties PersonalUrl -ErrorAction Stop
+
+        if (-not $onedriveProps.PersonalUrl) {
+            Write-StatusMessage -Message "No OneDrive URL found for $TermUser. Skipping OneDrive configuration." -Type WARN
+            return
+        }
+
+        $UserOneDriveURL = $onedriveProps.PersonalUrl
+        Write-StatusMessage -Message "Successfully retrieved OneDrive URL" -Type OK
+
+        # Handle OneDrive access grant if specified
+        if ($OneDriveUser) {
             try {
-                $mailbox = Get-Mailbox -Identity $User.Mail -ErrorAction Stop
-                if ($mailbox) {
-                    $success = $true
-                    Write-StatusMessage -Message "Retrieved mailbox successfully" -Type OK
-                    break
-                }
+                Write-StatusMessage -Message "Granting OneDrive access to $OneDriveUser" -Type INFO
+                Set-PnPTenantSite -Url $UserOneDriveURL -Owners $OneDriveUser -ErrorAction Stop
+                Write-StatusMessage -Message "Successfully granted OneDrive access" -Type OK
+                Write-StatusMessage -Message "OneDrive URL: $UserOneDriveURL" -Type INFO
+
+                do {
+                    $response = Read-Host "Please copy the OneDrive URL above. Have you copied it? (y/n)"
+                } while ($response -notmatch '^[yY]$')
+
             } catch {
-                $retryCount++
-                if ($retryCount -ge $MaxRetries) {
-                    Write-StatusMessage -Message "Failed to get mailbox after $MaxRetries attempts" -Type WARN
-                    return
-                }
-                Write-StatusMessage -Message "Mailbox not ready, attempt $retryCount of $MaxRetries. Waiting $RetryIntervalSeconds seconds..." -Type INFO
-                Start-Sleep -Seconds $RetryIntervalSeconds
+                Write-StatusMessage -Message "Failed to grant OneDrive access: $_" -Type ERROR
             }
-        } while ($retryCount -lt $MaxRetries)
-
-        if (-not $success) {
-            Write-StatusMessage -Message "Failed to get mailbox after all retries" -Type WARN
-            return
         }
 
-        # Get Exchange GUID
-        $exchangeGuid = $mailbox.ExchangeGuid.Guid
-        if ([string]::IsNullOrEmpty($exchangeGuid)) {
-            Write-StatusMessage -Message "Exchange GUID not found for $($User.displayName)" -Type WARN
-            return
-        }
-
-        # Generate BookWithMeId
-        $formattedGuid = $exchangeGuid -replace "-"
-        $bookWithMeId = "${formattedGuid}@compassmsp.com?anonymous&ep=plink"
-
-        if ($bookWithMeId -eq '@compassmsp.com?anonymous&ep=plink') {
-            Write-StatusMessage -Message "Generated BookWithMeId is invalid (missing ExchangeGuid)" -Type WARN
-            Write-StatusMessage -Message "Please add BookWithMeId to extensionAttribute15 manually for $SamAccountName" -Type WARN
-            return
-        }
-
-        # Set AD attribute
-        try {
-            Set-ADUser -Identity $SamAccountName -Add @{extensionAttribute15 = $bookWithMeId } -ErrorAction Stop
-            Write-StatusMessage -Message "Successfully set BookWithMeId for $($User.displayName)" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to set extensionAttribute15: $_" -Type WARN
-            Write-StatusMessage -Message "Please set BookWithMeId ($bookWithMeId) manually for $SamAccountName" -Type WARN
+        # Handle read-only setting if specified
+        if ($SetReadOnly) {
+            try {
+                Write-StatusMessage -Message "Setting OneDrive to read-only" -Type INFO
+                Set-PnPTenantSite -Url $UserOneDriveURL -LockState ReadOnly -ErrorAction Stop
+                Write-StatusMessage -Message "Successfully set OneDrive to read-only" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to set OneDrive to read-only: $_" -Type ERROR
+            }
         }
 
     } catch {
-        Write-StatusMessage -Message "Error in Set-UserBookWithMeId: $_" -Type WARN
+        Write-StatusMessage -Message "Error processing OneDrive configuration: $_" -Type ERROR
+    } finally {
+        # Disconnect from SharePoint if we connected
+        if (Get-PnPConnection -ErrorAction SilentlyContinue) {
+            Write-StatusMessage -Message "Disconnecting from SharePoint Online..." -Type INFO
+            Connect-ServiceEndpoints -SharePoint -Disconnect
+        }
     }
 }
 
-function Start-NewUserFinalize {
+function Start-ADSyncAndFinalize {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -2270,72 +1865,94 @@ function Start-NewUserFinalize {
         $User,
 
         [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Password,
+        [string]$DestinationOU,
 
-        [Parameter(Mandatory)]
-        [ValidateRange(0, [int]::MaxValue)]
-        [int]$TemplateGroupCount,
+        [Parameter()]
+        [string]$GrantUserFullControl,
 
-        [Parameter(Mandatory)]
-        [ValidateRange(0, [int]::MaxValue)]
-        [int]$AssignedGroupCount
+        [Parameter()]
+        [string]$SetUserMailFWD,
+
+        [Parameter()]
+        [string]$GrantUserOneDriveAccess,
+
+        [Parameter()]
+        [string]$ExportPath
     )
 
-    Write-StatusMessage -Message "Preparing final summary" -Type INFO
-
-    # Validate group counts
-    if ($TemplateGroupCount -ne $AssignedGroupCount) {
-        Write-StatusMessage -Message "Group count mismatch: Template=$TemplateGroupCount, Assigned=$AssignedGroupCount" -Type WARN
+    # Start AD Sync
+    Write-StatusMessage -Message "Starting AD sync cycle" -Type INFO
+    try {
+        Import-Module -Name ADSync -UseWindowsPowerShell -WarningAction:SilentlyContinue -ErrorAction Stop
+        $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
+        Write-StatusMessage -Message "AD sync cycle initiated successfully" -Type OK
+    } catch {
+        try {
+            # Fallback to direct PowerShell execution if module import fails
+            $null = powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
+            Write-StatusMessage -Message "AD sync cycle initiated through PowerShell" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to start AD sync cycle" -Type ERROR
+            throw
+        }
     }
 
     # Build summary parts
     $summaryParts = @(
         "Summary of Actions:",
         "----------------------------------------",
-        "$($User.displayName) should now be created unless any errors occurred during the process.",
+        "$($User.displayName) should now be offboarded unless any errors occurred during the process.",
         "If any info below is blank then something went wrong in the script. ",
-        "User Creation Status:",
+        "User Termination Status:",
         "- EntraID: $($User.Id)",
         "- Display Name: $($User.displayName)",
         "- Email Address: $($User.mail)",
-        "- Password: $Password",
-        "- Template User   = $TemplateUser",
-        "- Template Groups: $TemplateGroupCount",
-        "- Assigned Groups: $AssignedGroupCount",
-        "----------------------------------------",
-        "",
-        "IMPORTANT: Please record this password now - it will be needed for the user's first login."
+        "- Moved to OU: $DestinationOU"
     )
 
-    # Add warning for group mismatch
-    if ($TemplateGroupCount -ne $AssignedGroupCount) {
-        $summaryParts += @(
-            "",
-            "WARNING: Group count mismatch detected",
-            "- Template Groups: $TemplateGroupCount",
-            "- Assigned Groups: $AssignedGroupCount",
-            "Please verify group assignments manually"
-        )
+    if ($GrantUserFullControl) {
+        $summaryParts += "- Mailbox access granted to: $GrantUserFullControl"
+    }
+    if ($SetUserMailFWD) {
+        $summaryParts += "- Mail forwarded to: $SetUserMailFWD"
+    }
+    if ($GrantUserOneDriveAccess) {
+        $summaryParts += "- OneDrive access granted to: $GrantUserOneDriveAccess"
+    }
+    if ($ExportPath) {
+        $summaryParts += "- Attributes, Groups and licenses exported to: $ExportPath"
     }
 
-    # Display summary
-    try {
-        $summaryMessage = $summaryParts -join "`n"
-        Write-StatusMessage -Message $summaryMessage -Type SUMMARY
-    } catch {
-        Write-StatusMessage -Message "Failed to display summary message: $_" -Type WARN
-    }
+    $summaryParts += "----------------------------------------"
+    $summaryMessage = $summaryParts -join "`n"
 
+    Write-StatusMessage -Message $summaryMessage -Type SUMMARY
+
+    # Show duration
+    $endTime = Get-Date
+    $duration = $endTime - $startTime
+    Write-StatusMessage "Script completed in $($duration.TotalMinutes.ToString('F2')) minutes" -Type INFO
+
+    # Give user time to read/copy the summary
+    Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
+    Read-Host | Out-Null
+
+    # Clear the progress bar
+    Write-Progress -Activity "User Termination" -Completed
+
+    # Clean up and exit
+    Stop-Job $loadingJob | Out-Null
+    Remove-Job $loadingJob | Out-Null
+
+
+    Exit-Script -Message "$User has been successfully disabled." -ExitCode Success
 }
 
-
-#EndRegion Functions
-
 Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
-Write-Host "`n  Ready to process user request..." -ForegroundColor Cyan
-Write-Host "`n  Beginning New User Request..." -ForegroundColor Cyan
+Write-Host "`n  Ready to create new user account..." -ForegroundColor Cyan
+
 #Region Main Execution
+
 
 # Step 1: Initialization
 Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].Description
@@ -2355,141 +1972,143 @@ $GraphCertSubject = $Config.Graph.CertificateSubject
 $PnPAppId = $config.PnPSharePoint.AppId
 $PnPUrl = $config.PnPSharePoint.Url
 $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
-$GithubAPIToken = $config.GitHub.Token
+$localExportPath = $config.Paths.TermExportPath
 
 Connect-ServiceEndpoints -ExchangeOnline -Graph
 
-# Step 2: User Input
-Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
-$result = Get-NewUserRequestInput
+# Call the custom input window function
 
-# Set variables after input
+$result = Get-UserTerminationInput
+if (-not $result) {
+    Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
+}
+
 if ($result.TestModeEnabled -eq 'True') { $script:TestMode = $true }
 
-$NewUser = $result.InputNewUser.Trim()
-$UserToCopy = $result.InputUserToCopy.Trim()
-$RequiredLicense = $result.InputRequiredLicense
-$Phone = if ($result.InputNewMobile) { $result.InputNewMobile.Trim() } else { $null }
-$AncillaryLicenses = $result.InputAncillaryLicenses
+# Set variables with validation
+$User = $result.InputUser.Trim()
 
-# Step 3: Validation and Preparation (AD)
-Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
-$UserToCopyAD = Get-TemplateUser -UserToCopy $UserToCopy
-$destinationOU = $UserToCopyAD.DistinguishedName.split(",", 2)[1]                 # Validates template user
-$newUserProperties = New-UserProperties -NewUser $NewUser -SourceUserUPN $UserToCopyAD.UserPrincipalName
+# Optional fields - use $null for unset values
+$GrantUserFullControl = if ($result.InputUserFullControl) { $result.InputUserFullControl.Trim() } else { $null }
+$SetUserMailFWD = if ($result.InputUserFWD) { $result.InputUserFWD.Trim() } else { $null }
+$GrantUserOneDriveAccess = if ($result.InputUserOneDriveAccess) { $result.InputUserOneDriveAccess.Trim() } else { $null }
+$SetOneDriveReadOnly = $result.SetOneDriveReadOnly
 
-# Step 4: AD User Creation
-Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
-$passwordResult = New-ReadablePassword -GitHubToken $GithubAPIToken
+Write-StatusMessage -Message "Termination input collected successfully" -Type OK
 
-# Show summary and get confirmation before creating
-Confirm-UserCreation -NewUserProperties $newUserProperties `
-    -DestinationOU $destinationOU `
-    -TemplateUser $UserToCopy `
-    -Password $passwordResult.PlainPassword
-
-# Only proceeds if user confirms
-New-ADUserFromTemplate -NewUser $newUserProperties `
-    -SourceUser $UserToCopyAD `
-    -Phone $Phone `
-    -Password $passwordResult.SecurePassword `
-    -DestinationOU $destinationOU
-
-# Step 5: AD Group Copy
-Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
-Copy-UserADGroups -SourceUser $UserToCopy -TargetUser $NewUser
-
-# Step 6: Azure Sync
-Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
-$MgUser = Wait-ForADUserSync -UserEmail $newUserProperties.Email
-
-if ($MgUser) {
-
-    # Step 7: License Setup
-    Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
-    Write-StatusMessage -Message "Setting Usage Location for new user" -Type INFO
-    Update-MgUser -UserId $MgUser.Id -UsageLocation US
-    Write-StatusMessage -Message "Usage Location has been set for new user" -Type OK
-
-    # Required license - will exit on failure
-    Set-UserLicenses -User $MgUser -License $RequiredLicense -Required
-
-    Start-Sleep -Seconds 60  # Wait for license to apply
-
-    # Ancillary licenses - will continue on failure
-    if ($null -ne $AncillaryLicenses) {
-        Set-UserLicenses -User $MgUser -License $AncillaryLicenses
-    }
-
-    # Step 8: Entra Group Copy
-    Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
-    $MgUserCopyAD = Get-MgUser -UserId $UserToCopyAD.UserPrincipalName
-    Copy-UserEntraGroups -SourceUser $MgUserCopyAD -TargetUser $MgUser
-    $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $MgUserCopyAD.Id).Count
-    $NewUserGroupCount = (Get-MgUserMemberOf -UserId $MgUser.Id).Count
-
-    # Step 9: Email to SOC for KnowBe4
-    Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
-    $emailSubject = "KB4 – New User"
-    $emailContent = "The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)"
-    $MsgFrom = $config.Email.NotificationFrom
-    $ToAddress = $config.Email.NotificationTo
-    Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
-
-    # Step 10: OneDrive Provisioning
-    Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
-    Write-StatusMessage -Message "Provisioning OneDrive for new user." -Type INFO
-
-    <# This is not working as expected.
+# Validate OneDrive access user if specified
+$oneDriveUser = $null
+if ($GrantUserOneDriveAccess) {
+    # Will be $null if not provided
     try {
-        Get-MgUserDefaultDrive -UserId $MgUser.Id -ErrorAction Stop
-        Write-StatusMessage -Message "OneDrive has been provisioned for new user." -Type OK
+        Write-StatusMessage -Message "Validating OneDrive access user..." -Type 'INFO'
+        $oneDriveUser = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop
+        Write-StatusMessage -Message "OneDrive access user validated" -Type 'OK'
     } catch {
-        Write-StatusMessage -Message "Failed to provision OneDrive: $_" -Type ERROR
+        Write-StatusMessage -Message "Invalid OneDrive access user specified: $_" -Type 'ERROR'
+        Write-StatusMessage -Message "OneDrive access user validation failed. Skipping OneDrive access grant." -Type 'ERROR'
+        $GrantUserOneDriveAccess = $null  # Reset to null if validation fails
     }
-    #>
-
-    # Step 11: BookWithMeId Setup
-    Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
-    Set-UserBookWithMeId -User $MgUser -SamAccountName $newUserProperties.SamAccountName
-
-    # Step 12: Processing - Placeholder
-    Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
-    #Add-UserToZoom -User $MgUser
-
-    # Step 13: Cleanup and Summary
-    Write-ProgressStep -StepName $progressSteps[13].Name -Status $progressSteps[13].Description
-    Write-StatusMessage -Message "Disconnecting from Exchange Online and Graph." -Type INFO
-
-    Connect-ServiceEndpoints -Disconnect
-
-    Write-StatusMessage -Message "Building final summary..." -Type INFO
-
-    Start-NewUserFinalize -User $MgUser `
-        -Password $passwordResult.PlainPassword `
-        -TemplateGroupCount $CopyUserGroupCount `
-        -AssignedGroupCount $NewUserGroupCount
-
-
-    # Show duration
-    $endTime = Get-Date
-    $duration = $endTime - $startTime
-    Write-StatusMessage "Script completed in $($duration.TotalMinutes.ToString('F2')) minutes" -Type INFO
-
-    # Give user time to read/copy the summary
-    Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
-    Read-Host | Out-Null
-
-    # Clear the progress bar
-    Write-Progress -Activity "New User Creation" -Completed
-
-    # Clean up and exit
-    Stop-Job $loadingJob | Out-Null
-    Remove-Job $loadingJob | Out-Null
-
-    Exit-Script -Message "$($MgUser.displayName) has been successfully created." -ExitCode Success
-
-} else {
-    Write-StatusMessage -Message "Failed to get user from Azure AD after sync" -Type 'ERROR'
-    Exit-Script -Message "Azure AD sync completed but user was not found" -ExitCode GeneralError
 }
+
+# Step 2: User Input
+Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
+# Should this be a function in the New User Script?
+$userPropertiesPath = Join-Path $localExportPath "$($User)_Properties.csv"
+$adGroupsPath = Join-Path $localExportPath "$($User)_ADGroups.csv"
+$UserInfo = Get-TerminationPrerequisites `
+    -User $User `
+    -UserPropertiesPath $userPropertiesPath `
+    -ADGroupsPath $adGroupsPath
+
+# Extract variables for use in the rest of the script
+$UserFromAD = $userInfo.UserFromAD
+$DestinationOU = $userInfo.DestinationOU
+$365Mailbox = $userInfo.Mailbox
+$MgUser = $userInfo.MgUser
+
+# Step 3: AD Tasks
+Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
+Disable-ADUser -UserFromAD $UserFromAD -DestinationOU $DestinationOU
+
+# Step 4: Azure/Entra Tasks
+Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
+Remove-UserSessions -UserPrincipalName $UserFromAD.UserPrincipalName
+
+$mailboxParams = @{
+    Mailbox = $365Mailbox
+}
+
+# Only add these parameters if they exist and have values
+if ($SetUserMailFWD) {
+    $mailboxParams['ForwardingAddress'] = $SetUserMailFWD
+
+}
+
+if ($GrantUserFullControl) {
+    $mailboxParams['GrantAccessTo'] = $GrantUserFullControl
+}
+
+# Step 5: Convert to SharedMailbox, Set forwarding/grant access
+Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
+Set-TerminatedMailbox @mailboxParams
+
+# Step 6: Remove Directory Roles
+Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
+Remove-UserFromEntraDirectoryRoles -UserId $MgUser.Id
+
+# Step 7: Remove Groups
+Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
+$groupExportPath = Join-Path $localExportPath "$($User)_Groups_Id.csv"
+Remove-UserFromEntraGroups -UserId $MgUser.Id -ExportPath $groupExportPath
+
+# Step 8: Remove Licenses
+Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
+$licensePath = Join-Path $localExportPath "$($User)_License_Id.csv"
+Remove-UserLicenses -UserId $UserFromAD.UserPrincipalName -ExportPath $licensePath
+
+# Step 9: Remove from Zoom
+Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
+Remove-UserFromZoom -UserId $MgUser.Id
+
+#Step 10: Send Email Notification - SecurePath
+Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
+$emailSubject = "KB4 – Remove User"
+$emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)"
+$MsgFrom = $config.Email.NotificationFrom
+$ToAddress = $config.Email.NotificationTo
+Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+
+# Step 11: Disconnect from Exchange Online and Graph
+Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
+Connect-ServiceEndpoints -Disconnect -ExchangeOnline -Graph
+
+# Step 12: Configure OneDrive
+Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
+
+# Only create and run OneDrive params if needed
+if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
+    $oneDriveParams = @{
+        TermUser = $UserFromAD.UserPrincipalName
+    }
+
+    if ($SetOneDriveReadOnly) {
+        $oneDriveParams['SetReadOnly'] = $true
+    }
+
+    if ($GrantUserOneDriveAccess) {
+        $oneDriveParams['OneDriveUser'] = $oneDriveUser
+    }
+
+    Set-TerminatedOneDrive @oneDriveParams
+}
+
+# Step 13: Final Sync and Summary
+Write-ProgressStep -StepName $progressSteps[13].Name -Status $progressSteps[13].Description
+
+Start-ADSyncAndFinalize -User $MgUser `
+    -DestinationOU $DestinationOU `
+    -GrantUserFullControl $GrantUserFullControl `
+    -SetUserMailFWD $SetUserMailFWD `
+    -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
+    -ExportPath $localExportPath
