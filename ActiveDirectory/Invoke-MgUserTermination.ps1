@@ -1550,13 +1550,21 @@ function Remove-UserFromEntraGroups {
             }
         }
 
-        # Define select parameters
+        # Define select parameters with a custom groupType classification
         $selectParams = @{
             Property = @(
                 'Id'
                 @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }
                 @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
-                @{n = 'groupType'; e = { $_.AdditionalProperties.groupTypes } }
+                @{n = 'groupType'; e = {
+                    if ($_.AdditionalProperties.securityEnabled -eq $true) {
+                        return "Security"
+                    } elseif ($_.AdditionalProperties.groupTypes -contains "Unified") {
+                        return "Unified"
+                    } else {
+                        return "Distribution"
+                    }
+                }}
                 @{n = 'securityEnabled'; e = { $_.AdditionalProperties.securityEnabled } }
             )
         }
@@ -1584,7 +1592,7 @@ function Remove-UserFromEntraGroups {
                 Write-StatusMessage -Message "Processing group: $($365Group.DisplayName)" -Type INFO
 
                 try {
-                    if ($365Group.securityEnabled -eq 'True' -or $365Group.groupType -eq 'Unified') {
+                    if ($365Group.securityEnabled -eq $true -or $365Group.groupType -eq 'Unified') {
                         Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $userId -ErrorAction Stop
                         Write-StatusMessage -Message "Removed from Security/Unified Group: $($365Group.DisplayName)" -Type OK
                     } else {
