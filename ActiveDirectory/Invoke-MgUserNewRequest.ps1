@@ -28,12 +28,15 @@
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2025-01-24
+    Last Modified: 2025-02-01
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
+    3.2.0        2025-02-01  Zoom Phone Onboarding:
+                          - Added provisioning steps for Zoom Phone and Contact Center
+
     3.1.0        2025-01-25  Password System Update:
                           - Replaced New-SecureRandomPassword with New-ReadablePassword
                           - Added human-readable password generation using word list
@@ -1963,7 +1966,7 @@ function Wait-ForADUserSync {
 
                 # Try to get user
                 Write-StatusMessage -Message "Checking for user in Azure AD..." -Type INFO
-                $user = Get-MgUser -UserId $UserEmail -Property Id, Mail, DisplayName, Department | Select-Object Id, Mail, DisplayName, Department -ErrorAction Stop
+                $user = Get-MgUser -UserId $UserEmail -Property Id, Mail, DisplayName, Department, officeLocation | Select-Object Id, Mail, DisplayName, Department, officeLocation -ErrorAction Stop
                 if ($user) {
                     Write-StatusMessage -Message "User $UserEmail successfully synced to Azure AD" -Type OK
                     return $user
@@ -2144,11 +2147,11 @@ function Add-UserToZoom {
                 Method      = "POST"
                 Uri         = "https://zoom.us/oauth/token"
                 ContentType = "application/x-www-form-urlencoded"
-                Body       = @{
+                Body        = @{
                     grant_type = 'account_credentials'
                     account_id = $AccountId
                 }
-                Headers    = @{
+                Headers     = @{
                     Host          = 'zoom.us'
                     Authorization = "Basic $base64"
                 }
@@ -2157,8 +2160,7 @@ function Add-UserToZoom {
             $tokenResponse = Invoke-WebRequest @tokenParams
             $BearerToken = ($tokenResponse.Content | ConvertFrom-Json).access_token
             Write-StatusMessage -Message "Successfully obtained Zoom API token" -Type OK
-        }
-        catch {
+        } catch {
             Write-StatusMessage -Message "Failed to get Zoom API token: $_" -Type ERROR
             return
         }
@@ -2182,8 +2184,7 @@ function Add-UserToZoom {
                         type         = 1
                     }
                 }
-            }
-            else {
+            } else {
                 $body = @{
                     action    = "create"
                     user_info = @{
@@ -2200,11 +2201,140 @@ function Add-UserToZoom {
             }
 
             $response = Invoke-WebRequest -Uri 'https://api.zoom.us/v2/users' -Method POST -Headers $headers -Body ($body | ConvertTo-Json -Depth 3)
-            Write-StatusMessage -Message "Successfully created Zoom user via API" -Type OK
-        }
-        catch {
+
+            if ($response.StatusCode -eq 201) {
+                Write-StatusMessage -Message "Successfully created Zoom user via API" -Type OK
+            } else {
+                Write-StatusMessage -Message "Failed to create Zoom user. Status code: $($response.StatusCode)" -Type ERROR
+                return
+            }
+        } catch {
             Write-StatusMessage -Message "Failed to create Zoom user via API: $_" -Type ERROR
             return
+        }
+
+        # After creating the user, assign calling plan if not Reactive department
+        if ($User.Department -eq 'Reactive') {
+            Write-StatusMessage -Message "Provisioning Zoom Contact Center for $($User.DisplayName)" -Type INFO
+
+            # Define Zoom Conact Center template ID mapping
+            $templateMap = @{
+                'South Florida' = "unIR_2-xQemLQ9pfvDKk3w"
+                'Northeast'     = "-Pil2tjcRaOTaIl6LUV_6g"
+                'North Florida' = "nQdKAwkhRh-ds0Yvp7QKsw"
+                'Mid-West'      = "ySmugPJ0Qc6O3IaWHi9jHA"
+                'Mid-Atlantic'  = "K-6ajeNsS4KJRf-6xfRnaA"
+            }
+
+            $body = @{
+                user_email = $User.Mail
+                template_id = $null  # Will be set based on location
+            }
+
+            if ($templateMap.ContainsKey($User.officeLocation)) {  # Changed from $mguser to $User
+                $body.template_id = $templateMap[$User.officeLocation]
+                Write-StatusMessage -Message "Using template ID for location: $($User.officeLocation)" -Type INFO
+
+                $headers["Content-Type"] = "application/json"
+
+                try {
+                    $response = Invoke-WebRequest -Uri 'https://api.zoom.us/v2/contact_center/users' `
+                        -Method POST `
+                        -Headers $headers `
+                        -Body ($body | ConvertTo-Json)
+
+                    if ($response.StatusCode -eq 201) {
+                        Write-StatusMessage -Message "Successfully provisioned Contact Center" -Type OK
+
+                        # Get skills from user to copy
+                        try {
+                            Write-StatusMessage -Message "Getting skills from template user" -Type INFO
+                            $skillsResponse = Invoke-WebRequest -Uri "https://api.zoom.us/v2/contact_center/users/$UserToCopy/skills" `
+                                -Method GET `
+                                -Headers $headers
+
+                            if ($skillsResponse.StatusCode -eq 200) {
+                                $skillsContent = $skillsResponse.Content | ConvertFrom-Json
+                                $user_proficiency_level = $skillsContent.skills[0].max_proficiency_level
+
+                                # Set skills for new user
+                                $skillBody = @{
+                                    skills = @(
+                                        @{
+                                            skill_id = "sS21RNM2PSQOy8djVEbxang" # Tech Proficiency skill Id
+                                            max_proficiency_level = $user_proficiency_level
+                                        }
+                                    )
+                                }
+
+                                $setSkillResponse = Invoke-WebRequest `
+                                    -Uri "https://api.zoom.us/v2/contact_center/users/$($User.Mail)/skills" `
+                                    -Method POST `
+                                    -Headers $headers `
+                                    -ContentType 'application/json' `
+                                    -Body ($skillBody | ConvertTo-Json)
+
+                                if ($setSkillResponse.StatusCode -eq 201) {
+                                    Write-StatusMessage -Message "Successfully copied skill proficiency level" -Type OK
+                                } else {
+                                    Write-StatusMessage -Message "Failed to set skill proficiency level. Status code: $($setSkillResponse.StatusCode)" -Type ERROR
+                                }
+                            } else {
+                                Write-StatusMessage -Message "Failed to get template user skills. Status code: $($skillsResponse.StatusCode)" -Type ERROR
+                            }
+                        } catch {
+                            Write-StatusMessage -Message "Failed to copy skill proficiency: $_" -Type ERROR
+                        }
+                    }
+                }
+                catch {
+                    Write-StatusMessage -Message "Failed to provision Contact Center: $_" -Type ERROR
+                    return
+                }
+            } else {
+                Write-StatusMessage -Message "No template ID found for location: $($User.officeLocation)" -Type ERROR
+                return
+            }
+        } else {
+            Write-StatusMessage -Message "Provisioning Zoom Phone Plan for $($User.DisplayName)" -Type INFO
+            try {
+                # Get available calling plans
+                $response = Invoke-WebRequest -Uri 'https://api.zoom.us/v2/phone/calling_plans' -Method GET -Headers $headers
+                $responseContent = $response.Content | ConvertFrom-Json
+                $callingPlan = $responseContent.calling_plans | Where-Object { $_.name -eq 'US/CA Unlimited Calling Plan' }
+
+                if ($callingPlan -and $callingPlan.available -gt 0) {
+                    Write-StatusMessage -Message "Zoom licenses are available for assignment" -Type INFO
+
+                    # Assign calling plan to user
+                    $body = @{
+                        calling_plans = @(
+                            @{
+                                type = 200  # Type for the "US/CA Unlimited Calling Plan"
+                            }
+                        )
+                    } | ConvertTo-Json
+
+                    $assignPlanResponse = Invoke-WebRequest `
+                        -Uri "https://api.zoom.us/v2/phone/users/$($User.Mail)/calling_plans" `
+                        -Method POST `
+                        -Headers $headers `
+                        -ContentType 'application/json' `
+                        -Body $body
+
+                    if ($assignPlanResponse.StatusCode -eq 201) {
+                        Write-StatusMessage -Message "Calling plan successfully assigned to the user" -Type OK
+                    } else {
+                        Write-StatusMessage -Message "Failed to assign calling plan" -Type ERROR
+                    }
+                } else {
+                    Write-StatusMessage -Message "No Zoom licenses available" -Type ERROR
+                    return
+                }
+            } catch {
+                Write-StatusMessage -Message "Failed to assign calling plan: $_" -Type ERROR
+                return
+            }
         }
 
         # Now handle the Enterprise App assignment
@@ -2554,6 +2684,7 @@ if ($MgUser) {
             -ClientId $zoomClientId `
             -ClientSecret $zoomClientSecret `
             -AccountId $zoomAccountId
+            -UserToCopy $MgUserCopyAD.mail
     }
 
     # Step 13: Cleanup and Summary
