@@ -2344,8 +2344,6 @@ function Add-UserToZoom {
                 $body.template_id = $templateMap[$User.officeLocation]
                 Write-StatusMessage -Message "Using template ID for location: $($User.officeLocation)" -Type INFO
 
-                $headers["Content-Type"] = "application/json"
-
                 try {
                     $response = Invoke-WebRequest -Uri 'https://api.zoom.us/v2/contact_center/users' `
                         -Method POST `
@@ -2364,13 +2362,14 @@ function Add-UserToZoom {
 
                             if ($skillsResponse.StatusCode -eq 200) {
                                 $skillsContent = $skillsResponse.Content | ConvertFrom-Json
+                                $skill_id = $skillsContent.skills[0].skill_id
                                 $user_proficiency_level = $skillsContent.skills[0].user_proficiency_level
 
                                 # Set skills for new user
                                 $skillBody = @{
                                     skills = @(
                                         @{
-                                            skill_id              = "sS21RNM2PSQOy8djVEbxang" # Tech Proficiency skill Id
+                                            skill_id              = $skill_id
                                             max_proficiency_level = $user_proficiency_level
                                         }
                                     )
