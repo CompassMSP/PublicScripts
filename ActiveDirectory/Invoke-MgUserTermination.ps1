@@ -28,12 +28,15 @@
 .NOTES
     Author: Chris Williams
     Created: 2021-12-20
-    Last Modified: 2025-01-20
+    Last Modified: 2025-02-03
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
+    3.2.0        2025-02-03  Zoom Phone Offboarding:
+                          - Added removeal steps for Zoom Phone and Contact Center
+
     3.0.0        2025-01-20  Major Rework:
                           - Complete script reorganization and optimization
                           - Optimized UI spacing and element alignment
@@ -41,7 +44,7 @@
                           - Added secure configuration management via Get-ScriptConfig
                           - Enhanced error handling and logging system
                           - Added progress tracking and status messaging
-                          - Added Zoom phone onboarding
+                          - Added Zoom phone offboarding
 
     2.1.0        2024-11-25  Feature Update:
                           - Reworked GUI interface
@@ -1283,6 +1286,7 @@ Continue? (Y/N)
         Exit-Script -Message "Failed to validate termination prerequisites: $_" -ExitCode UserNotFound
     }
 }
+
 function Disable-ADUser {
     [CmdletBinding()]
     param(
@@ -1322,6 +1326,14 @@ function Disable-ADUser {
                     'extensionAttribute4',
                     'extensionAttribute5',
                     'extensionAttribute6',
+                    'extensionAttribute7',
+                    'extensionAttribute8',
+                    'extensionAttribute9',
+                    'extensionAttribute10',
+                    'extensionAttribute11',
+                    'extensionAttribute12',
+                    'extensionAttribute13',
+                    'extensionAttribute14',
                     'extensionAttribute15'
                 )
             }
@@ -1373,8 +1385,7 @@ function Remove-UserSessions {
         try {
             Revoke-MgUserSignInSession -UserId $UserPrincipalName -ErrorAction Stop
             Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
-        }
-        catch {
+        } catch {
             Write-StatusMessage -Message "Failed to revoke user sessions" -Type ERROR
         }
 
@@ -1419,13 +1430,11 @@ function Remove-UserSessions {
                             Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type ERROR
                         }
                     }
-                }
-                catch {
+                } catch {
                     Write-StatusMessage -Message "Failed to remove authentication method $($authMethod.Id) of type $authType" -Type ERROR
                 }
             }
-        }
-        catch {
+        } catch {
             Write-StatusMessage -Message "Failed to get user authentication methods" -Type ERROR
         }
 
@@ -1438,13 +1447,11 @@ function Remove-UserSessions {
                 try {
                     Remove-MobileDevice -Identity $mobileDevice.Id -Confirm:$false -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully removed mobile device: $($mobileDevice.Id)" -Type OK
-                }
-                catch {
+                } catch {
                     Write-StatusMessage -Message "Failed to remove mobile device $($mobileDevice.Id)" -Type ERROR
                 }
             }
-        }
-        catch {
+        } catch {
             Write-StatusMessage -Message "Failed to get mobile devices" -Type ERROR
         }
 
@@ -1456,13 +1463,11 @@ function Remove-UserSessions {
                 try {
                     Update-MgDevice -DeviceId $termUserDevice.Id -BodyParameter @{ AccountEnabled = $false } -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.Id)" -Type OK
-                }
-                catch {
+                } catch {
                     Write-StatusMessage -Message "Failed to disable device $($termUserDevice.Id)" -Type ERROR
                 }
             }
-        }
-        catch {
+        } catch {
             Write-StatusMessage -Message "Failed to get registered devices" -Type ERROR
         }
 
@@ -1625,14 +1630,15 @@ function Remove-UserFromEntraGroups {
                 @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }
                 @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
                 @{n = 'groupType'; e = {
-                    if ($_.AdditionalProperties.securityEnabled -eq $true) {
-                        return "Security"
-                    } elseif ($_.AdditionalProperties.groupTypes -contains "Unified") {
-                        return "Unified"
-                    } else {
-                        return "Distribution"
+                        if ($_.AdditionalProperties.securityEnabled -eq $true) {
+                            return "Security"
+                        } elseif ($_.AdditionalProperties.groupTypes -contains "Unified") {
+                            return "Unified"
+                        } else {
+                            return "Distribution"
+                        }
                     }
-                }}
+                }
                 @{n = 'securityEnabled'; e = { $_.AdditionalProperties.securityEnabled } }
             )
         }
@@ -1749,31 +1755,132 @@ function Remove-UserFromZoom {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$UserId
+        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        $User,
+
+        [Parameter(Mandatory)]
+        [string]$ClientId,
+
+        [Parameter(Mandatory)]
+        [string]$ClientSecret,
+
+        [Parameter(Mandatory)]
+        [string]$AccountId
     )
 
     try {
-        Write-StatusMessage -Message "Checking Zoom assignments..." -Type INFO
+        # Get Bearer Token
         try {
-            $ZoomSSO = Get-MgUserAppRoleAssignment -UserId $UserId -ErrorAction Stop |
-            Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
+            $pair = "$ClientId`:$ClientSecret"
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+            $base64 = [Convert]::ToBase64String($bytes)
+
+            $tokenParams = @{
+                Method      = "POST"
+                Uri         = "https://zoom.us/oauth/token"
+                ContentType = "application/x-www-form-urlencoded"
+                Body        = @{
+                    grant_type = 'account_credentials'
+                    account_id = $AccountId
+                }
+                Headers     = @{
+                    Host          = 'zoom.us'
+                    Authorization = "Basic $base64"
+                }
+            }
+
+            $tokenResponse = Invoke-WebRequest @tokenParams
+            $BearerToken = ($tokenResponse.Content | ConvertFrom-Json).access_token
+
+            $headers = @{
+                "Authorization" = "Bearer $BearerToken"
+            }
+
+            Write-StatusMessage -Message "Successfully obtained Zoom API token" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to get Zoom API token: $_" -Type ERROR
+            return
+        }
+
+        # Delete Zoom User
+        try {
+            # Check if Zoom user exists first
+            try {
+                Write-StatusMessage -Message "Checking if Zoom user exists" -Type INFO
+                $checkUserResponse = Invoke-WebRequest `
+                    -Uri "https://api.zoom.us/v2/users/$($User.Mail)" `
+                    -Method GET `
+                    -Headers $headers
+
+                if ($checkUserResponse.StatusCode -eq 200) {
+                    Write-StatusMessage -Message "Zoom user found, proceeding with deletion" -Type OK
+                } else {
+                    Write-StatusMessage -Message "Zoom user not found. Status: $($checkUserResponse.StatusCode)" -Type INFO
+                    return
+                }
+            } catch {
+                Write-StatusMessage -Message "Error checking Zoom user: $_" -Type ERROR
+                return
+            }
+
+            # Delete based on department
+            if ($User.Department -eq 'Reactive') {
+                Write-StatusMessage -Message "Deleting Zoom Call Center user" -Type INFO
+                try {
+                    $deleteCallcenterResponse = Invoke-WebRequest `
+                        -Uri "https://api.zoom.us/v2/contact_center/users/$($User.Mail)" `
+                        -Method DELETE `
+                        -Headers $headers
+
+                    if ($deleteCallcenterResponse.StatusCode -eq 204) {
+                        Write-StatusMessage -Message "Successfully deleted Zoom Call Center user" -Type OK
+                    } else {
+                        Write-StatusMessage -Message "Failed to delete Zoom Call Center user. Status: $($deleteCallcenterResponse.StatusCode)" -Type ERROR
+                    }
+                } catch {
+                    Write-StatusMessage -Message "Error deleting Call Center user: $_" -Type ERROR
+                }
+            }
+
+            # Delete main Zoom user account
+            Write-StatusMessage -Message "Deleting Zoom user account" -Type INFO
+            $deleteZoomUserResponse = Invoke-WebRequest `
+                -Uri "https://api.zoom.us/v2/users/$($User.Mail)" `
+                -Method DELETE `
+                -Headers $headers
+
+            if ($deleteZoomUserResponse.StatusCode -eq 204) {
+                Write-StatusMessage -Message "Successfully deleted Zoom user" -Type OK
+            } else {
+                Write-StatusMessage -Message "Failed to delete Zoom user. Status: $($deleteZoomUserResponse.StatusCode)" -Type ERROR
+                return
+            }
+        } catch {
+            Write-StatusMessage -Message "Failed to delete Zoom user: $_" -Type ERROR
+            return
+        }
+
+        # Remove Enterprise App assignment
+        try {
+            Write-StatusMessage -Message "Removing Zoom Enterprise App assignment" -Type INFO
+            $ZoomSSO = Get-MgUserAppRoleAssignment -UserId $User.Id -ErrorAction Stop |
+                Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
 
             if ($ZoomSSO) {
                 try {
-                    Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $ZoomSSO.Id -UserId $UserId -ErrorAction Stop
-                    Write-StatusMessage -Message "Successfully removed user from Zoom Workplace Phones" -Type OK
+                    Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $ZoomSSO.Id -UserId $User.Id -ErrorAction Stop
+                    Write-StatusMessage -Message "Successfully removed Zoom Enterprise App assignment" -Type OK
                 } catch {
-                    Write-StatusMessage -Message "Failed to remove Zoom assignment" -Type ERROR
+                    Write-StatusMessage -Message "Failed to remove Zoom Enterprise App assignment: $_" -Type ERROR
                 }
             } else {
-                Write-StatusMessage -Message "User is not assigned to Zoom Workplace Phones" -Type INFO
+                Write-StatusMessage -Message "No Zoom Enterprise App assignment found" -Type INFO
             }
         } catch {
-            Write-StatusMessage -Message "Failed to get Zoom assignments" -Type ERROR
-            throw
+            Write-StatusMessage -Message "Failed to check Zoom Enterprise App assignments: $_" -Type ERROR
         }
     } catch {
-        Write-StatusMessage -Message "Critical error in Remove-UserFromZoom" -Type ERROR
+        Write-StatusMessage -Message "Critical error in Remove-UserFromZoom: $_" -Type ERROR
         throw
     }
 }
@@ -1917,7 +2024,7 @@ function Start-ADSyncAndFinalize {
         $summaryParts += "- OneDrive access granted to: $GrantUserOneDriveAccess"
     }
     if ($ExportPath) {
-        $summaryParts += "- Groups and licenses exported to: $ExportPath"
+        $summaryParts += "- Attributes, Groups and licenses exported to: $ExportPath"
     }
 
     $summaryParts += "----------------------------------------"
@@ -1970,6 +2077,9 @@ $PnPAppId = $config.PnPSharePoint.AppId
 $PnPUrl = $config.PnPSharePoint.Url
 $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
 $localExportPath = $config.Paths.TermExportPath
+$zoomClientId = $config.Zoom.ClientId
+$zoomClientSecret = $config.Zoom.ClientSecret
+$zoomAccountId = $config.Zoom.AccountId
 
 Connect-ServiceEndpoints -ExchangeOnline -Graph
 
@@ -2032,9 +2142,6 @@ Disable-ADUser -UserFromAD $UserFromAD -DestinationOU $DestinationOU
 Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
 Remove-UserSessions -UserPrincipalName $UserFromAD.UserPrincipalName
 
-# Step 5: Convert to SharedMailbox, Set forwarding/grant access
-Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
-
 $mailboxParams = @{
     Mailbox = $365Mailbox
 }
@@ -2042,12 +2149,15 @@ $mailboxParams = @{
 # Only add these parameters if they exist and have values
 if ($SetUserMailFWD) {
     $mailboxParams['ForwardingAddress'] = $SetUserMailFWD
+
 }
 
 if ($GrantUserFullControl) {
     $mailboxParams['GrantAccessTo'] = $GrantUserFullControl
 }
 
+# Step 5: Convert to SharedMailbox, Set forwarding/grant access
+Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
 Set-TerminatedMailbox @mailboxParams
 
 # Step 6: Remove Directory Roles
@@ -2056,17 +2166,20 @@ Remove-UserFromEntraDirectoryRoles -UserId $MgUser.Id
 
 # Step 7: Remove Groups
 Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
-$GroupExportPath = Join-Path $localExportPath "$($User)_EntraGroups.csv"
+$groupExportPath = Join-Path $localExportPath "$($User)_Groups_Id.csv"
 Remove-UserFromEntraGroups -UserId $MgUser.Id -ExportPath $groupExportPath
 
 # Step 8: Remove Licenses
 Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
-$licensePath = Join-Path $localExportPath "$($User)_EntraLicense.csv"
+$licensePath = Join-Path $localExportPath "$($User)_License_Id.csv"
 Remove-UserLicenses -UserId $UserFromAD.UserPrincipalName -ExportPath $licensePath
 
 # Step 9: Remove from Zoom
 Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
-Remove-UserFromZoom -UserId $MgUser.Id
+Remove-UserFromZoom -User $MgUser `
+    -ClientId $zoomClientId `
+    -ClientSecret $zoomClientSecret `
+    -AccountId $zoomAccountId
 
 #Step 10: Send Email Notification - SecurePath
 Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description

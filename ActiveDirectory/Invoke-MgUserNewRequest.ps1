@@ -28,13 +28,13 @@
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2025-02-01
+    Last Modified: 2025-02-03
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
-    3.2.0        2025-02-01  Zoom Phone Onboarding:
+    3.2.0        2025-02-03  Zoom Phone Onboarding:
                           - Added provisioning steps for Zoom Phone and Contact Center
 
     3.1.0        2025-01-25  Password System Update:
@@ -2234,7 +2234,7 @@ function Add-UserToZoom {
                 template_id = $null  # Will be set based on location
             }
 
-            if ($templateMap.ContainsKey($User.officeLocation)) {  # Changed from $mguser to $User
+            if ($templateMap.ContainsKey($User.officeLocation)) {
                 $body.template_id = $templateMap[$User.officeLocation]
                 Write-StatusMessage -Message "Using template ID for location: $($User.officeLocation)" -Type INFO
 
@@ -2702,7 +2702,6 @@ if ($MgUser) {
         -Password $passwordResult.PlainPassword `
         -TemplateGroupCount $CopyUserGroupCount `
         -AssignedGroupCount $NewUserGroupCount
-
 
     # Show duration
     $endTime = Get-Date
