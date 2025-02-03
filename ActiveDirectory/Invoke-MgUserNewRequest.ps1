@@ -1011,6 +1011,8 @@ function Get-NewUserRequestInput {
             "MCOEV" { "Microsoft Teams Phone Standard" }
             "POWER_BI_STANDARD" { "Power BI Standard" }
             "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
+            "SHAREPOINTSTORAGE" { "SharePoint Storage" }
+            "Teams_Premium_(for_Departments)" { "Teams Premium (for Departments)" }
             default { $SkuPartNumber }
         }
         return $displayName
@@ -1140,11 +1142,13 @@ function Get-NewUserRequestInput {
         "Microsoft_Copilot_for_Finance_trial",
         "STREAM",
         "Project Plan 3 (for Department)",
-        "Dynamics 365 Business Central for IWs"
+        "Dynamics 365 Business Central for IWs",
+        "SharePoint Storage",
+        "Teams Premium (for Departments)"
     )
 
     # Create window and main containers
-    $window = New-FormWindow -Title "New User Request" -Height 830
+    $window = New-FormWindow -Title "New User Request" -Height 950
     $scrollViewer = New-FormScrollViewer
     $mainPanel = New-MainPanel -Margin '10'
     $scrollViewer.Content = $mainPanel
@@ -1192,8 +1196,59 @@ function Get-NewUserRequestInput {
     $mobileSection.Stack.Children.Add($bypassPanel)
     $mainPanel.Children.Add($mobileSection.Group)
 
+    # Zoom License Section (only visible if Zoom User is checked)
+    $zoomSection = New-FormGroupBox -Header "Zoom License Type"
+    $zoomComboBox = New-FormComboBox `
+        -ToolTip "Select the type of Zoom license for the user" `
+        -DisplayMemberPath "DisplayName"
+
+    # Add Zoom license options
+    $zoomLicenses = @(
+        [PSCustomObject]@{
+            DisplayName = "Zoom Basic"
+            Value = "false"
+        },
+        [PSCustomObject]@{
+            DisplayName = "Zoom Workplace"
+            Value = "true"
+        }
+    )
+
+    foreach ($license in $zoomLicenses) {
+        $zoomComboBox.Items.Add($license)
+    }
+
+    # Create a panel for Zoom options
+    $zoomPanel = New-FormDockPanel
+
+    # Add zoom user checkbox - now enabled by default
+    $zoomUserCheckBox = New-FormCheckBox -Content "Enable Zoom" -ToolTip "Enable to create Zoom account for user" -IsChecked $true -Margin "0,5,10,5"
+
+    $zoomPanel.Children.Add($zoomUserCheckBox)
+    $zoomSection.Stack.Children.Add($zoomPanel)
+    $zoomSection.Stack.Children.Add($zoomComboBox)
+
+    # Enable the combo box since checkbox is checked by default
+    $zoomComboBox.IsEnabled = $true
+
+    # Pre-select Basic license
+    $zoomComboBox.SelectedIndex = 0  # Select first item (Zoom Basic)
+
+    # Add event handler for checkbox
+    $zoomUserCheckBox.Add_Checked({
+        $zoomComboBox.IsEnabled = $true
+        $zoomComboBox.SelectedIndex = 0  # Select Basic when re-enabled
+    })
+
+    $zoomUserCheckBox.Add_Unchecked({
+        $zoomComboBox.IsEnabled = $false
+        $zoomComboBox.SelectedIndex = -1
+    })
+
+    $mainPanel.Children.Add($zoomSection.Group)
+
     # Required License Section
-    $requiredSection = New-FormGroupBox -Header "Required License (Select One) *"
+    $requiredSection = New-FormGroupBox -Header "365:Required License (Select One) *"
     $requiredComboBox = New-FormComboBox `
         -ToolTip "Select one of the required base licenses for the user" `
         -DisplayMemberPath "DisplayName"
@@ -1215,7 +1270,7 @@ function Get-NewUserRequestInput {
     $mainPanel.Children.Add($requiredSection.Group)
 
     # Ancillary Licenses Section
-    $ancillarySection = New-FormGroupBox -Header "Ancillary Licenses"
+    $ancillarySection = New-FormGroupBox -Header "365: Ancillary Licenses"
     $scrollingPanel = New-ScrollingStackPanel -MaxHeight 200
     $licensesStack = $scrollingPanel.StackPanel
 
@@ -1251,15 +1306,6 @@ function Get-NewUserRequestInput {
 
     # Create and add OK and Cancel buttons
     $buttonPanel = New-ButtonPanel -Margin "0,10,0,0"
-
-    # Add zoom user checkbox to button panel
-    $zoomUserCheckBox = New-FormCheckBox `
-        -Content "Zoom User" `
-        -ToolTip "Enable to create Zoom account for user" `
-        -IsChecked $false `
-        -Margin "0,5,10,0"
-
-    $buttonPanel.Children.Add($zoomUserCheckBox)
 
     # Add test mode checkbox to button panel
     $testModeButton = New-FormCheckBox `
@@ -1380,6 +1426,9 @@ function Get-NewUserRequestInput {
                 })
             TestModeEnabled        = ($testModeButton.IsChecked -eq $true)
             ZoomUserEnabled        = ($zoomUserCheckBox.IsChecked -eq $true)
+            IsWorkPlaceLicense     = ($zoomUserCheckBox.IsChecked -and
+                                    $zoomComboBox.SelectedItem -and
+                                    $zoomComboBox.SelectedItem.DisplayName -eq 'Zoom Workplace')
         }
     } else {
         return $null
@@ -1681,7 +1730,7 @@ function New-ReadablePassword {
             }
 
             # Generate password
-            $SpecialChars = [char[]]((33,35) + (36..38) + (40..46) + (60..62) + (64))
+            $SpecialChars = [char[]]((33, 35) + (36..38) + (40..46) + (60..62) + (64))
             $Numbers = [char[]](48..57)
 
             $Password = 1..$WordCount | ForEach-Object {
@@ -2136,7 +2185,10 @@ function Add-UserToZoom {
         [string]$UserToCopy,
 
         [Parameter()]
-        [string]$Password
+        [string]$Password,
+
+        [Parameter()]
+        [string]$IsWorkPlaceLicense
     )
 
     try {
@@ -2179,7 +2231,23 @@ function Add-UserToZoom {
             }
 
             # Determine if user should have phone features based on department
-            if ($User.Department -eq 'Reactive') {
+            if ($IsWorkPlaceLicense -eq 'true') {
+                $body = @{
+                    action    = "autoCreate"
+                    user_info = @{
+                        email        = $User.Mail
+                        first_name   = $User.GivenName
+                        last_name    = $User.Surname
+                        display_name = $User.DisplayName
+                        password     = $Password
+                        type         = 2
+                        feature      = @{
+                            zoom_phone    = $true
+                            zoom_one_type = 16
+                        }
+                    }
+                }
+            } elseif ($User.Department -eq 'Reactive') {
                 $body = @{
                     action    = "autoCreate"
                     user_info = @{
@@ -2207,6 +2275,7 @@ function Add-UserToZoom {
                     }
                 }
             }
+
 
             $response = Invoke-WebRequest -Uri 'https://api.zoom.us/v2/users' -Method POST -Headers $headers -Body ($body | ConvertTo-Json -Depth 3)
 
@@ -2251,7 +2320,10 @@ function Add-UserToZoom {
         }
 
         # After creating the user, assign calling plan if not Reactive department
-        if ($User.Department -eq 'Reactive') {
+        if ($IsWorkPlaceLicense -eq 'true') {
+            Write-StatusMessage -Message "Provisioning Zoom Phone Plan for $($User.DisplayName)" -Type INFO
+            Write-StatusMessage -Message "Phone plan included with Workplace license" -Type OK
+        } elseif ($User.Department -eq 'Reactive') {
             Write-StatusMessage -Message "Provisioning Zoom Contact Center for $($User.DisplayName)" -Type INFO
 
             # Define Zoom Conact Center template ID mapping
@@ -2374,7 +2446,12 @@ function Add-UserToZoom {
         }
 
         # Now handle the Enterprise App assignment
-        $zoom_app_role_name = "Basic"
+        if ($IsWorkPlaceLicense -eq 'true') {
+            $zoom_app_role_name = "Licensed"
+        } else {
+            $zoom_app_role_name = "Basic"
+        }
+
         $zoom_app_name = "Zoom Workplace Phones"
 
         # Get Zoom app and sync details
@@ -2599,8 +2676,6 @@ Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].De
 # Load configuration
 $config = Get-ScriptConfig
 
-$script:TestEmailAddress = $config.TestMode.Email
-
 # Get connection parameters from config
 $Organization = $config.ExchangeOnline.Organization
 $ExOAppId = $config.ExchangeOnline.AppId
@@ -2611,10 +2686,6 @@ $GraphCertSubject = $Config.Graph.CertificateSubject
 $PnPAppId = $config.PnPSharePoint.AppId
 $PnPUrl = $config.PnPSharePoint.Url
 $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
-$GithubAPIToken = $config.GitHub.Token
-$zoomClientId = $config.Zoom.ClientId
-$zoomClientSecret = $config.Zoom.ClientSecret
-$zoomAccountId = $config.Zoom.AccountId
 
 Connect-ServiceEndpoints -ExchangeOnline -Graph
 
@@ -2624,31 +2695,28 @@ $userInput = Get-NewUserRequestInput
 
 # Set variables after input
 if ($userInput.TestModeEnabled -eq 'True') { $script:TestMode = $true }
-
-$NewUser = $userInput.InputNewUser.Trim()
-$UserToCopy = $userInput.InputUserToCopy.Trim()
-$RequiredLicense = $userInput.InputRequiredLicense
-$Phone = if ($userInput.InputNewMobile) { $userInput.InputNewMobile.Trim() } else { $null }
-$AncillaryLicenses = $userInput.InputAncillaryLicenses
-$ZoomUserEnabled = $userInput.ZoomUserEnabled
+$script:TestEmailAddress = $config.TestMode.Email
 
 # Step 3: Validation and Preparation (AD)
 Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
-$UserToCopyAD = Get-TemplateUser -UserToCopy $UserToCopy
+$UserToCopyAD = Get-TemplateUser -UserToCopy $userInput.InputUserToCopy
 $destinationOU = $UserToCopyAD.DistinguishedName.split(",", 2)[1]                 # Validates template user
-$newUserProperties = New-UserProperties -NewUser $NewUser -SourceUserUPN $UserToCopyAD.UserPrincipalName
+$newUserProperties = New-UserProperties -NewUser $userInput.InputNewUser -SourceUserUPN $UserToCopyAD.UserPrincipalName
 
 # Step 4: AD User Creation
 Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
-$passwordResult = New-ReadablePassword -GitHubToken $GithubAPIToken
+$passwordResult = New-ReadablePassword -GitHubToken $config.GitHub.Token
 
 # Show summary and get confirmation before creating
+
 Confirm-UserCreation -NewUserProperties $newUserProperties `
     -DestinationOU $destinationOU `
-    -TemplateUser $UserToCopy `
+    -TemplateUser $userInput.InputUserToCopy `
     -Password $passwordResult.PlainPassword
 
 # Only proceeds if user confirms
+$Phone = if ($userInput.InputNewMobile) { $userInput.InputNewMobile } else { $null }
+
 New-ADUserFromTemplate -NewUser $newUserProperties `
     -SourceUser $UserToCopyAD `
     -Phone $Phone `
@@ -2657,7 +2725,7 @@ New-ADUserFromTemplate -NewUser $newUserProperties `
 
 # Step 5: AD Group Copy
 Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
-Copy-UserADGroups -SourceUser $UserToCopy -TargetUser $NewUser
+Copy-UserADGroups -SourceUser $userInput.InputUserToCopy -TargetUser $userInput.InputUserToCopy
 
 # Step 6: Azure Sync
 Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
@@ -2672,13 +2740,13 @@ if ($MgUser) {
     Write-StatusMessage -Message "Usage Location has been set for new user" -Type OK
 
     # Required license - will exit on failure
-    Set-UserLicenses -User $MgUser -License $RequiredLicense -Required
+    Set-UserLicenses -User $MgUser -License $userInput.InputRequiredLicense -Required
 
     Start-Sleep -Seconds 60  # Wait for license to apply
 
     # Ancillary licenses - will continue on failure
-    if ($null -ne $AncillaryLicenses) {
-        Set-UserLicenses -User $MgUser -License $AncillaryLicenses
+    if ($null -ne $userInput.InputAncillaryLicenses) {
+        Set-UserLicenses -User $MgUser -License $userInput.InputAncillaryLicenses
     }
 
     # Step 8: Entra Group Copy
@@ -2715,13 +2783,24 @@ if ($MgUser) {
 
     # Step 12: Zoom Phone Creation
     Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
-    if ($ZoomUserEnabled) {
-        Add-UserToZoom -User $MgUser `
-            -ClientId $zoomClientId `
-            -ClientSecret $zoomClientSecret `
-            -AccountId $zoomAccountId `
-            -UserToCopy $MgUserCopyAD.mail `
-            -Password $passwordResult.PlainPassword
+    if ($userInput.ZoomUserEnabled) {
+
+            $zoomParams = @{
+                User         = $MgUser
+                ClientId     = $config.Zoom.ClientId
+                ClientSecret = $config.Zoom.ClientSecret
+                AccountId    = $config.Zoom.AccountId
+                UserToCopy   = $MgUserCopyAD.mail
+                Password     = $passwordResult.PlainPassword
+            }
+
+            # Add IsWorkPlaceLicense parameter only if true
+            if ($userInput.IsWorkPlaceLicense) {
+                $zoomParams['IsWorkPlaceLicense'] = 'true'
+            }
+
+            # Call function with splatted parameters
+            Add-UserToZoom @zoomParams
     }
 
     # Step 13: Cleanup and Summary
