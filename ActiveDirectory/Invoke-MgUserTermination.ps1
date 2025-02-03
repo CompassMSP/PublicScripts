@@ -1261,25 +1261,24 @@ Continue? (Y/N)
                     Write-StatusMessage -Message "Exporting group memberships" -Type INFO
                     $groups = $UserFromAD.MemberOf | ForEach-Object {
                         Get-ADGroup -Identity $_ -Properties Name, Description, GroupCategory, GroupScope |
-                            Select-Object Name, Description, GroupCategory, GroupScope, DistinguishedName
+                        Select-Object Name, Description, GroupCategory, GroupScope, DistinguishedName
                     }
                     $groups | Export-Csv -Path $ADGroupsPath -NoTypeInformation
                     Write-StatusMessage -Message "Exported group memberships to: $ADGroupsPath" -Type OK
                 }
-            }
-            catch {
+            } catch {
                 Write-StatusMessage -Message "Failed to export user data: $_" -Type ERROR
             }
         }
 
         # Return all the collected information
         return @{
-            UserFromAD    = $UserFromAD
-            DestinationOU = $DestinationOU
-            Mailbox       = $365Mailbox
-            MgUser        = $MgUser
-            UserPropertiesPath = $UserPropertiesPath
-            ADGroupsPath = $ADGroupsPath
+            selectUserFromAD    = $UserFromAD
+            selectDestinationOU = $DestinationOU
+            selectMailbox       = $365Mailbox
+            selectMgUser        = $MgUser
+            UserPropertiesPath  = $UserPropertiesPath
+            ADGroupsPath        = $ADGroupsPath
         }
 
     } catch {
@@ -1376,14 +1375,16 @@ function Remove-UserSessions {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$UserPrincipalName
+        [ValidateNotNullOrEmpty()]
+        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        $User
     )
 
     try {
         # Revoke all sessions
         Write-StatusMessage -Message "Revoking all user signed in sessions" -Type INFO
         try {
-            Revoke-MgUserSignInSession -UserId $UserPrincipalName -ErrorAction Stop
+            Revoke-MgUserSignInSession -UserId $User.Id -ErrorAction Stop
             Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to revoke user sessions" -Type ERROR
@@ -1392,7 +1393,7 @@ function Remove-UserSessions {
         # Remove authentication methods
         Write-StatusMessage -Message "Removing user authentication methods" -Type INFO
         try {
-            $authMethods = Get-MgUserAuthenticationMethod -UserId $UserPrincipalName -ErrorAction Stop
+            $authMethods = Get-MgUserAuthenticationMethod -UserId $User.Id -ErrorAction Stop
 
             foreach ($authMethod in $authMethods) {
                 $authType = $authMethod.AdditionalProperties.'@odata.type'
@@ -1403,27 +1404,27 @@ function Remove-UserSessions {
                             continue
                         }
                         "#microsoft.graph.phoneAuthenticationMethod" {
-                            Remove-MgUserAuthenticationPhoneMethod -UserId $UserPrincipalName -PhoneAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Remove-MgUserAuthenticationPhoneMethod -UserId $User.Id -PhoneAuthenticationMethodId $authMethod.Id -ErrorAction Stop
                             Write-StatusMessage -Message "Removed Phone Authentication Method: $($authMethod.Id)" -Type OK
                         }
                         "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod" {
-                            Remove-MgUserAuthenticationWindowsHelloForBusinessMethod -UserId $UserPrincipalName -WindowsHelloForBusinessAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Remove-MgUserAuthenticationWindowsHelloForBusinessMethod -UserId $User.Id -WindowsHelloForBusinessAuthenticationMethodId $authMethod.Id -ErrorAction Stop
                             Write-StatusMessage -Message "Removed Windows Hello for Business Method: $($authMethod.Id)" -Type OK
                         }
                         "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod" {
-                            Remove-MgUserAuthenticationMicrosoftAuthenticatorMethod -UserId $UserPrincipalName -MicrosoftAuthenticatorAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Remove-MgUserAuthenticationMicrosoftAuthenticatorMethod -UserId $User.Id -MicrosoftAuthenticatorAuthenticationMethodId $authMethod.Id -ErrorAction Stop
                             Write-StatusMessage -Message "Removed Microsoft Authenticator Method: $($authMethod.Id)" -Type OK
                         }
                         "#microsoft.graph.fido2AuthenticationMethod" {
-                            Remove-MgUserAuthenticationFido2Method -UserId $UserPrincipalName -Fido2AuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Remove-MgUserAuthenticationFido2Method -UserId $User.Id -Fido2AuthenticationMethodId $authMethod.Id -ErrorAction Stop
                             Write-StatusMessage -Message "Removed FIDO2 Authenticator Method: $($authMethod.Id)" -Type OK
                         }
                         "#microsoft.graph.softwareOathAuthenticationMethod" {
-                            Remove-MgUserAuthenticationSoftwareOathMethod -UserId $UserPrincipalName -SoftwareOathAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Remove-MgUserAuthenticationSoftwareOathMethod -UserId $User.Id -SoftwareOathAuthenticationMethodId $authMethod.Id -ErrorAction Stop
                             Write-StatusMessage -Message "Removed Software Oath Method: $($authMethod.Id)" -Type OK
                         }
                         "#microsoft.graph.temporaryAccessPassAuthenticationMethod" {
-                            Remove-MgUserAuthenticationTemporaryAccessPassMethod -UserId $UserPrincipalName -TemporaryAccessPassAuthenticationMethodId $authMethod.Id -ErrorAction Stop
+                            Remove-MgUserAuthenticationTemporaryAccessPassMethod -UserId $User.Id -TemporaryAccessPassAuthenticationMethodId $authMethod.Id -ErrorAction Stop
                             Write-StatusMessage -Message "Removed Temporary Access Pass Method: $($authMethod.Id)" -Type OK
                         }
                         default {
@@ -1441,7 +1442,7 @@ function Remove-UserSessions {
         # Remove Mobile Devices
         Write-StatusMessage -Message "Removing all mobile devices" -Type INFO
         try {
-            $mobileDevices = Get-MobileDevice -Mailbox $UserPrincipalName -ErrorAction Stop
+            $mobileDevices = Get-MobileDevice -Mailbox $User.mail -ErrorAction Stop
             foreach ($mobileDevice in $mobileDevices) {
                 Write-StatusMessage -Message "Removing mobile device: $($mobileDevice.Id)" -Type INFO
                 try {
@@ -1457,7 +1458,7 @@ function Remove-UserSessions {
 
         # Disable Azure AD devices
         try {
-            $termUserDevices = Get-MgUserRegisteredDevice -UserId $UserPrincipalName -ErrorAction Stop
+            $termUserDevices = Get-MgUserRegisteredDevice -UserId $User.Id -ErrorAction Stop
             foreach ($termUserDevice in $termUserDevices) {
                 Write-StatusMessage -Message "Disabling registered device: $($termUserDevice.Id)" -Type INFO
                 try {
@@ -1560,7 +1561,9 @@ function Remove-UserFromEntraDirectoryRoles {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
-        [string]$UserId
+        [ValidateNotNullOrEmpty()]
+        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        $User
     )
 
     try {
@@ -1568,7 +1571,7 @@ function Remove-UserFromEntraDirectoryRoles {
 
         try {
             # Get all directory roles the user is a member of
-            $directoryRoles = Get-MgUserMemberOf -UserId $UserId -ErrorAction Stop |
+            $directoryRoles = Get-MgUserMemberOf -UserId $User.Id -ErrorAction Stop |
             Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.directoryRole' }
 
             if (-not $directoryRoles) {
@@ -1584,7 +1587,7 @@ function Remove-UserFromEntraDirectoryRoles {
                     $roleName = $role.AdditionalProperties.displayName
 
                     Write-StatusMessage -Message "Removing from role: $roleName" -Type INFO
-                    Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $roleId -DirectoryObjectId $UserId -ErrorAction Stop
+                    Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $roleId -DirectoryObjectId $User.Id -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully removed from role: $roleName" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove from role $roleName" -Type ERROR
@@ -1604,7 +1607,9 @@ function Remove-UserFromEntraGroups {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$userId,
+        [ValidateNotNullOrEmpty()]
+        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        $User,
 
         [Parameter()]
         [string]$ExportPath
@@ -1646,7 +1651,7 @@ function Remove-UserFromEntraGroups {
         Write-StatusMessage -Message "Finding Azure groups" -Type INFO
 
         try {
-            $All365Groups = Get-MgUserMemberOf -UserId $userId -ErrorAction Stop |
+            $All365Groups = Get-MgUserMemberOf -UserId $User.Id -ErrorAction Stop |
             Where-Object @filterParams |
             Select-Object @selectParams
 
@@ -1667,10 +1672,10 @@ function Remove-UserFromEntraGroups {
 
                 try {
                     if ($365Group.securityEnabled -eq $true -or $365Group.groupType -eq 'Unified') {
-                        Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $userId -ErrorAction Stop
+                        Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $User.Id -ErrorAction Stop
                         Write-StatusMessage -Message "Removed from Security/Unified Group: $($365Group.DisplayName)" -Type OK
                     } else {
-                        Remove-DistributionGroupMember -Identity $365Group.Id -Member $userId -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction Stop
+                        Remove-DistributionGroupMember -Identity $365Group.Id -Member $User.Id -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction Stop
                         Write-StatusMessage -Message "Removed from Distribution Group: $($365Group.DisplayName)" -Type OK
                     }
                 } catch {
@@ -1691,7 +1696,9 @@ function Remove-UserLicenses {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$UserId,
+        [ValidateNotNullOrEmpty()]
+        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        $User,
 
         [Parameter()]
         [string]$ExportPath
@@ -1702,7 +1709,7 @@ function Remove-UserLicenses {
 
         try {
             # Get and export license details if path provided
-            $licenseDetails = Get-MgUserLicenseDetail -UserId $UserId -ErrorAction Stop |
+            $licenseDetails = Get-MgUserLicenseDetail -UserId $User.Id -ErrorAction Stop |
             Select-Object SkuPartNumber, SkuId, Id
 
             if ($ExportPath) {
@@ -1725,7 +1732,7 @@ function Remove-UserLicenses {
             # Step 1: Remove Ancillary Licenses
             foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -notin $primaryLicenses })) {
                 try {
-                    $null = Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+                    $null = Set-MgUserLicense -UserId $User.Id -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Ancillary License: $($license.SkuPartNumber)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove Ancillary License $($license.SkuPartNumber)" -Type ERROR
@@ -1735,7 +1742,7 @@ function Remove-UserLicenses {
             # Step 2: Remove Primary Licenses
             foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -in $primaryLicenses })) {
                 try {
-                    $null = Set-MgUserLicense -UserId $UserId -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+                    $null = Set-MgUserLicense -UserId $User.Id -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Primary License: $($license.SkuPartNumber)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove Primary License $($license.SkuPartNumber)" -Type ERROR
@@ -2080,10 +2087,6 @@ $GraphCertSubject = $Config.Graph.CertificateSubject
 $PnPAppId = $config.PnPSharePoint.AppId
 $PnPUrl = $config.PnPSharePoint.Url
 $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
-$localExportPath = $config.Paths.TermExportPath
-$zoomClientId = $config.Zoom.ClientId
-$zoomClientSecret = $config.Zoom.ClientSecret
-$zoomAccountId = $config.Zoom.AccountId
 
 Connect-ServiceEndpoints -ExchangeOnline -Graph
 
@@ -2095,16 +2098,11 @@ if (-not $result) {
 }
 
 if ($result.TestModeEnabled -eq 'True') { $script:TestMode = $true }
-
-# Set variables with validation
-$User = $result.InputUser.Trim()
-
 # Optional fields - use $null for unset values
 $GrantUserFullControl = if ($result.InputUserFullControl) { $result.InputUserFullControl.Trim() } else { $null }
 $SetUserMailFWD = if ($result.InputUserFWD) { $result.InputUserFWD.Trim() } else { $null }
 $GrantUserOneDriveAccess = if ($result.InputUserOneDriveAccess) { $result.InputUserOneDriveAccess.Trim() } else { $null }
 $SetOneDriveReadOnly = $result.SetOneDriveReadOnly
-
 Write-StatusMessage -Message "Termination input collected successfully" -Type OK
 
 # Validate OneDrive access user if specified
@@ -2125,29 +2123,28 @@ if ($GrantUserOneDriveAccess) {
 # Step 2: User Input
 Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
 # Should this be a function in the New User Script?
-$userPropertiesPath = Join-Path $localExportPath "$($User)_Properties.csv"
-$adGroupsPath = Join-Path $localExportPath "$($User)_ADGroups.csv"
+$userPropertiesPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Properties.csv"
+$adGroupsPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_ADGroups.csv"
 $UserInfo = Get-TerminationPrerequisites `
-    -User $User `
+    -User $result.InputUser `
     -UserPropertiesPath $userPropertiesPath `
     -ADGroupsPath $adGroupsPath
 
 # Extract variables for use in the rest of the script
-$UserFromAD = $userInfo.UserFromAD
-$DestinationOU = $userInfo.DestinationOU
-$365Mailbox = $userInfo.Mailbox
-$MgUser = $userInfo.MgUser
 
 # Step 3: AD Tasks
 Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
-Disable-ADUser -UserFromAD $UserFromAD -DestinationOU $DestinationOU
+Disable-ADUser -UserFromAD $userInfo.selectUserFromAD -DestinationOU $userInfo.selectDestinationOU
 
 # Step 4: Azure/Entra Tasks
 Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
-Remove-UserSessions -UserPrincipalName $UserFromAD.UserPrincipalName
+Remove-UserSessions -User $UserInfo.selectMgUser
+
+# Step 5: Convert to SharedMailbox, Set forwarding/grant access
+Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
 
 $mailboxParams = @{
-    Mailbox = $365Mailbox
+    Mailbox = $userInfo.selectMailbox
 }
 
 # Only add these parameters if they exist and have values
@@ -2160,35 +2157,33 @@ if ($GrantUserFullControl) {
     $mailboxParams['GrantAccessTo'] = $GrantUserFullControl
 }
 
-# Step 5: Convert to SharedMailbox, Set forwarding/grant access
-Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
 Set-TerminatedMailbox @mailboxParams
 
 # Step 6: Remove Directory Roles
 Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
-Remove-UserFromEntraDirectoryRoles -UserId $MgUser.Id
+Remove-UserFromEntraDirectoryRoles -User $userInfo.selectMgUser
 
 # Step 7: Remove Groups
 Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
-$groupExportPath = Join-Path $localExportPath "$($User)_Groups_Id.csv"
-Remove-UserFromEntraGroups -UserId $MgUser.Id -ExportPath $groupExportPath
+$groupExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Groups_Id.csv"
+Remove-UserFromEntraGroups -User $userInfo.selectMgUser -ExportPath $groupExportPath
 
 # Step 8: Remove Licenses
 Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
-$licensePath = Join-Path $localExportPath "$($User)_License_Id.csv"
-Remove-UserLicenses -UserId $UserFromAD.UserPrincipalName -ExportPath $licensePath
+$licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
+Remove-UserLicenses -User $userInfo.selectMgUser -ExportPath $licensePath
 
 # Step 9: Remove from Zoom
 Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
-Remove-UserFromZoom -User $MgUser `
-    -ClientId $zoomClientId `
-    -ClientSecret $zoomClientSecret `
-    -AccountId $zoomAccountId
+Remove-UserFromZoom -User $userInfo.selectMgUser `
+    -ClientId $config.Zoom.ClientId `
+    -ClientSecret $config.Zoom.ClientSecret `
+    -AccountId $config.Zoom.AccountId
 
 #Step 10: Send Email Notification - SecurePath
 Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
 $emailSubject = "KB4 – Remove User"
-$emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)"
+$emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
 $MsgFrom = $config.Email.NotificationFrom
 $ToAddress = $config.Email.NotificationTo
 Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
@@ -2220,9 +2215,9 @@ if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
 # Step 13: Final Sync and Summary
 Write-ProgressStep -StepName $progressSteps[13].Name -Status $progressSteps[13].Description
 
-Start-ADSyncAndFinalize -User $MgUser `
-    -DestinationOU $DestinationOU `
+Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
+    -DestinationOU $userInfo.DestinationOU `
     -GrantUserFullControl $GrantUserFullControl `
     -SetUserMailFWD $SetUserMailFWD `
     -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
-    -ExportPath $localExportPath
+    -ExportPath $config.Paths.TermExportPath
