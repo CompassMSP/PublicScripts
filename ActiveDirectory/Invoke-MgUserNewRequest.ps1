@@ -2130,7 +2130,10 @@ function Add-UserToZoom {
         [string]$ClientSecret,
 
         [Parameter(Mandatory)]
-        [string]$AccountId
+        [string]$AccountId,
+
+        [Parameter()]
+        [string]$UserToCopy
     )
 
     try {
@@ -2683,7 +2686,7 @@ if ($MgUser) {
         Add-UserToZoom -User $MgUser `
             -ClientId $zoomClientId `
             -ClientSecret $zoomClientSecret `
-            -AccountId $zoomAccountId
+            -AccountId $zoomAccountId `
             -UserToCopy $MgUserCopyAD.mail
     }
 
