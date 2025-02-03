@@ -1765,7 +1765,11 @@ function Remove-UserFromZoom {
         [string]$ClientSecret,
 
         [Parameter(Mandatory)]
-        [string]$AccountId
+        [string]$AccountId,
+
+        [Parameter()]
+        [ValidateSet('delete', 'disassociate')]
+        [string]$Action = 'delete'
     )
 
     try {
@@ -1845,7 +1849,7 @@ function Remove-UserFromZoom {
             # Delete main Zoom user account
             Write-StatusMessage -Message "Deleting Zoom user account" -Type INFO
             $deleteZoomUserResponse = Invoke-WebRequest `
-                -Uri "https://api.zoom.us/v2/users/$($User.Mail)" `
+                -Uri "https://api.zoom.us/v2/users/$($User.Mail)?action=$Action" `
                 -Method DELETE `
                 -Headers $headers
 
@@ -1864,7 +1868,7 @@ function Remove-UserFromZoom {
         try {
             Write-StatusMessage -Message "Removing Zoom Enterprise App assignment" -Type INFO
             $ZoomSSO = Get-MgUserAppRoleAssignment -UserId $User.Id -ErrorAction Stop |
-                Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
+            Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
 
             if ($ZoomSSO) {
                 try {

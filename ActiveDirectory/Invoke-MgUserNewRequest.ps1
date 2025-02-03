@@ -1966,7 +1966,7 @@ function Wait-ForADUserSync {
 
                 # Try to get user
                 Write-StatusMessage -Message "Checking for user in Azure AD..." -Type INFO
-                $user = Get-MgUser -UserId $UserEmail -Property Id, Mail, DisplayName, Department, officeLocation | Select-Object Id, Mail, DisplayName, Department, officeLocation -ErrorAction Stop
+                $user = Get-MgUser -UserId $UserEmail -Property Id, Mail, DisplayName, GivenName, Surname, Department, officeLocation | Select-Object Id, Mail, DisplayName, GivenName, Surname, Department, officeLocation -ErrorAction Stop
                 if ($user) {
                     Write-StatusMessage -Message "User $UserEmail successfully synced to Azure AD" -Type OK
                     return $user
@@ -2133,7 +2133,10 @@ function Add-UserToZoom {
         [string]$AccountId,
 
         [Parameter()]
-        [string]$UserToCopy
+        [string]$UserToCopy,
+
+        [Parameter()]
+        [string]$Password
     )
 
     try {
@@ -2178,23 +2181,25 @@ function Add-UserToZoom {
             # Determine if user should have phone features based on department
             if ($User.Department -eq 'Reactive') {
                 $body = @{
-                    action    = "create"
+                    action    = "autoCreate"
                     user_info = @{
                         email        = $User.Mail
                         first_name   = $User.GivenName
                         last_name    = $User.Surname
                         display_name = $User.DisplayName
+                        password     = $Password
                         type         = 1
                     }
                 }
             } else {
                 $body = @{
-                    action    = "create"
+                    action    = "autoCreate"
                     user_info = @{
                         email        = $User.Mail
                         first_name   = $User.GivenName
                         last_name    = $User.Surname
                         display_name = $User.DisplayName
+                        password     = $Password
                         type         = 1
                         feature      = @{
                             zoom_phone = $true
@@ -2207,6 +2212,35 @@ function Add-UserToZoom {
 
             if ($response.StatusCode -eq 201) {
                 Write-StatusMessage -Message "Successfully created Zoom user via API" -Type OK
+
+                # Wait for user to be fully provisioned
+                Write-StatusMessage -Message "Waiting for Zoom user provisioning to complete" -Type INFO
+                $maxAttempts = 6  # Maximum number of attempts
+                $attempt = 0
+                $userProvisioned = $false
+
+                while (-not $userProvisioned -and $attempt -lt $maxAttempts) {
+                    try {
+                        $checkResponse = Invoke-WebRequest `
+                            -Uri "https://api.zoom.us/v2/users/$($User.Mail)" `
+                            -Method GET `
+                            -Headers $headers
+
+                        if ($checkResponse.StatusCode -eq 200) {
+                            $userProvisioned = $true
+                            Write-StatusMessage -Message "Zoom user provisioning completed" -Type OK
+                        }
+                    } catch {
+                        $attempt++
+                        if ($attempt -lt $maxAttempts) {
+                            Write-StatusMessage -Message "Waiting for user provisioning (attempt $attempt of $maxAttempts)" -Type INFO
+                            Start-Sleep -Seconds 5
+                        } else {
+                            Write-StatusMessage -Message "Timeout waiting for user provisioning" -Type ERROR
+                            return
+                        }
+                    }
+                }
             } else {
                 Write-StatusMessage -Message "Failed to create Zoom user. Status code: $($response.StatusCode)" -Type ERROR
                 return
@@ -2230,7 +2264,7 @@ function Add-UserToZoom {
             }
 
             $body = @{
-                user_email = $User.Mail
+                user_email  = $User.Mail
                 template_id = $null  # Will be set based on location
             }
 
@@ -2258,13 +2292,13 @@ function Add-UserToZoom {
 
                             if ($skillsResponse.StatusCode -eq 200) {
                                 $skillsContent = $skillsResponse.Content | ConvertFrom-Json
-                                $user_proficiency_level = $skillsContent.skills[0].max_proficiency_level
+                                $user_proficiency_level = $skillsContent.skills[0].user_proficiency_level
 
                                 # Set skills for new user
                                 $skillBody = @{
                                     skills = @(
                                         @{
-                                            skill_id = "sS21RNM2PSQOy8djVEbxang" # Tech Proficiency skill Id
+                                            skill_id              = "sS21RNM2PSQOy8djVEbxang" # Tech Proficiency skill Id
                                             max_proficiency_level = $user_proficiency_level
                                         }
                                     )
@@ -2289,8 +2323,7 @@ function Add-UserToZoom {
                             Write-StatusMessage -Message "Failed to copy skill proficiency: $_" -Type ERROR
                         }
                     }
-                }
-                catch {
+                } catch {
                     Write-StatusMessage -Message "Failed to provision Contact Center: $_" -Type ERROR
                     return
                 }
@@ -2687,7 +2720,8 @@ if ($MgUser) {
             -ClientId $zoomClientId `
             -ClientSecret $zoomClientSecret `
             -AccountId $zoomAccountId `
-            -UserToCopy $MgUserCopyAD.mail
+            -UserToCopy $MgUserCopyAD.mail `
+            -Password $passwordResult.PlainPassword
     }
 
     # Step 13: Cleanup and Summary
