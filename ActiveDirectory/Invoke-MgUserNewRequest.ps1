@@ -1206,11 +1206,11 @@ function Get-NewUserRequestInput {
     $zoomLicenses = @(
         [PSCustomObject]@{
             DisplayName = "Zoom Basic"
-            Value = "false"
+            Value       = "false"
         },
         [PSCustomObject]@{
             DisplayName = "Zoom Workplace"
-            Value = "true"
+            Value       = "true"
         }
     )
 
@@ -1236,14 +1236,14 @@ function Get-NewUserRequestInput {
 
     # Add event handler for checkbox
     $zoomUserCheckBox.Add_Checked({
-        $zoomComboBox.IsEnabled = $true
-        $zoomComboBox.SelectedIndex = 0  # Select Basic when re-enabled
-    })
+            $zoomComboBox.IsEnabled = $true
+            $zoomComboBox.SelectedIndex = 0  # Select Basic when re-enabled
+        })
 
     $zoomUserCheckBox.Add_Unchecked({
-        $zoomComboBox.IsEnabled = $false
-        $zoomComboBox.SelectedIndex = -1
-    })
+            $zoomComboBox.IsEnabled = $false
+            $zoomComboBox.SelectedIndex = -1
+        })
 
     $mainPanel.Children.Add($zoomSection.Group)
 
@@ -1427,8 +1427,8 @@ function Get-NewUserRequestInput {
             TestModeEnabled        = ($testModeButton.IsChecked -eq $true)
             ZoomUserEnabled        = ($zoomUserCheckBox.IsChecked -eq $true)
             IsWorkPlaceLicense     = ($zoomUserCheckBox.IsChecked -and
-                                    $zoomComboBox.SelectedItem -and
-                                    $zoomComboBox.SelectedItem.DisplayName -eq 'Zoom Workplace')
+                $zoomComboBox.SelectedItem -and
+                $zoomComboBox.SelectedItem.DisplayName -eq 'Zoom Workplace')
         }
     } else {
         return $null
@@ -2785,22 +2785,22 @@ if ($MgUser) {
     Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
     if ($userInput.ZoomUserEnabled) {
 
-            $zoomParams = @{
-                User         = $MgUser
-                ClientId     = $config.Zoom.ClientId
-                ClientSecret = $config.Zoom.ClientSecret
-                AccountId    = $config.Zoom.AccountId
-                UserToCopy   = $MgUserCopyAD.mail
-                Password     = $passwordResult.PlainPassword
-            }
+        $zoomParams = @{
+            User         = $MgUser
+            ClientId     = $config.Zoom.ClientId
+            ClientSecret = $config.Zoom.ClientSecret
+            AccountId    = $config.Zoom.AccountId
+            UserToCopy   = $MgUserCopyAD.mail
+            Password     = $passwordResult.PlainPassword
+        }
 
-            # Add IsWorkPlaceLicense parameter only if true
-            if ($userInput.IsWorkPlaceLicense) {
-                $zoomParams['IsWorkPlaceLicense'] = 'true'
-            }
+        # Add IsWorkPlaceLicense parameter only if true
+        if ($userInput.IsWorkPlaceLicense) {
+            $zoomParams['IsWorkPlaceLicense'] = 'true'
+        }
 
-            # Call function with splatted parameters
-            Add-UserToZoom @zoomParams
+        # Call function with splatted parameters
+        Add-UserToZoom @zoomParams
     }
 
     # Step 13: Cleanup and Summary
