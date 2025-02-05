@@ -1198,6 +1198,7 @@ function Get-NewUserRequestInput {
         'Eastern Standard Time',
         'Central Standard Time',
         'Mountain Standard Time',
+        'US Mountain Standard Time (Arizona)',
         'Pacific Standard Time'
     )
 
@@ -2276,8 +2277,13 @@ function Add-UserToZoom {
         [string]$IsWorkPlaceLicense,
 
         [Parameter()]
-        [string]$TimeZone
+        [string]$TimeZone,
+
+        [Parameter()]
+        [hashtable]$ContactCenterTemplateMap
     )
+
+    $isContactCenter = $User.Department -eq 'Reactive'
 
     function Get-ZoomTimeZoneMapping {
         param (
@@ -2287,57 +2293,57 @@ function Add-UserToZoom {
 
         # Define the mapping between Microsoft TimeZone format and Zoom TimeZone IDs
         $timeZoneMap = @{
-            "Midway Island, Samoa"           = "Pacific/Midway"
-            "Hawaiian Standard Time"         = "Pacific/Honolulu"
-            "Alaskan Standard Time"          = "America/Anchorage"
-            "Pacific Standard Time"          = "America/Los_Angeles"
-            "Pacific Standard Time (Mexico)" = "America/Tijuana"
-            "Mountain Standard Time"         = "America/Denver"
-            "US Mountain Standard Time"      = "America/Phoenix"
-            "Mountain Standard Time (Mexico)"= "America/Mazatlan"
-            "Central Standard Time"          = "America/Chicago"
-            "Canada Central Standard Time"   = "America/Regina"
-            "Central Standard Time (Mexico)" = "America/Mexico_City"
-            "Central America Standard Time"  = "America/Guatemala"
-            "Eastern Standard Time"          = "America/New_York"
-            "US Eastern Standard Time"       = "America/Indianapolis"
-            "SA Pacific Standard Time"       = "America/Bogota"
-            "Atlantic Standard Time"         = "America/Halifax"
-            "Venezuela Standard Time"        = "America/Caracas"
-            "Pacific SA Standard Time"       = "America/Santiago"
-            "Newfoundland Standard Time"     = "America/St_Johns"
-            "Montevideo Standard Time"       = "America/Montevideo"
-            "E. South America Standard Time" = "America/Sao_Paulo"
-            "Argentina Standard Time"        = "America/Argentina/Buenos_Aires"
-            "Greenland Standard Time"        = "America/Godthab"
-            "Azores Standard Time"           = "Atlantic/Azores"
-            "Cape Verde Standard Time"       = "Atlantic/Cape_Verde"
-            "UTC"                            = "UTC"
-            "GMT Standard Time"              = "Europe/London"
-            "Morocco Standard Time"          = "Africa/Casablanca"
-            "W. Europe Standard Time"        = "Europe/Berlin"
-            "Romance Standard Time"          = "Europe/Paris"
-            "Central European Standard Time" = "Europe/Warsaw"
-            "GTB Standard Time"              = "Europe/Athens"
-            "Turkey Standard Time"           = "Europe/Istanbul"
-            "Middle East Standard Time"      = "Asia/Beirut"
-            "Israel Standard Time"           = "Asia/Jerusalem"
-            "Egypt Standard Time"            = "Africa/Cairo"
-            "South Africa Standard Time"     = "Africa/Johannesburg"
-            "Russian Standard Time"          = "Europe/Moscow"
-            "Arabic Standard Time"           = "Asia/Baghdad"
-            "Arabian Standard Time"          = "Asia/Dubai"
-            "Iran Standard Time"             = "Asia/Tehran"
-            "Afghanistan Standard Time"      = "Asia/Kabul"
-            "India Standard Time"            = "Asia/Kolkata"
-            "Nepal Standard Time"            = "Asia/Kathmandu"
-            "Bangladesh Standard Time"       = "Asia/Dhaka"
-            "SE Asia Standard Time"          = "Asia/Bangkok"
-            "China Standard Time"            = "Asia/Shanghai"
-            "Tokyo Standard Time"            = "Asia/Tokyo"
-            "AUS Eastern Standard Time"      = "Australia/Sydney"
-            "Fiji Standard Time"             = "Pacific/Fiji"
-            "New Zealand Standard Time"      = "Pacific/Auckland"
+            "Midway Island, Samoa"            = "Pacific/Midway"
+            "Hawaiian Standard Time"          = "Pacific/Honolulu"
+            "Alaskan Standard Time"           = "America/Anchorage"
+            "Pacific Standard Time"           = "America/Los_Angeles"
+            "Pacific Standard Time (Mexico)"  = "America/Tijuana"
+            "Mountain Standard Time"          = "America/Denver"
+            "US Mountain Standard Time"       = "America/Phoenix"
+            "Mountain Standard Time (Mexico)" = "America/Mazatlan"
+            "Central Standard Time"           = "America/Chicago"
+            "Canada Central Standard Time"    = "America/Regina"
+            "Central Standard Time (Mexico)"  = "America/Mexico_City"
+            "Central America Standard Time"   = "America/Guatemala"
+            "Eastern Standard Time"           = "America/New_York"
+            "US Eastern Standard Time"        = "America/Indianapolis"
+            "SA Pacific Standard Time"        = "America/Bogota"
+            "Atlantic Standard Time"          = "America/Halifax"
+            "Venezuela Standard Time"         = "America/Caracas"
+            "Pacific SA Standard Time"        = "America/Santiago"
+            "Newfoundland Standard Time"      = "America/St_Johns"
+            "Montevideo Standard Time"        = "America/Montevideo"
+            "E. South America Standard Time"  = "America/Sao_Paulo"
+            "Argentina Standard Time"         = "America/Argentina/Buenos_Aires"
+            "Greenland Standard Time"         = "America/Godthab"
+            "Azores Standard Time"            = "Atlantic/Azores"
+            "Cape Verde Standard Time"        = "Atlantic/Cape_Verde"
+            "UTC"                             = "UTC"
+            "GMT Standard Time"               = "Europe/London"
+            "Morocco Standard Time"           = "Africa/Casablanca"
+            "W. Europe Standard Time"         = "Europe/Berlin"
+            "Romance Standard Time"           = "Europe/Paris"
+            "Central European Standard Time"  = "Europe/Warsaw"
+            "GTB Standard Time"               = "Europe/Athens"
+            "Turkey Standard Time"            = "Europe/Istanbul"
+            "Middle East Standard Time"       = "Asia/Beirut"
+            "Israel Standard Time"            = "Asia/Jerusalem"
+            "Egypt Standard Time"             = "Africa/Cairo"
+            "South Africa Standard Time"      = "Africa/Johannesburg"
+            "Russian Standard Time"           = "Europe/Moscow"
+            "Arabic Standard Time"            = "Asia/Baghdad"
+            "Arabian Standard Time"           = "Asia/Dubai"
+            "Iran Standard Time"              = "Asia/Tehran"
+            "Afghanistan Standard Time"       = "Asia/Kabul"
+            "India Standard Time"             = "Asia/Kolkata"
+            "Nepal Standard Time"             = "Asia/Kathmandu"
+            "Bangladesh Standard Time"        = "Asia/Dhaka"
+            "SE Asia Standard Time"           = "Asia/Bangkok"
+            "China Standard Time"             = "Asia/Shanghai"
+            "Tokyo Standard Time"             = "Asia/Tokyo"
+            "AUS Eastern Standard Time"       = "Australia/Sydney"
+            "Fiji Standard Time"              = "Pacific/Fiji"
+            "New Zealand Standard Time"       = "Pacific/Auckland"
         }
 
         # Return the mapped Zoom time zone or a default message if not found
@@ -2349,14 +2355,14 @@ function Add-UserToZoom {
 
         # Obtain Zoom API Bearer Token
         $tokenParams = @{
-            Uri = "https://zoom.us/oauth/token"
-            Method = 'POST'
+            Uri         = "https://zoom.us/oauth/token"
+            Method      = 'POST'
             ContentType = "application/x-www-form-urlencoded"
-            Body = @{
+            Body        = @{
                 grant_type = 'account_credentials'
                 account_id = $AccountId
             }
-            Headers = @{
+            Headers     = @{
                 Authorization = "Basic $([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$ClientId`:$ClientSecret")))"
             }
             ErrorAction = 'Stop'
@@ -2368,7 +2374,7 @@ function Add-UserToZoom {
             Write-StatusMessage -Message "Successfully obtained Zoom API token" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to get Zoom API token: $_" -Type ERROR
-            return
+            return $false
         }
 
         # Prepare headers for API requests
@@ -2378,7 +2384,7 @@ function Add-UserToZoom {
         }
 
         # Define base user structure
-        $body = @{
+        $createBody = @{
             action    = "autoCreate"
             user_info = @{
                 email        = $User.Mail
@@ -2392,29 +2398,29 @@ function Add-UserToZoom {
 
         # Adjust features based on conditions
         if ($IsWorkPlaceLicense -eq 'true') {
-            $body.user_info.type = 2
-            $body.user_info.feature = @{
+            $createBody.user_info.type = 2
+            $createBody.user_info.feature = @{
                 zoom_phone    = $true
                 zoom_one_type = 16
             }
         } elseif ($User.Department -ne 'Reactive') {
-            $body.user_info.feature = @{
+            $createBody.user_info.feature = @{
                 zoom_phone = $true
             }
         }
 
         # Create Zoom User
         try {
-            $response = Invoke-WebRequest -Uri "https://api.zoom.us/v2/users" -Method POST -Headers $headers -Body ($body | ConvertTo-Json -Depth 3)
-            if ($response.StatusCode -eq 201) {
+            $createResponse = Invoke-WebRequest -Uri "https://api.zoom.us/v2/users" -Method POST -Headers $headers -Body ($createBody | ConvertTo-Json -Depth 3)
+            if ($createResponse.StatusCode -eq 201) {
                 Write-StatusMessage -Message "Successfully created Zoom user: $($User.Mail)" -Type OK
             } else {
-                Write-StatusMessage -Message "Failed to create Zoom user. Status code: $($response.StatusCode)" -Type ERROR
-                return
+                Write-StatusMessage -Message "Failed to create Zoom user. Status code: $($createResponse.StatusCode)" -Type ERROR
+                return $false
             }
         } catch {
             Write-StatusMessage -Message "Error creating Zoom user: $_" -Type ERROR
-            return
+            return $false
         }
 
         # Wait for provisioning to complete
@@ -2423,7 +2429,7 @@ function Add-UserToZoom {
         $waitSeconds = 5
         $userCheckUri = "https://api.zoom.us/v2/users/$($User.Mail)"
 
-        while ($attempt -lt $maxAttempts) {
+        do {
             try {
                 $checkResponse = Invoke-WebRequest -Uri $userCheckUri -Method GET -Headers $headers -ErrorAction Stop
                 if ($checkResponse.StatusCode -eq 200) {
@@ -2432,14 +2438,14 @@ function Add-UserToZoom {
                 }
             } catch {
                 $attempt++
-                if ($attempt -eq $maxAttempts) {
+                if ($attempt -ge $maxAttempts) {
                     Write-StatusMessage -Message "Timeout waiting for user provisioning after $($maxAttempts * $waitSeconds) seconds" -Type ERROR
-                    return
+                    return $false
                 }
-                Write-StatusMessage -Message "Waiting for user provisioning (attempt $attempt of $maxAttempts)" -Type INFO
-                Start-Sleep -Seconds $waitSeconds
+                Write-StatusMessage -Message "Waiting for user provisioning (attempt $attempt of $maxAttempts)..." -Type INFO
+                Start-Sleep -Seconds ($waitSeconds * $attempt)  # Exponential backoff
             }
-        }
+        } while ($true)
 
         # Update TimeZone
         if ($TimeZone) {
@@ -2459,24 +2465,15 @@ function Add-UserToZoom {
         # Assign Calling Plan or Contact Center
         if ($IsWorkPlaceLicense -eq 'true') {
             Write-StatusMessage -Message "User has Workplace license. No additional calling plan needed." -Type OK
-        } elseif ($User.Department -eq 'Reactive') {
+        } elseif ($isContactCenter) {
             Write-StatusMessage -Message "Assigning Contact Center license and assigning queue for $($User.Mail)" -Type INFO
 
-            $templateMap = @{
-                'South Florida' = "unIR_2-xQemLQ9pfvDKk3w"
-                'Northeast'     = "-Pil2tjcRaOTaIl6LUV_6g"
-                'North Florida' = "nQdKAwkhRh-ds0Yvp7QKsw"
-                'Mid-West'      = "ySmugPJ0Qc6O3IaWHi9jHA"
-                'Mid-Atlantic'  = "K-6ajeNsS4KJRf-6xfRnaA"
-            }
-
-            if ($templateMap.ContainsKey($User.officeLocation)) {
-
-                $templateId = $templateMap[$User.officeLocation]
+            if ($ContactCenterTemplateMap.ContainsKey($User.officeLocation)) {
+                $templateId = $ContactCenterTemplateMap[$User.officeLocation]
 
                 try {
-                    $body = @{ user_email = $User.Mail; template_id = $templateId } | ConvertTo-Json
-                    Invoke-WebRequest -Uri "https://api.zoom.us/v2/contact_center/users" -Method POST -Headers $headers -Body $body
+                    $contantCenterBody = @{ user_email = $User.Mail; template_id = $templateId } | ConvertTo-Json
+                    Invoke-WebRequest -Uri "https://api.zoom.us/v2/contact_center/users" -Method POST -Headers $headers -Body $contantCenterBody
                     Write-StatusMessage -Message "Contact Center successfully provisioned for $($User.Mail)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to provision Contact Center: $_" -Type ERROR
@@ -2495,32 +2492,38 @@ function Add-UserToZoom {
             if ($skillsResponse.StatusCode -eq 200) {
                 $skillsContent = $skillsResponse.Content | ConvertFrom-Json
 
-                if ($skillsContent.skills.Count -gt 0) {
+                # Check number of skills
+                if ($skillsContent.skills.Count -eq 1) {
+                    # Handle single skill case
                     $skillBody = @{
-                        skills = $skillsContent.skills | ForEach-Object {
+                        skills = @(
                             @{
-                                skill_id              = $_.skill_id
-                                max_proficiency_level = $_.user_proficiency_level
+                                skill_id              = $skillsContent.skills[0].skill_id
+                                max_proficiency_level = $skillsContent.skills[0].user_proficiency_level
                             }
+                        )
+                    }
+
+                    # Set single skill for new user
+                    try {
+                        $setSkillResponse = Invoke-WebRequest `
+                            -Uri "https://api.zoom.us/v2/contact_center/users/$($User.Mail)/skills" `
+                            -Method POST `
+                            -Headers $headers `
+                            -ContentType 'application/json' `
+                            -Body ($skillBody | ConvertTo-Json -Depth 2)
+
+                        if ($setSkillResponse.StatusCode -eq 201) {
+                            Write-StatusMessage -Message "Single skill successfully set for $($User.Mail)" -Type OK
                         }
+                    } catch {
+                        Write-StatusMessage -Message "Failed to set skill for $($User.Mail): $_" -Type ERROR
                     }
-
-                    # Set skills for new user
-                    $setSkillResponse = Invoke-WebRequest `
-                        -Uri "https://api.zoom.us/v2/contact_center/users/$($User.Mail)/skills" `
-                        -Method POST `
-                        -Headers $headers `
-                        -ContentType 'application/json' `
-                        -Body ($skillBody | ConvertTo-Json -Depth 2)
-
-                    if ($setSkillResponse.StatusCode -eq 201) {
-                        Write-StatusMessage -Message "Skills successfully set for $($User.Mail)" -Type OK
-                    }
+                } elseif ($skillsContent.skills.Count -gt 1) {
+                    Write-StatusMessage -Message "Multiple skills found for template user $UserToCopy. Only single skill assignments are supported." -Type ERROR
                 } else {
-                    Write-StatusMessage -Message "No skills found for template user $UserToCopy" -Type WARN
+                    Write-StatusMessage -Message "No skills found for template user $UserToCopy" -Type ERROR
                 }
-            } else {
-                Write-StatusMessage -Message "Failed to retrieve skills for template user $UserToCopy. Status Code: $($skillsResponse.StatusCode)" -Type ERROR
             }
         } else {
             Write-StatusMessage -Message "Assigning US/CA Unlimited Calling Plan to $($User.Mail)" -Type INFO
@@ -2539,8 +2542,12 @@ function Add-UserToZoom {
                 Write-StatusMessage -Message "Failed to assign calling plan: $_" -Type ERROR
             }
         }
+
+        # Return true if everything completed successfully
+        return $true
     } catch {
         Write-StatusMessage -Message "Unexpected error in Add-UserToZoom: $_" -Type ERROR
+        return $false
     }
 }
 
@@ -2642,7 +2649,6 @@ function Add-UserToZoomSSO {
         Write-StatusMessage -Message "Error starting Zoom sync: $_" -Type ERROR
     }
 }
-
 
 function Set-UserBookWithMeId {
     [CmdletBinding()]
@@ -2882,6 +2888,7 @@ if ($MgUser) {
 
     # Set Timezone after license
     Write-StatusMessage -Message "Setting Timezone for new user" -Type INFO
+    if ($userInput.TimeZone -eq 'US Mountain Standard Time (Arizona)') { $userinput.TimeZone = 'US Mountain Standard Time' }
     Set-MailboxRegionalConfiguration -Identity $($MgUser.Mail) -TimeZone $userinput.TimeZone
 
     # Step 8: Entra Group Copy
@@ -2936,19 +2943,39 @@ if ($MgUser) {
             $zoomParams['IsWorkPlaceLicense'] = 'true'
         }
 
-        # Call function with splatted parameters
-        Add-UserToZoom @zoomParams
-
-        $zoomSSOParams = @{
-            User         = $MgUser
+        # Add Contact Center template map only if user is in Reactive department
+        if ($MgUser.Department -eq 'Reactive') {
+            $zoomParams['ContactCenterTemplateMap'] = @{
+                'South Florida' = "unIR_2-xQemLQ9pfvDKk3w"
+                'Northeast'     = "-Pil2tjcRaOTaIl6LUV_6g"
+                'North Florida' = "nQdKAwkhRh-ds0Yvp7QKsw"
+                'Mid-West'      = "ySmugPJ0Qc6O3IaWHi9jHA"
+                'Mid-Atlantic'  = "K-6ajeNsS4KJRf-6xfRnaA"
+            }
         }
 
-        # Add IsWorkPlaceLicense parameter only if true
-        if ($userInput.IsWorkPlaceLicense) {
-            $zoomSSOParams['IsWorkPlaceLicense'] = 'true'
-        }
+        # Call function with splatted parameters and capture the result
+        try {
+            $zoomUserCreated = Add-UserToZoom @zoomParams
 
-        Add-UserToZoomSSO @zoomSSOParams
+            # Only proceed with SSO if Zoom user creation was successful
+            if ($zoomUserCreated) {
+
+                Write-StatusMessage -Message "Zoom user created successfully" -Type OK
+
+                $zoomSSOParams = @{
+                    User = $MgUser
+                }
+
+                if ($userInput.IsWorkPlaceLicense) {
+                    $zoomSSOParams['IsWorkPlaceLicense'] = 'true'
+                }
+
+                Add-UserToZoomSSO @zoomSSOParams
+            }
+        } catch {
+            Write-StatusMessage -Message "Failed to create Zoom user: $_" -Type ERROR
+        }
     }
 
     # Step 13: Cleanup and Summary
