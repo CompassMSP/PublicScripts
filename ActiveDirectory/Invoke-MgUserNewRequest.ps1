@@ -780,6 +780,10 @@ function Get-NewUserRequestInput {
         Returns $null if the user cancels the operation.
         #>
 
+    # Window dimensions
+    $setWindowHeight = 790
+    $setWindowWidth = 570  # Default width value
+
     # 1. Add required assemblies
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
 
@@ -820,7 +824,7 @@ function Get-NewUserRequestInput {
     function New-FormWindow {
         param (
             [string]$Title,
-            [int]$Width = 500,
+            [int]$Width,
             [int]$Height,
             [string]$Background = '#F0F0F0'
         )
@@ -1147,8 +1151,11 @@ function Get-NewUserRequestInput {
         "Teams Premium (for Departments)"
     )
 
-    # Create window and main containers
-    $window = New-FormWindow -Title "New User Request" -Height 950
+    # Create the main window
+    $window = New-FormWindow `
+        -Title "New User Request" `
+        -Width $setWindowWidth `
+        -Height $setWindowHeight
     $scrollViewer = New-FormScrollViewer
     $mainPanel = New-MainPanel -Margin '10'
     $scrollViewer.Content = $mainPanel
@@ -1159,45 +1166,118 @@ function Get-NewUserRequestInput {
 
     # New User section
     $newUserSection = New-FormGroupBox -Header "New User Information"
-    $newUserSection.Stack.Children.Add((New-FormLabel -Content "New User Name (First Last) *"))
+
+    # Create horizontal panel for name and timezone
+    $nameAndTzPanel = New-Object System.Windows.Controls.StackPanel
+    $nameAndTzPanel.Orientation = 'Horizontal'
+    $nameAndTzPanel.Margin = '0,0,0,10'
+
+    # Name input (left side)
+    $nameStack = New-Object System.Windows.Controls.StackPanel
+    $nameStack.Width = 240
+    $nameStack.Margin = '0,0,10,0'
+    $nameStack.Children.Add((New-FormLabel -Content "New User Name (First Last) *"))
     $newUserTextBox = Initialize-InputTextBox `
         -Name "newUser" `
         -PlaceholderText "Enter first and last name" `
         -ToolTipText "Enter the full name of the new user (e.g., John Smith)"
-    $newUserSection.Stack.Children.Add($newUserTextBox)
-    $mainPanel.Children.Add($newUserSection.Group)
+    $nameStack.Children.Add($newUserTextBox)
+    $nameAndTzPanel.Children.Add($nameStack)
 
-    # Template User section
-    $copyUserSection = New-FormGroupBox -Header "Template User Information"
-    $copyUserSection.Stack.Children.Add((New-FormLabel -Content "User To Copy (First Last) *"))
-    $userToCopyTextBox = Initialize-InputTextBox `
-        -Name "userToCopy" `
-        -PlaceholderText "Enter template user's name" `
-        -ToolTipText "Enter the name of an existing user whose permissions should be copied"
-    $copyUserSection.Stack.Children.Add($userToCopyTextBox)
-    $mainPanel.Children.Add($copyUserSection.Group)
+    # Timezone input (right side)
+    $tzStack = New-Object System.Windows.Controls.StackPanel
+    $tzStack.Width = 240
+    $tzStack.Children.Add((New-FormLabel -Content "Time Zone *"))
 
-    # Mobile section
-    $mobileSection = New-FormGroupBox -Header "Contact Information"
-    $mobileSection.Stack.Children.Add((New-FormLabel -Content "Mobile Number"))
+    $timezoneComboBox = New-FormComboBox `
+        -ToolTip "Select the user's time zone" `
+        -DisplayMemberPath "DisplayName"
+
+    # Add timezone options
+    $selectTimeZone = @(
+        'Eastern Standard Time',
+        'Central Standard Time',
+        'Mountain Standard Time',
+        'Pacific Standard Time'
+    )
+
+    foreach ($tz in $selectTimeZone) {
+        $timezoneComboBox.Items.Add([PSCustomObject]@{
+                DisplayName = $tz
+                Value       = $tz
+            })
+    }
+
+    # Pre-select Eastern Time
+    $timezoneComboBox.SelectedIndex = 0
+    $tzStack.Children.Add($timezoneComboBox)
+    $nameAndTzPanel.Children.Add($tzStack)
+
+    # Add the name and timezone panel to the section
+    $newUserSection.Stack.Children.Add($nameAndTzPanel)
+
+    # Create horizontal panel for mobile and zoom
+    $mobileAndZoomPanel = New-Object System.Windows.Controls.StackPanel
+    $mobileAndZoomPanel.Orientation = 'Horizontal'
+    $mobileAndZoomPanel.Margin = '0,0,0,10'
+
+    # Mobile input (left side)
+    $mobileStack = New-Object System.Windows.Controls.StackPanel
+    $mobileStack.Width = 240
+    $mobileStack.Margin = '0,0,10,0'
+
+    # Create horizontal panel for mobile label and bypass checkbox
+    $mobileLabelPanel = New-Object System.Windows.Controls.DockPanel
+
+    # Add mobile label
+    $mobileLabel = New-FormLabel -Content "Mobile Number"
+    $mobileLabel.VerticalAlignment = 'Center'
+    [System.Windows.Controls.DockPanel]::SetDock($mobileLabel, 'Left')
+    $mobileLabelPanel.Children.Add($mobileLabel)
+
+    # Add bypass formatting checkbox
+    $bypassFormattingCheckBox = New-FormCheckBox `
+        -Content "Bypass" `
+        -ToolTip "Check this box to skip automatic formatting of the mobile number" `
+        -Margin "10,0,0,0"
+    $bypassFormattingCheckBox.VerticalAlignment = 'Center'
+    [System.Windows.Controls.DockPanel]::SetDock($bypassFormattingCheckBox, 'Right')
+    $mobileLabelPanel.Children.Add($bypassFormattingCheckBox)
+
+    $mobileStack.Children.Add($mobileLabelPanel)
+
     $mobileTextBox = Initialize-InputTextBox `
         -Name "mobile" `
         -PlaceholderText "Enter 10-digit mobile number" `
         -ToolTipText "Enter a 10-digit mobile number (e.g., 1234567890)"
-    $mobileSection.Stack.Children.Add($mobileTextBox)
+    $mobileStack.Children.Add($mobileTextBox)
+    $mobileAndZoomPanel.Children.Add($mobileStack)
 
-    $bypassPanel = New-FormDockPanel -Margin "0,0,0,5"
-    $bypassFormattingCheckBox = New-FormCheckBox `
-        -Content "Bypass Mobile Number Formatting" `
-        -ToolTip "Check this box to skip automatic formatting of the mobile number" `
-        -Margin "0,5,0,5"
-    $bypassFormattingCheckBox.VerticalAlignment = 'Center'
-    $bypassPanel.Children.Add($bypassFormattingCheckBox)
-    $mobileSection.Stack.Children.Add($bypassPanel)
-    $mainPanel.Children.Add($mobileSection.Group)
+    # Zoom side (right)
+    $zoomStack = New-Object System.Windows.Controls.StackPanel
+    $zoomStack.Width = 240
 
-    # Zoom License Section (only visible if Zoom User is checked)
-    $zoomSection = New-FormGroupBox -Header "Zoom License Type"
+    # Create header panel with checkbox
+    $zoomHeaderPanel = New-Object System.Windows.Controls.DockPanel
+
+    # Add zoom label
+    $zoomLabel = New-FormLabel -Content "Zoom Phone"
+    $zoomLabel.VerticalAlignment = 'Center'
+    [System.Windows.Controls.DockPanel]::SetDock($zoomLabel, 'Left')
+
+    # Add enable checkbox
+    $zoomUserCheckBox = New-FormCheckBox `
+        -Content "Enable" `
+        -ToolTip "Enable to create Zoom account for user" `
+        -IsChecked $true `
+        -Margin "10,0,0,0"
+    $zoomUserCheckBox.VerticalAlignment = 'Center'
+    [System.Windows.Controls.DockPanel]::SetDock($zoomUserCheckBox, 'Right')
+
+    $zoomHeaderPanel.Children.Add($zoomLabel)
+    $zoomHeaderPanel.Children.Add($zoomUserCheckBox)
+    $zoomStack.Children.Add($zoomHeaderPanel)
+
     $zoomComboBox = New-FormComboBox `
         -ToolTip "Select the type of Zoom license for the user" `
         -DisplayMemberPath "DisplayName"
@@ -1218,15 +1298,7 @@ function Get-NewUserRequestInput {
         $zoomComboBox.Items.Add($license)
     }
 
-    # Create a panel for Zoom options
-    $zoomPanel = New-FormDockPanel
-
-    # Add zoom user checkbox - now enabled by default
-    $zoomUserCheckBox = New-FormCheckBox -Content "Enable Zoom" -ToolTip "Enable to create Zoom account for user" -IsChecked $true -Margin "0,5,10,5"
-
-    $zoomPanel.Children.Add($zoomUserCheckBox)
-    $zoomSection.Stack.Children.Add($zoomPanel)
-    $zoomSection.Stack.Children.Add($zoomComboBox)
+    $zoomStack.Children.Add($zoomComboBox)
 
     # Enable the combo box since checkbox is checked by default
     $zoomComboBox.IsEnabled = $true
@@ -1245,7 +1317,23 @@ function Get-NewUserRequestInput {
             $zoomComboBox.SelectedIndex = -1
         })
 
-    $mainPanel.Children.Add($zoomSection.Group)
+    $mobileAndZoomPanel.Children.Add($zoomStack)
+
+    # Add the mobile and zoom panel to the new user section
+    $newUserSection.Stack.Children.Add($mobileAndZoomPanel)
+
+    # Add the new user section to the main panel
+    $mainPanel.Children.Add($newUserSection.Group)
+
+    # Template User section
+    $copyUserSection = New-FormGroupBox -Header "Template User Information"
+    $copyUserSection.Stack.Children.Add((New-FormLabel -Content "User To Copy (First Last) *"))
+    $userToCopyTextBox = Initialize-InputTextBox `
+        -Name "userToCopy" `
+        -PlaceholderText "Enter template user's name" `
+        -ToolTipText "Enter the name of an existing user whose permissions should be copied"
+    $copyUserSection.Stack.Children.Add($userToCopyTextBox)
+    $mainPanel.Children.Add($copyUserSection.Group)
 
     # Required License Section
     $requiredSection = New-FormGroupBox -Header "365:Required License (Select One) *"
@@ -1310,8 +1398,7 @@ function Get-NewUserRequestInput {
     # Add test mode checkbox to button panel
     $testModeButton = New-FormCheckBox `
         -Content "Test Mode" `
-        -ToolTip "Enable to redirect emails to: $($config.TestMode.Email)" `
-        -IsChecked ($script:TestMode -eq $true) `
+        -ToolTip "Enable to redirect emails to: $($config.TestMode.Email)" -IsChecked ($script:TestMode -eq $true) `
         -Margin "0,5,10,0"
 
     $buttonPanel.Children.Add($testModeButton)
@@ -1338,11 +1425,13 @@ function Get-NewUserRequestInput {
         }
 
         # Validate Mobile Number
-        if ($mobileTextBox.Text -ne $mobileTextBox.Tag -and -not $bypassFormattingCheckBox.IsChecked) {
-            $formattedNumber = Format-MobileNumber $mobileTextBox.Text
-            if ($null -eq $formattedNumber) {
-                Show-ValidationError -Message "Invalid mobile number format. Please enter a valid 10-digit mobile number."
-                return
+        if ($mobileTextBox.Text -ne $mobileTextBox.Tag) {
+            if (-not $bypassFormattingCheckBox.IsChecked) {
+                $tempFormatted = Format-MobileNumber $mobileTextBox.Text
+                if ($null -eq $tempFormatted) {
+                    Show-ValidationError -Message "Invalid mobile number format. Please enter a valid 10-digit mobile number."
+                    return
+                }
             }
         }
 
@@ -1375,6 +1464,12 @@ function Get-NewUserRequestInput {
             }
         }
 
+        # Validate timezone selection
+        if ($null -eq $timezoneComboBox.SelectedItem) {
+            Show-ValidationError -Message "Please select a time zone." -Title "Time Zone Required"
+            return
+        }
+
         # Get selected licenses
         $script:selectedLicenses = @()
         $script:selectedLicenses += $requiredComboBox.SelectedItem.SkuId
@@ -1396,22 +1491,12 @@ function Get-NewUserRequestInput {
     # Show the window
     $result = $window.ShowDialog()
 
-    # Initialize formattedMobile variable
-    $formattedMobile = $null
-    if ($mobileTextBox.Text -ne $mobileTextBox.Tag) {
-        # Only process if not placeholder text
-        if (-not $bypassFormattingCheckBox.IsChecked) {
-            $formattedMobile = Format-MobileNumber $mobileTextBox.Text
-        } else {
-            $formattedMobile = $mobileTextBox.Text  # Use the unformatted mobile number
-        }
-    }
-
     if ($result -eq $true) {
         return @{
             InputNewUser           = $newUserTextBox.Text
-            InputNewMobile         = $formattedMobile
+            InputNewMobile         = $mobileTextBox.Text
             InputUserToCopy        = $userToCopyTextBox.Text
+            TimeZone               = $timezoneComboBox.SelectedItem.Value
             InputRequiredLicense   = @{
                 SkuId       = $requiredComboBox.SelectedItem.SkuId
                 DisplayName = $requiredComboBox.SelectedItem.DisplayName
@@ -2188,33 +2273,31 @@ function Add-UserToZoom {
         [string]$Password,
 
         [Parameter()]
-        [string]$IsWorkPlaceLicense
+        [string]$IsWorkPlaceLicense,
+
+        [Parameter()]
+        [string]$TimeZone
     )
 
     try {
-        # First create the Zoom user via API
-        Write-StatusMessage -Message "Creating Zoom user via API" -Type INFO
+        Write-StatusMessage -Message "Starting Zoom user provisioning for $($User.DisplayName)" -Type INFO
 
-        # Get Bearer Token
-        try {
-            $pair = "$ClientId`:$ClientSecret"
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
-            $base64 = [Convert]::ToBase64String($bytes)
-
-            $tokenParams = @{
-                Method      = "POST"
-                Uri         = "https://zoom.us/oauth/token"
-                ContentType = "application/x-www-form-urlencoded"
-                Body        = @{
-                    grant_type = 'account_credentials'
-                    account_id = $AccountId
-                }
-                Headers     = @{
-                    Host          = 'zoom.us'
-                    Authorization = "Basic $base64"
-                }
+        # Obtain Zoom API Bearer Token
+        $tokenParams = @{
+            Uri = "https://zoom.us/oauth/token"
+            Method = 'POST'
+            ContentType = "application/x-www-form-urlencoded"
+            Body = @{
+                grant_type = 'account_credentials'
+                account_id = $AccountId
             }
+            Headers = @{
+                Authorization = "Basic $([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$ClientId`:$ClientSecret")))"
+            }
+            ErrorAction = 'Stop'
+        }
 
+        try {
             $tokenResponse = Invoke-WebRequest @tokenParams
             $BearerToken = ($tokenResponse.Content | ConvertFrom-Json).access_token
             Write-StatusMessage -Message "Successfully obtained Zoom API token" -Type OK
@@ -2223,110 +2306,103 @@ function Add-UserToZoom {
             return
         }
 
+        # Prepare headers for API requests
+        $headers = @{
+            "Content-Type"  = "application/json"
+            "Authorization" = "Bearer $BearerToken"
+        }
+
+        # Define base user structure
+        $body = @{
+            action    = "autoCreate"
+            user_info = @{
+                email        = $User.Mail
+                first_name   = $User.GivenName
+                last_name    = $User.Surname
+                display_name = $User.DisplayName
+                password     = $Password
+                type         = 1  # Default to 1, will change if needed
+            }
+        }
+
+        # Adjust features based on conditions
+        if ($IsWorkPlaceLicense -eq 'true') {
+            $body.user_info.type = 2
+            $body.user_info.feature = @{
+                zoom_phone    = $true
+                zoom_one_type = 16
+            }
+        } elseif ($User.Department -ne 'Reactive') {
+            $body.user_info.feature = @{
+                zoom_phone = $true
+            }
+        }
+
         # Create Zoom User
         try {
-            $headers = @{
-                "Content-Type"  = "application/json"
-                "Authorization" = "Bearer $BearerToken"
-            }
-
-            # Determine if user should have phone features based on department
-            if ($IsWorkPlaceLicense -eq 'true') {
-                $body = @{
-                    action    = "autoCreate"
-                    user_info = @{
-                        email        = $User.Mail
-                        first_name   = $User.GivenName
-                        last_name    = $User.Surname
-                        display_name = $User.DisplayName
-                        password     = $Password
-                        type         = 2
-                        feature      = @{
-                            zoom_phone    = $true
-                            zoom_one_type = 16
-                        }
-                    }
-                }
-            } elseif ($User.Department -eq 'Reactive') {
-                $body = @{
-                    action    = "autoCreate"
-                    user_info = @{
-                        email        = $User.Mail
-                        first_name   = $User.GivenName
-                        last_name    = $User.Surname
-                        display_name = $User.DisplayName
-                        password     = $Password
-                        type         = 1
-                    }
-                }
-            } else {
-                $body = @{
-                    action    = "autoCreate"
-                    user_info = @{
-                        email        = $User.Mail
-                        first_name   = $User.GivenName
-                        last_name    = $User.Surname
-                        display_name = $User.DisplayName
-                        password     = $Password
-                        type         = 1
-                        feature      = @{
-                            zoom_phone = $true
-                        }
-                    }
-                }
-            }
-
-
-            $response = Invoke-WebRequest -Uri 'https://api.zoom.us/v2/users' -Method POST -Headers $headers -Body ($body | ConvertTo-Json -Depth 3)
-
+            $response = Invoke-WebRequest -Uri "https://api.zoom.us/v2/users" -Method POST -Headers $headers -Body ($body | ConvertTo-Json -Depth 3)
             if ($response.StatusCode -eq 201) {
-                Write-StatusMessage -Message "Successfully created Zoom user via API" -Type OK
-
-                # Wait for user to be fully provisioned
-                Write-StatusMessage -Message "Waiting for Zoom user provisioning to complete" -Type INFO
-                $maxAttempts = 6  # Maximum number of attempts
-                $attempt = 0
-                $userProvisioned = $false
-
-                while (-not $userProvisioned -and $attempt -lt $maxAttempts) {
-                    try {
-                        $checkResponse = Invoke-WebRequest `
-                            -Uri "https://api.zoom.us/v2/users/$($User.Mail)" `
-                            -Method GET `
-                            -Headers $headers
-
-                        if ($checkResponse.StatusCode -eq 200) {
-                            $userProvisioned = $true
-                            Write-StatusMessage -Message "Zoom user provisioning completed" -Type OK
-                        }
-                    } catch {
-                        $attempt++
-                        if ($attempt -lt $maxAttempts) {
-                            Write-StatusMessage -Message "Waiting for user provisioning (attempt $attempt of $maxAttempts)" -Type INFO
-                            Start-Sleep -Seconds 5
-                        } else {
-                            Write-StatusMessage -Message "Timeout waiting for user provisioning" -Type ERROR
-                            return
-                        }
-                    }
-                }
+                Write-StatusMessage -Message "Successfully created Zoom user: $($User.Mail)" -Type OK
             } else {
                 Write-StatusMessage -Message "Failed to create Zoom user. Status code: $($response.StatusCode)" -Type ERROR
                 return
             }
         } catch {
-            Write-StatusMessage -Message "Failed to create Zoom user via API: $_" -Type ERROR
+            Write-StatusMessage -Message "Error creating Zoom user: $_" -Type ERROR
             return
         }
 
-        # After creating the user, assign calling plan if not Reactive department
-        if ($IsWorkPlaceLicense -eq 'true') {
-            Write-StatusMessage -Message "Provisioning Zoom Phone Plan for $($User.DisplayName)" -Type INFO
-            Write-StatusMessage -Message "Phone plan included with Workplace license" -Type OK
-        } elseif ($User.Department -eq 'Reactive') {
-            Write-StatusMessage -Message "Provisioning Zoom Contact Center for $($User.DisplayName)" -Type INFO
+        # Wait for provisioning to complete
+        $maxAttempts = 6
+        $attempt = 0
+        $waitSeconds = 5
+        $userCheckUri = "https://api.zoom.us/v2/users/$($User.Mail)"
 
-            # Define Zoom Conact Center template ID mapping
+        while ($attempt -lt $maxAttempts) {
+            try {
+                $checkResponse = Invoke-WebRequest -Uri $userCheckUri -Method GET -Headers $headers -ErrorAction Stop
+                if ($checkResponse.StatusCode -eq 200) {
+                    Write-StatusMessage -Message "Zoom user provisioning completed for $($User.Mail)" -Type OK
+                    break
+                }
+            } catch {
+                $attempt++
+                if ($attempt -eq $maxAttempts) {
+                    Write-StatusMessage -Message "Timeout waiting for user provisioning after $($maxAttempts * $waitSeconds) seconds" -Type ERROR
+                    return
+                }
+                Write-StatusMessage -Message "Waiting for user provisioning (attempt $attempt of $maxAttempts)" -Type INFO
+                Start-Sleep -Seconds $waitSeconds
+            }
+        }
+
+        # Update TimeZone
+        if ($TimeZone) {
+            $timeZoneMap = @{
+                'Eastern Standard Time'  = 'America/New_York'
+                'Central Standard Time'  = 'America/Chicago'
+                'Mountain Standard Time' = 'America/Denver'
+                'Pacific Standard Time'  = 'America/Los_Angeles'
+            }
+            $zoomTimeZone = $timeZoneMap[$TimeZone]
+            if ($zoomTimeZone) {
+                try {
+                    Invoke-WebRequest -Uri "https://api.zoom.us/v2/users/$($User.Mail)" -Method PATCH -Headers $headers -Body (@{ timezone = $zoomTimeZone } | ConvertTo-Json)
+                    Write-StatusMessage -Message "Successfully updated Zoom timezone to $zoomTimeZone" -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to update timezone: $_" -Type WARN
+                }
+            } else {
+                Write-StatusMessage -Message "No mapping found for timezone: $TimeZone" -Type WARN
+            }
+        }
+
+        # Assign Calling Plan or Contact Center
+        if ($IsWorkPlaceLicense -eq 'true') {
+            Write-StatusMessage -Message "User has Workplace license. No additional calling plan needed." -Type OK
+        } elseif ($User.Department -eq 'Reactive') {
+            Write-StatusMessage -Message "Assigning Contact Center license for $($User.Mail)" -Type INFO
+
             $templateMap = @{
                 'South Florida' = "unIR_2-xQemLQ9pfvDKk3w"
                 'Northeast'     = "-Pil2tjcRaOTaIl6LUV_6g"
@@ -2335,181 +2411,175 @@ function Add-UserToZoom {
                 'Mid-Atlantic'  = "K-6ajeNsS4KJRf-6xfRnaA"
             }
 
-            $body = @{
-                user_email  = $User.Mail
-                template_id = $null  # Will be set based on location
-            }
-
             if ($templateMap.ContainsKey($User.officeLocation)) {
-                $body.template_id = $templateMap[$User.officeLocation]
-                Write-StatusMessage -Message "Using template ID for location: $($User.officeLocation)" -Type INFO
+
+                $templateId = $templateMap[$User.officeLocation]
 
                 try {
-                    $response = Invoke-WebRequest -Uri 'https://api.zoom.us/v2/contact_center/users' `
-                        -Method POST `
-                        -Headers $headers `
-                        -Body ($body | ConvertTo-Json)
-
-                    if ($response.StatusCode -eq 201) {
-                        Write-StatusMessage -Message "Successfully provisioned Contact Center" -Type OK
-
-                        # Get skills from user to copy
-                        try {
-                            Write-StatusMessage -Message "Getting skills from template user" -Type INFO
-                            $skillsResponse = Invoke-WebRequest -Uri "https://api.zoom.us/v2/contact_center/users/$UserToCopy/skills" `
-                                -Method GET `
-                                -Headers $headers
-
-                            if ($skillsResponse.StatusCode -eq 200) {
-                                $skillsContent = $skillsResponse.Content | ConvertFrom-Json
-                                $skill_id = $skillsContent.skills[0].skill_id
-                                $user_proficiency_level = $skillsContent.skills[0].user_proficiency_level
-
-                                # Set skills for new user
-                                $skillBody = @{
-                                    skills = @(
-                                        @{
-                                            skill_id              = $skill_id
-                                            max_proficiency_level = $user_proficiency_level
-                                        }
-                                    )
-                                }
-
-                                $setSkillResponse = Invoke-WebRequest `
-                                    -Uri "https://api.zoom.us/v2/contact_center/users/$($User.Mail)/skills" `
-                                    -Method POST `
-                                    -Headers $headers `
-                                    -ContentType 'application/json' `
-                                    -Body ($skillBody | ConvertTo-Json)
-
-                                if ($setSkillResponse.StatusCode -eq 201) {
-                                    Write-StatusMessage -Message "Successfully copied skill proficiency level" -Type OK
-                                } else {
-                                    Write-StatusMessage -Message "Failed to set skill proficiency level. Status code: $($setSkillResponse.StatusCode)" -Type ERROR
-                                }
-                            } else {
-                                Write-StatusMessage -Message "Failed to get template user skills. Status code: $($skillsResponse.StatusCode)" -Type ERROR
-                            }
-                        } catch {
-                            Write-StatusMessage -Message "Failed to copy skill proficiency: $_" -Type ERROR
-                        }
-                    }
+                    $body = @{ user_email = $User.Mail; template_id = $templateId } | ConvertTo-Json
+                    Invoke-WebRequest -Uri "https://api.zoom.us/v2/contact_center/users" -Method POST -Headers $headers -Body $body
+                    Write-StatusMessage -Message "Contact Center successfully provisioned for $($User.Mail)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to provision Contact Center: $_" -Type ERROR
-                    return
                 }
             } else {
-                Write-StatusMessage -Message "No template ID found for location: $($User.officeLocation)" -Type ERROR
-                return
+                Write-StatusMessage -Message "No template found for location: $($User.officeLocation)" -Type ERROR
             }
-        } else {
-            Write-StatusMessage -Message "Provisioning Zoom Phone Plan for $($User.DisplayName)" -Type INFO
-            try {
-                # Get available calling plans
-                $response = Invoke-WebRequest -Uri 'https://api.zoom.us/v2/phone/calling_plans' -Method GET -Headers $headers
-                $responseContent = $response.Content | ConvertFrom-Json
-                $callingPlan = $responseContent.calling_plans | Where-Object { $_.name -eq 'US/CA Unlimited Calling Plan' }
 
-                if ($callingPlan -and $callingPlan.available -gt 0) {
-                    Write-StatusMessage -Message "Zoom licenses are available for assignment" -Type INFO
+            Write-StatusMessage -Message "Getting skills from template user" -Type INFO
 
-                    # Assign calling plan to user
-                    $body = @{
-                        calling_plans = @(
+            # Fetch skills from template user
+            $skillsResponse = Invoke-WebRequest -Uri "https://api.zoom.us/v2/contact_center/users/$UserToCopy/skills" `
+                -Method GET `
+                -Headers $headers
+
+            if ($skillsResponse.StatusCode -eq 200) {
+                $skillsContent = $skillsResponse.Content | ConvertFrom-Json
+
+                if ($skillsContent.skills.Count -gt 0) {
+                    $skillBody = @{
+                        skills = $skillsContent.skills | ForEach-Object {
                             @{
-                                type = 200  # Type for the "US/CA Unlimited Calling Plan"
+                                skill_id              = $_.skill_id
+                                max_proficiency_level = $_.user_proficiency_level
                             }
-                        )
-                    } | ConvertTo-Json
+                        }
+                    }
 
-                    $assignPlanResponse = Invoke-WebRequest `
-                        -Uri "https://api.zoom.us/v2/phone/users/$($User.Mail)/calling_plans" `
+                    # Set skills for new user
+                    $setSkillResponse = Invoke-WebRequest `
+                        -Uri "https://api.zoom.us/v2/contact_center/users/$($User.Mail)/skills" `
                         -Method POST `
                         -Headers $headers `
                         -ContentType 'application/json' `
-                        -Body $body
-
-                    if ($assignPlanResponse.StatusCode -eq 201) {
-                        Write-StatusMessage -Message "Calling plan successfully assigned to the user" -Type OK
-                    } else {
-                        Write-StatusMessage -Message "Failed to assign calling plan" -Type ERROR
-                    }
+                        -Body ($skillBody | ConvertTo-Json -Depth 2)
                 } else {
-                    Write-StatusMessage -Message "No Zoom licenses available" -Type ERROR
-                    return
+                    Write-StatusMessage -Message "No skills found for template user $UserToCopy" -Type WARN
+                }
+            } else {
+                Write-StatusMessage -Message "Failed to retrieve skills for template user $UserToCopy. Status Code: $($skillsResponse.StatusCode)" -Type ERROR
+            }
+        } else {
+            Write-StatusMessage -Message "Assigning US/CA Unlimited Calling Plan to $($User.Mail)" -Type INFO
+            try {
+                $response = Invoke-WebRequest -Uri "https://api.zoom.us/v2/phone/calling_plans" -Method GET -Headers $headers
+                $callingPlan = ($response.Content | ConvertFrom-Json).calling_plans | Where-Object { $_.name -eq 'US/CA Unlimited Calling Plan' }
+
+                if ($callingPlan -and $callingPlan.available -gt 0) {
+                    $body = @{ calling_plans = @( @{ type = 200 } ) } | ConvertTo-Json
+                    Invoke-WebRequest -Uri "https://api.zoom.us/v2/phone/users/$($User.Mail)/calling_plans" -Method POST -Headers $headers -Body $body
+                    Write-StatusMessage -Message "Calling plan successfully assigned to $($User.Mail)" -Type OK
+                } else {
+                    Write-StatusMessage -Message "No available calling plans" -Type ERROR
                 }
             } catch {
                 Write-StatusMessage -Message "Failed to assign calling plan: $_" -Type ERROR
-                return
             }
-        }
-
-        # Now handle the Enterprise App assignment
-        if ($IsWorkPlaceLicense -eq 'true') {
-            $zoom_app_role_name = "Licensed"
-        } else {
-            $zoom_app_role_name = "Basic"
-        }
-
-        $zoom_app_name = "Zoom Workplace Phones"
-
-        # Get Zoom app and sync details
-        try {
-            $zoom_ServicePrincipal = Get-MgServicePrincipal -Filter "displayName eq '$zoom_app_name'" -ErrorAction Stop
-            if (-not $zoom_ServicePrincipal) {
-                Write-StatusMessage -Message "Zoom Service Principal not found" -Type WARN
-                return
-            }
-
-            $zoom_syncJob = Get-MgServicePrincipalSynchronizationJob -ServicePrincipalId $zoom_ServicePrincipal.Id -ErrorAction Stop
-            $zoom_syncJobRuleId = (Get-MgServicePrincipalSynchronizationJobSchema -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_syncJob.Id).SynchronizationRules.Id
-
-            Write-StatusMessage -Message "Retrieved Zoom app details successfully" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to get Zoom app details: $_" -Type WARN
-            return
-        }
-
-        # Assign user to Zoom app
-        try {
-            $params = @{
-                "PrincipalId" = $User.Id
-                "ResourceId"  = $zoom_ServicePrincipal.Id
-                "AppRoleId"   = ($zoom_ServicePrincipal.AppRoles | Where-Object { $_.DisplayName -eq $zoom_app_role_name }).Id
-            }
-
-            $null = New-MgUserAppRoleAssignment -UserId $User.Id -BodyParameter $params -ErrorAction Stop
-            Write-StatusMessage -Message "Successfully assigned Zoom role to user" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to assign Zoom role: $_" -Type WARN
-            return
-        }
-
-        # Start Zoom sync
-        try {
-            $params = @{
-                parameters = @(
-                    @{
-                        subjects = @(
-                            @{
-                                objectId       = "$($User.Id)"
-                                objectTypeName = "User"
-                            }
-                        )
-                        ruleId   = $zoom_syncJobRuleId
-                    }
-                )
-            }
-
-            $null = New-MgServicePrincipalSynchronizationJobOnDemand -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_syncJob.Id -BodyParameter $params
-            Write-StatusMessage -Message "Successfully started Zoom sync" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to start Zoom sync: $_" -Type WARN
         }
     } catch {
-        Write-StatusMessage -Message "Error in Add-UserToZoom: $_" -Type WARN
+        Write-StatusMessage -Message "Unexpected error in Add-UserToZoom: $_" -Type ERROR
     }
 }
+
+function Add-UserToZoomSSO {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        $User,
+
+        [Parameter()]
+        [string]$IsWorkPlaceLicense
+    )
+
+    # Define constants
+    $ZOOM_APP_NAME = "Zoom Workplace Phones"
+    $ROLE_MAPPING = @{
+        'true' = "Licensed"
+        default = "Basic"
+    }
+
+    $zoom_app_role_name = $ROLE_MAPPING[$IsWorkPlaceLicense] ?? $ROLE_MAPPING['default']
+
+    # Get Zoom Service Principal
+    try {
+        $zoom_ServicePrincipal = Get-MgServicePrincipal -Filter "displayName eq '$ZOOM_APP_NAME'" -ErrorAction Stop |
+                                 Select-Object -First 1
+
+        if (-not $zoom_ServicePrincipal) {
+            Write-StatusMessage -Message "Zoom Service Principal not found: $ZOOM_APP_NAME" -Type WARN
+            return
+        }
+
+        Write-StatusMessage -Message "Retrieved Zoom Service Principal: $($zoom_ServicePrincipal.Id)" -Type OK
+    } catch {
+        Write-StatusMessage -Message "Error retrieving Zoom Service Principal: $_" -Type ERROR
+        return
+    }
+
+    # Get Synchronization Job Details
+    try {
+        $zoom_syncJob = Get-MgServicePrincipalSynchronizationJob -ServicePrincipalId $zoom_ServicePrincipal.Id -ErrorAction Stop |
+                        Select-Object -First 1
+
+        if (-not $zoom_syncJob) {
+            Write-StatusMessage -Message "Zoom Synchronization Job not found" -Type WARN
+            return
+        }
+
+        $zoom_syncJobRuleId = (Get-MgServicePrincipalSynchronizationJobSchema -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_syncJob.Id).SynchronizationRules.Id
+        Write-StatusMessage -Message "Retrieved Zoom sync job details" -Type OK
+    } catch {
+        Write-StatusMessage -Message "Error retrieving Zoom synchronization job: $_" -Type ERROR
+        return
+    }
+
+    # Assign user to Zoom Enterprise App
+    try {
+        $appRole = $zoom_ServicePrincipal.AppRoles | Where-Object { $_.DisplayName -eq $zoom_app_role_name } | Select-Object -First 1
+
+        if (-not $appRole) {
+            Write-StatusMessage -Message "Zoom App Role '$zoom_app_role_name' not found" -Type WARN
+            return
+        }
+
+        $params = @{
+            "PrincipalId" = $User.Id
+            "ResourceId"  = $zoom_ServicePrincipal.Id
+            "AppRoleId"   = $appRole.Id
+        }
+
+        $null = New-MgUserAppRoleAssignment -UserId $User.Id -BodyParameter $params -ErrorAction Stop
+        Write-StatusMessage -Message "Successfully assigned Zoom role '$zoom_app_role_name' to user" -Type OK
+    } catch {
+        Write-StatusMessage -Message "Error assigning Zoom role to user: $_" -Type ERROR
+        return
+    }
+
+    # Start Zoom Sync for the User
+    try {
+        $syncParams = @{
+            parameters = @(
+                @{
+                    subjects = @(
+                        @{
+                            objectId       = $User.Id
+                            objectTypeName = "User"
+                        }
+                    )
+                    ruleId   = $zoom_syncJobRuleId
+                }
+            )
+        }
+
+        $null = New-MgServicePrincipalSynchronizationJobOnDemand -ServicePrincipalId $zoom_ServicePrincipal.Id -SynchronizationJobId $zoom_syncJob.Id -BodyParameter $syncParams -ErrorAction Stop
+        Write-StatusMessage -Message "Successfully started Zoom sync for user" -Type OK
+    } catch {
+        Write-StatusMessage -Message "Error starting Zoom sync: $_" -Type ERROR
+    }
+}
+
 
 function Set-UserBookWithMeId {
     [CmdletBinding()]
@@ -2736,7 +2806,6 @@ if ($MgUser) {
     Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
     Write-StatusMessage -Message "Setting Usage Location for new user" -Type INFO
     Update-MgUser -UserId $MgUser.Id -UsageLocation US
-    Write-StatusMessage -Message "Usage Location has been set for new user" -Type OK
 
     # Required license - will exit on failure
     Set-UserLicenses -User $MgUser -License $userInput.InputRequiredLicense -Required
@@ -2747,6 +2816,10 @@ if ($MgUser) {
     if ($null -ne $userInput.InputAncillaryLicenses) {
         Set-UserLicenses -User $MgUser -License $userInput.InputAncillaryLicenses
     }
+
+    # Set Timezone after license
+    Write-StatusMessage -Message "Setting Timezone for new user" -Type INFO
+    Set-MailboxRegionalConfiguration -Identity $($MgUser.Mail) -TimeZone $userinput.TimeZone
 
     # Step 8: Entra Group Copy
     Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
@@ -2782,6 +2855,7 @@ if ($MgUser) {
 
     # Step 12: Zoom Phone Creation
     Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
+
     if ($userInput.ZoomUserEnabled) {
 
         $zoomParams = @{
@@ -2791,6 +2865,7 @@ if ($MgUser) {
             AccountId    = $config.Zoom.AccountId
             UserToCopy   = $MgUserCopyAD.mail
             Password     = $passwordResult.PlainPassword
+            Timezone     = $userinput.TimeZone
         }
 
         # Add IsWorkPlaceLicense parameter only if true
@@ -2800,6 +2875,17 @@ if ($MgUser) {
 
         # Call function with splatted parameters
         Add-UserToZoom @zoomParams
+
+        $zoomSSOParams = @{
+            User         = $MgUser
+        }
+
+        # Add IsWorkPlaceLicense parameter only if true
+        if ($userInput.IsWorkPlaceLicense) {
+            $zoomSSOParams['IsWorkPlaceLicense'] = 'true'
+        }
+
+        Add-UserToZoomSSO @zoomSSOParams
     }
 
     # Step 13: Cleanup and Summary
