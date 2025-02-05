@@ -2279,6 +2279,71 @@ function Add-UserToZoom {
         [string]$TimeZone
     )
 
+    function Get-ZoomTimeZoneMapping {
+        param (
+            [Parameter(Mandatory)]
+            [string]$MicrosoftTimeZone
+        )
+
+        # Define the mapping between Microsoft TimeZone format and Zoom TimeZone IDs
+        $timeZoneMap = @{
+            "Midway Island, Samoa"           = "Pacific/Midway"
+            "Hawaiian Standard Time"         = "Pacific/Honolulu"
+            "Alaskan Standard Time"          = "America/Anchorage"
+            "Pacific Standard Time"          = "America/Los_Angeles"
+            "Pacific Standard Time (Mexico)" = "America/Tijuana"
+            "Mountain Standard Time"         = "America/Denver"
+            "US Mountain Standard Time"      = "America/Phoenix"
+            "Mountain Standard Time (Mexico)"= "America/Mazatlan"
+            "Central Standard Time"          = "America/Chicago"
+            "Canada Central Standard Time"   = "America/Regina"
+            "Central Standard Time (Mexico)" = "America/Mexico_City"
+            "Central America Standard Time"  = "America/Guatemala"
+            "Eastern Standard Time"          = "America/New_York"
+            "US Eastern Standard Time"       = "America/Indianapolis"
+            "SA Pacific Standard Time"       = "America/Bogota"
+            "Atlantic Standard Time"         = "America/Halifax"
+            "Venezuela Standard Time"        = "America/Caracas"
+            "Pacific SA Standard Time"       = "America/Santiago"
+            "Newfoundland Standard Time"     = "America/St_Johns"
+            "Montevideo Standard Time"       = "America/Montevideo"
+            "E. South America Standard Time" = "America/Sao_Paulo"
+            "Argentina Standard Time"        = "America/Argentina/Buenos_Aires"
+            "Greenland Standard Time"        = "America/Godthab"
+            "Azores Standard Time"           = "Atlantic/Azores"
+            "Cape Verde Standard Time"       = "Atlantic/Cape_Verde"
+            "UTC"                            = "UTC"
+            "GMT Standard Time"              = "Europe/London"
+            "Morocco Standard Time"          = "Africa/Casablanca"
+            "W. Europe Standard Time"        = "Europe/Berlin"
+            "Romance Standard Time"          = "Europe/Paris"
+            "Central European Standard Time" = "Europe/Warsaw"
+            "GTB Standard Time"              = "Europe/Athens"
+            "Turkey Standard Time"           = "Europe/Istanbul"
+            "Middle East Standard Time"      = "Asia/Beirut"
+            "Israel Standard Time"           = "Asia/Jerusalem"
+            "Egypt Standard Time"            = "Africa/Cairo"
+            "South Africa Standard Time"     = "Africa/Johannesburg"
+            "Russian Standard Time"          = "Europe/Moscow"
+            "Arabic Standard Time"           = "Asia/Baghdad"
+            "Arabian Standard Time"          = "Asia/Dubai"
+            "Iran Standard Time"             = "Asia/Tehran"
+            "Afghanistan Standard Time"      = "Asia/Kabul"
+            "India Standard Time"            = "Asia/Kolkata"
+            "Nepal Standard Time"            = "Asia/Kathmandu"
+            "Bangladesh Standard Time"       = "Asia/Dhaka"
+            "SE Asia Standard Time"          = "Asia/Bangkok"
+            "China Standard Time"            = "Asia/Shanghai"
+            "Tokyo Standard Time"            = "Asia/Tokyo"
+            "AUS Eastern Standard Time"      = "Australia/Sydney"
+            "Fiji Standard Time"             = "Pacific/Fiji"
+            "New Zealand Standard Time"      = "Pacific/Auckland"
+        }
+
+        # Return the mapped Zoom time zone or a default message if not found
+        return $timeZoneMap[$MicrosoftTimeZone] ?? $null
+    }
+
     try {
         Write-StatusMessage -Message "Starting Zoom user provisioning for $($User.DisplayName)" -Type INFO
 
@@ -2378,13 +2443,7 @@ function Add-UserToZoom {
 
         # Update TimeZone
         if ($TimeZone) {
-            $timeZoneMap = @{
-                'Eastern Standard Time'  = 'America/New_York'
-                'Central Standard Time'  = 'America/Chicago'
-                'Mountain Standard Time' = 'America/Denver'
-                'Pacific Standard Time'  = 'America/Los_Angeles'
-            }
-            $zoomTimeZone = $timeZoneMap[$TimeZone]
+            $zoomTimeZone = Get-ZoomTimeZoneMapping -MicrosoftTimeZone $TimeZone
             if ($zoomTimeZone) {
                 try {
                     Invoke-WebRequest -Uri "https://api.zoom.us/v2/users/$($User.Mail)" -Method PATCH -Headers $headers -Body (@{ timezone = $zoomTimeZone } | ConvertTo-Json)
@@ -2401,7 +2460,7 @@ function Add-UserToZoom {
         if ($IsWorkPlaceLicense -eq 'true') {
             Write-StatusMessage -Message "User has Workplace license. No additional calling plan needed." -Type OK
         } elseif ($User.Department -eq 'Reactive') {
-            Write-StatusMessage -Message "Assigning Contact Center license for $($User.Mail)" -Type INFO
+            Write-StatusMessage -Message "Assigning Contact Center license and assigning queue for $($User.Mail)" -Type INFO
 
             $templateMap = @{
                 'South Florida' = "unIR_2-xQemLQ9pfvDKk3w"
@@ -2423,10 +2482,10 @@ function Add-UserToZoom {
                     Write-StatusMessage -Message "Failed to provision Contact Center: $_" -Type ERROR
                 }
             } else {
-                Write-StatusMessage -Message "No template found for location: $($User.officeLocation)" -Type ERROR
+                Write-StatusMessage -Message "No call center user template found for location: $($User.officeLocation)" -Type ERROR
             }
 
-            Write-StatusMessage -Message "Getting skills from template user" -Type INFO
+            Write-StatusMessage -Message "Getting skills from selected copy user" -Type INFO
 
             # Fetch skills from template user
             $skillsResponse = Invoke-WebRequest -Uri "https://api.zoom.us/v2/contact_center/users/$UserToCopy/skills" `
@@ -2453,6 +2512,10 @@ function Add-UserToZoom {
                         -Headers $headers `
                         -ContentType 'application/json' `
                         -Body ($skillBody | ConvertTo-Json -Depth 2)
+
+                    if ($setSkillResponse.StatusCode -eq 201) {
+                        Write-StatusMessage -Message "Skills successfully set for $($User.Mail)" -Type OK
+                    }
                 } else {
                     Write-StatusMessage -Message "No skills found for template user $UserToCopy" -Type WARN
                 }
@@ -2462,8 +2525,8 @@ function Add-UserToZoom {
         } else {
             Write-StatusMessage -Message "Assigning US/CA Unlimited Calling Plan to $($User.Mail)" -Type INFO
             try {
-                $response = Invoke-WebRequest -Uri "https://api.zoom.us/v2/phone/calling_plans" -Method GET -Headers $headers
-                $callingPlan = ($response.Content | ConvertFrom-Json).calling_plans | Where-Object { $_.name -eq 'US/CA Unlimited Calling Plan' }
+                $callingPlanResponse = Invoke-WebRequest -Uri "https://api.zoom.us/v2/phone/calling_plans" -Method GET -Headers $headers
+                $callingPlan = ($callingPlanResponse.Content | ConvertFrom-Json).calling_plans | Where-Object { $_.name -eq 'US/CA Unlimited Calling Plan' }
 
                 if ($callingPlan -and $callingPlan.available -gt 0) {
                     $body = @{ calling_plans = @( @{ type = 200 } ) } | ConvertTo-Json
