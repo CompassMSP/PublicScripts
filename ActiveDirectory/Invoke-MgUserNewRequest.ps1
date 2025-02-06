@@ -2636,7 +2636,7 @@ function Add-UserToZoom {
                     'Itasca'       = "0Kex5RhJT6KJP_E8WcDcqg"
                     'Coral Gables' = "XZiC3QseQIWummbG15G8KA"
                     'Tarrytown'    = "_XgGsk4bQ9-BL1LTEOL_CQ"
-                    'Wyomissing'   = "VkMtuzWyS4SkATA47X9mAA"
+                    'Reading'      = "VkMtuzWyS4SkATA47X9mAA"
                     'Princeton'    = "xSH1yokdQTqa8EZRHvCHxA"
                     'Westminster'  = "_CxooGkaS52zT9BFFFa5Eg"
                     'Jacksonville' = "swIy4r7kQCyqxkt8Sf0yRQ"
