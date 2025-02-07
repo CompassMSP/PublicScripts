@@ -2736,6 +2736,24 @@ function Add-UserToZoomSSO {
     )
 
     # Define constants
+
+    if ($IsWorkPlaceLicense -eq 'true') {
+	    $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Workplace Users')"
+    } elseif ($User.Department -eq 'Reactive') {
+	    $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Contact Center Users')"
+    } else {
+	    $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Phone Users')"
+    }
+
+    if ($zoomGroup) {
+        $addGroupMemberParams = @{
+	        "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($user.id)"
+        }
+
+        New-MgGroupMemberByRef -GroupId $($zoomGroup.Id) -BodyParameter $addGroupMemberParams
+    }
+
+    # Define app name and role mappings
     $ZOOM_APP_NAME = "Zoom Workplace Phones"
     $ROLE_MAPPING = @{
         'true'  = "Licensed"
