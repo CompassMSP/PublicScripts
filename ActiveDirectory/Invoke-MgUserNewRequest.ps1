@@ -2201,14 +2201,23 @@ function Copy-UserEntraGroups {
         Write-StatusMessage -Message "Starting group membership copy from $($SourceUser.DisplayName) to $($TargetUser.DisplayName)" -Type INFO
 
         # Define filter parameters
+        $excludeZoomGroups = @(
+            '11e88b67-a29f-4535-89d2-4ec6fe485ddd', # Zoom Phone Users
+            'ffc9955f-dddb-4905-ae2e-16c5c2b4cc18', # Zoom Contact Center Users
+            '2e7c5e9f-1165-41f2-9b3b-b9b0222add6b'  # Zoom Workplace Users
+        )
+
+        # Define filter parameters
         $filterParams = @{
             FilterScript = {
                 # Not a directory role
-                $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and
+                $_.AdditionalProperties['@odata.type'] -eq '#microsoft.graph.group' -and
                 # Not a dynamic group
                 $null -eq $_.AdditionalProperties.membershipRule -and
                 # Only sync-enabled groups (not false)
-                $null -eq $_.AdditionalProperties.onPremisesSyncEnabled
+                $null -eq $_.AdditionalProperties.onPremisesSyncEnabled -and
+                # Not in excluded groups list
+                $_.Id -notin $excludeZoomGroups
             }
         }
 
