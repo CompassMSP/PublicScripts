@@ -233,14 +233,13 @@ function Write-StatusMessage {
         [string]$Message,
 
         [Parameter(Mandatory = $false)]
-        [ValidateSet('INFO', 'OK', 'SUCCESS', 'ERROR', 'WARN', 'SUMMARY')]
+        [ValidateSet('INFO', 'OK', 'ERROR', 'WARN', 'SUMMARY')]
         [string]$Type = 'INFO'
     )
 
     $config = @{
         'INFO'    = @{ Status = 'INFO'; Color = 'White' }
         'OK'      = @{ Status = 'OK'; Color = 'Green' }
-        'SUCCESS' = @{ Status = 'SUCCESS'; Color = 'Green' }
         'ERROR'   = @{ Status = 'ERROR'; Color = 'Red' }
         'WARN'    = @{ Status = 'WARN'; Color = 'Yellow' }
         'SUMMARY' = @{ Status = ''; Color = 'Cyan' }
