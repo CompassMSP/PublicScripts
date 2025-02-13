@@ -756,6 +756,98 @@ function Send-GraphMailMessage {
 
 #Region Custom Functions
 
+function Get-LicenseDisplayName {
+    param ([string]$SkuPartNumber)
+    $displayName = switch -Regex ($SkuPartNumber) {
+        "POWERAUTOMATE_ATTENDED_RPA" { "Power Automate Premium" }
+        "PROJECT_MADEIRA_PREVIEW_IW_SKU" { "Dynamics 365 Business Central for IWs" }
+        "PROJECT_PLAN3_DEPT" { "Project Plan 3 (for Department)" }
+        "FLOW_FREE" { "Microsoft Power Automate Free" }
+        "WINDOWS_STORE" { "Windows Store for Business" }
+        "RMSBASIC" { "Rights Management Service Basic Content Protection" }
+        "RIGHTSMANAGEMENT_ADHOC" { "Rights Management Adhoc" }
+        "POWERAPPS_VIRAL" { "Microsoft Power Apps Plan 2 Trial" }
+        "POWERAPPS_PER_USER" { "Power Apps Premium" }
+        "POWERAPPS_DEV" { "Microsoft PowerApps for Developer" }
+        "PHONESYSTEM_VIRTUALUSER" { "Microsoft Teams Phone Resource Account" }
+        "MICROSOFT_BUSINESS_CENTER" { "Microsoft Business Center" }
+        "MCOPSTNC" { "Communications Credits" }
+        "MCOPSTN1" { "Skype for Business PSTN Domestic Calling" }
+        "MEETING_ROOM" { "Microsoft Teams Rooms Standard" }
+        "MCOMEETADV" { "Microsoft 365 Audio Conferencing" }
+        "CCIBOTS_PRIVPREV_VIRAL" { "Power Virtual Agents Viral Trial" }
+        "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
+        "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
+        "SPE_E3" { "Microsoft 365 E3" }
+        "SPB" { "Microsoft 365 Business Premium" }
+        "ENTERPRISEPACK" { "Office 365 E3" }
+        "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
+        "PROJECT_P1" { "Project Plan 1" }
+        "PROJECTPROFESSIONAL" { "Project Plan 3" }
+        "VISIOCLIENT" { "Visio Plan 2" }
+        "Microsoft_Teams_Audio_Conferencing_select_dial_out" { "Microsoft Teams Audio Conferencing with dial-out to USA/CAN" }
+        "POWER_BI_PRO" { "Power BI Pro" }
+        "Microsoft_365_Copilot" { "Microsoft 365 Copilot" }
+        "Microsoft_Teams_Premium" { "Microsoft Teams Premium" }
+        "MCOEV" { "Microsoft Teams Phone Standard" }
+        "POWER_BI_STANDARD" { "Power BI Standard" }
+        "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
+        "SHAREPOINTSTORAGE" { "SharePoint Storage" }
+        "Teams_Premium_(for_Departments)" { "Teams Premium (for Departments)" }
+        "Microsoft_Copilot_for_Finance_trial" { "Microsoft Copilot for Finance trial" }
+        default { $SkuPartNumber }
+    }
+    return $displayName
+}
+
+function Get-FormattedLicenseInfo {
+    param (
+        [array]$Skus,
+        [array]$IgnoredLicenses = @(
+            "Microsoft Teams Rooms Standard",
+            "Microsoft Teams Phone Standard",
+            "Power Automate Premium",
+            "Power Apps Premium",
+            "Power BI Pro",
+            "Power BI Standard",
+            "Microsoft 365 Lighthouse",
+            "Rights Management Service Basic Content Protection",
+            "Communications Credits",
+            "Rights Management Adhoc",
+            "Power Virtual Agents Viral Trial",
+            "Windows Store for Business",
+            "Skype for Business PSTN Domestic Calling",
+            "Microsoft Business Center",
+            "Microsoft Teams Phone Resource Account",
+            "Microsoft PowerApps for Developer",
+            "Microsoft Power Apps Plan 2 Trial",
+            "Microsoft Power Automate Free",
+            "Microsoft Copilot for Finance trial",
+            "Teams_Premium_(for_Departments)",
+            "STREAM",
+            "Project Plan 3 (for Department)",
+            "Dynamics 365 Business Central for IWs",
+            "SharePoint Storage"
+        )
+    )
+    return $Skus | ForEach-Object {
+        $available = $_.PrepaidUnits - $_.ConsumedUnits
+        $SkuDisplayName = Get-LicenseDisplayName $_.SkuPartNumber
+        if ([string]::IsNullOrEmpty($SkuDisplayName)) {
+            $SkuDisplayName = $_.SkuPartNumber
+        }
+
+        # Skip if license is in ignored list
+        if ($IgnoredLicenses -notcontains $SkuDisplayName) {
+            @{
+                DisplayName = "$($SkuDisplayName) (Available: $available)"
+                SkuId      = $_.SkuId
+                SortName   = $SkuDisplayName
+            }
+        }
+    } | Where-Object { $_ -ne $null } | Sort-Object { $_.SortName }
+}
+
 function Get-NewUserRequestInput {
     <#
         .SYNOPSIS
@@ -978,67 +1070,7 @@ function Get-NewUserRequestInput {
         [System.Windows.MessageBox]::Show($Message, $Title, [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
     }
 
-    # 4. License Processing Functions
-    function Get-LicenseDisplayName {
-        param ([string]$SkuPartNumber)
-        $displayName = switch -Regex ($SkuPartNumber) {
-            "POWERAUTOMATE_ATTENDED_RPA" { "Power Automate Premium" }
-            "PROJECT_MADEIRA_PREVIEW_IW_SKU" { "Dynamics 365 Business Central for IWs" }
-            "PROJECT_PLAN3_DEPT" { "Project Plan 3 (for Department)" }
-            "FLOW_FREE" { "Microsoft Power Automate Free" }
-            "WINDOWS_STORE" { "Windows Store for Business" }
-            "RMSBASIC" { "Rights Management Service Basic Content Protection" }
-            "RIGHTSMANAGEMENT_ADHOC" { "Rights Management Adhoc" }
-            "POWERAPPS_VIRAL" { "Microsoft Power Apps Plan 2 Trial" }
-            "POWERAPPS_PER_USER" { "Power Apps Premium" }
-            "POWERAPPS_DEV" { "Microsoft PowerApps for Developer" }
-            "PHONESYSTEM_VIRTUALUSER" { "Microsoft Teams Phone Resource Account" }
-            "MICROSOFT_BUSINESS_CENTER" { "Microsoft Business Center" }
-            "MCOPSTNC" { "Communications Credits" }
-            "MCOPSTN1" { "Skype for Business PSTN Domestic Calling" }
-            "MEETING_ROOM" { "Microsoft Teams Rooms Standard" }
-            "MCOMEETADV" { "Microsoft 365 Audio Conferencing" }
-            "CCIBOTS_PRIVPREV_VIRAL" { "Power Virtual Agents Viral Trial" }
-            "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
-            "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
-            "SPE_E3" { "Microsoft 365 E3" }
-            "SPB" { "Microsoft 365 Business Premium" }
-            "ENTERPRISEPACK" { "Office 365 E3" }
-            "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
-            "PROJECT_P1" { "Project Plan 1" }
-            "PROJECTPROFESSIONAL" { "Project Plan 3" }
-            "VISIOCLIENT" { "Visio Plan 2" }
-            "Microsoft_Teams_Audio_Conferencing_select_dial_out" { "Microsoft Teams Audio Conferencing with dial-out to USA/CAN" }
-            "POWER_BI_PRO" { "Power BI Pro" }
-            "Microsoft_365_Copilot" { "Microsoft 365 Copilot" }
-            "Microsoft_Teams_Premium" { "Microsoft Teams Premium" }
-            "MCOEV" { "Microsoft Teams Phone Standard" }
-            "POWER_BI_STANDARD" { "Power BI Standard" }
-            "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
-            "SHAREPOINTSTORAGE" { "SharePoint Storage" }
-            "Teams_Premium_(for_Departments)" { "Teams Premium (for Departments)" }
-            default { $SkuPartNumber }
-        }
-        return $displayName
-    }
-
-    function Get-FormattedLicenseInfo {
-        param ([array]$Skus)
-        return $Skus | ForEach-Object {
-            $available = $_.PrepaidUnits - $_.ConsumedUnits
-            $SkuDisplayName = Get-LicenseDisplayName $_.SkuPartNumber
-            if ([string]::IsNullOrEmpty($SkuDisplayName)) {
-                $SkuDisplayName = $_.SkuPartNumber
-            }
-            @{
-                DisplayName = "$($SkuDisplayName) (Available: $available)"
-                SkuId       = $_.SkuId
-                SortName    = $SkuDisplayName
-            }
-        } | Sort-Object { $_.SortName }
-    }
-
-    # 5. Event Handlers
+    # 4. Event Handlers
     $Script:inputGotFocusHandler = {
         if ($this.Text -eq $this.Tag) {
             $this.Text = ""
@@ -1084,7 +1116,7 @@ function Get-NewUserRequestInput {
         }
     }
 
-    # 6. Input Control Initialization
+    # 5. Input Control Initialization
     function Initialize-InputTextBox {
         param (
             [string]$PlaceholderText,
@@ -1108,7 +1140,7 @@ function Get-NewUserRequestInput {
         return $textBox
     }
 
-    # 7. Main UI Creation and Logic
+    # 6. Main UI Creation and Logic
     # Get license information
     $skus = Get-MgSubscribedSku | Select-Object SkuId, SkuPartNumber, ConsumedUnits, @{
         Name = 'PrepaidUnits'; Expression = { $_.PrepaidUnits.Enabled }
@@ -1122,33 +1154,6 @@ function Get-NewUserRequestInput {
         "Microsoft 365 Business Basic",
         "Microsoft 365 E3",
         "Microsoft 365 Business Premium"
-    )
-
-    $ignoredLicenses = @(
-        "Microsoft Teams Rooms Standard",
-        "Microsoft Teams Phone Standard",
-        "Power Automate Premium",
-        "Power Apps Premium",
-        "Power BI Pro",
-        "Power BI Standard",
-        "Microsoft 365 Lighthouse",
-        "Rights Management Service Basic Content Protection",
-        "Communications Credits",
-        "Rights Management Adhoc",
-        "Power Virtual Agents Viral Trial",
-        "Windows Store for Business",
-        "Skype for Business PSTN Domestic Calling",
-        "Microsoft Business Center",
-        "Microsoft Teams Phone Resource Account",
-        "Microsoft PowerApps for Developer",
-        "Microsoft Power Apps Plan 2 Trial",
-        "Microsoft Power Automate Free",
-        "Microsoft_Copilot_for_Finance_trial",
-        "STREAM",
-        "Project Plan 3 (for Department)",
-        "Dynamics 365 Business Central for IWs",
-        "SharePoint Storage",
-        "Teams Premium (for Departments)"
     )
 
     # Create the main window
@@ -1373,14 +1378,8 @@ function Get-NewUserRequestInput {
                 break
             }
         }
-        $isIgnored = $false
-        foreach ($ignoredLicense in $ignoredLicenses) {
-            if ($license.DisplayName -like "*$ignoredLicense*") {
-                $isIgnored = $true
-                break
-            }
-        }
-        if (-not $isRequired -and -not $isIgnored) {
+
+        if (-not $isRequired) {
             $skucb = New-FormCheckBox -Content $license.DisplayName -ToolTip $license.SkuId
             $skucb.Tag = $license.SkuId
             if ($license.DisplayName -like "*Microsoft Entra ID P2*") {
