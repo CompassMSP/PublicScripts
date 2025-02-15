@@ -2594,7 +2594,6 @@ function Add-UserToZoom {
 
                 if (-not $ContactCenterTemplates) {
                     Write-StatusMessage "No matching template found for location: $($User.officeLocation)" -Type 'ERROR'
-                    return $false
                 }
 
                 # Assign Contact Center template
@@ -2614,7 +2613,6 @@ function Add-UserToZoom {
                     }
                 } catch {
                     Write-StatusMessage "Failed to provision Contact Center: $($_.Exception.Message)" -Type 'ERROR'
-                    return $false
                 }
 
                 # Configure skills if UserToCopy is provided
