@@ -2432,28 +2432,29 @@ function Add-UserToZoom {
         $User,
 
         [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
         [string]$ClientId,
 
         [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
         [string]$ClientSecret,
 
         [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
         [string]$AccountId,
 
         [Parameter()]
         [string]$UserToCopy,
 
-        [Parameter()]
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
         [string]$Password,
-
-        [Parameter()]
-        [string]$IsWorkPlaceLicense,
 
         [Parameter()]
         [string]$TimeZone,
 
         [Parameter()]
-        [hashtable]$ContactCenterTemplateMap
+        [string]$IsWorkPlaceLicense
     )
 
     try {
@@ -2467,22 +2468,14 @@ function Add-UserToZoom {
         $isContactCenter = [bool]($User.Department -eq 'Reactive')
         $isWorkplace = [bool]($IsWorkPlaceLicense -eq 'true')
 
-        # Initialize tracking
-        $provisioningSteps = @{
-            UserCreated              = $false
-            TimeZoneSet              = $false
-            CallingPlanAssigned      = $false
-            ContactCenterProvisioned = $false
-            EmergencyAddressSet      = $false
-            QueueConfigured          = $false
-            SkillsConfigured         = $false
-        }
-
         # Get Zoom API Bearer Token
         $headers = Get-ZoomAccessToken -ClientId $ClientId -ClientSecret $ClientSecret -AccountId $AccountId
         if (-not $headers) {
-            throw "Failed to obtain Zoom access token"
+            Write-StatusMessage "Failed to obtain Zoom access token" -Type 'ERROR'
+            return $false
         }
+
+        Write-StatusMessage "Starting Zoom provisioning for $($User.DisplayName)" -Type 'INFO'
 
         # Create user with proper license type
         $createBody = @{
@@ -2515,7 +2508,6 @@ function Add-UserToZoom {
             if ($createResponse.StatusCode -ne 201) {
                 throw "Failed to create user. Status: $($createResponse.StatusCode)"
             }
-            $provisioningSteps.UserCreated = $true
 
             # Wait for provisioning with exponential backoff
             $maxAttempts = 6
@@ -2554,7 +2546,6 @@ function Add-UserToZoom {
                         -Body @{ timezone = $zoomTimeZone }
 
                     if ($tzResponse.StatusCode -eq 204) {
-                        $provisioningSteps.TimeZoneSet = $true
                         Write-StatusMessage "Successfully updated Zoom timezone to $zoomTimeZone" -Type 'OK'
                     }
                 }
@@ -2619,7 +2610,6 @@ function Add-UserToZoom {
                         -Body $contantCenterBody
 
                     if ($ccResponse.StatusCode -eq 201) {
-                        $provisioningSteps.ContactCenterProvisioned = $true
                         Write-StatusMessage "Contact Center successfully provisioned for $($User.Mail)" -Type 'OK'
                     }
                 } catch {
@@ -2651,7 +2641,6 @@ function Add-UserToZoom {
                                 -Body $skillBody
 
                             if ($setSkillResponse.StatusCode -eq 201) {
-                                $provisioningSteps.SkillsConfigured = $true
                                 Write-StatusMessage "Skills successfully set for $($User.Mail)" -Type 'OK'
                             }
                         }
@@ -2667,7 +2656,6 @@ function Add-UserToZoom {
                 # Assign Calling Plan if applicable
                 if ($IsWorkPlaceLicense -eq 'true') {
                     Write-StatusMessage "Workplace license detected, skipping Calling Plan provisioning" -Type 'INFO'
-                    $provisioningSteps.CallingPlanAssigned = $true
                 } else {
                     Write-StatusMessage "Assigning US/CA Unlimited Calling Plan to $($User.Mail)" -Type 'INFO'
 
@@ -2689,7 +2677,6 @@ function Add-UserToZoom {
                             -Body $planBody
 
                         if ($planResponse.StatusCode -eq 201) {
-                            $provisioningSteps.CallingPlanAssigned = $true
                             Write-StatusMessage "Calling plan successfully assigned to $($User.Mail)" -Type 'OK'
                         }
                     }
@@ -2750,7 +2737,6 @@ function Add-UserToZoom {
                             -Body $e911Body
 
                         if ($e911Response.StatusCode -eq 204) {
-                            $provisioningSteps.EmergencyAddressSet = $true
                             Write-StatusMessage "Emergency address assigned successfully: $($emergencyAddress.city)" -Type 'OK'
                         }
                     } else {
@@ -2821,14 +2807,12 @@ function Add-UserToZoom {
                             -Body $phoneQueueBody
 
                         if ($phoneQueueResponse.Success) {
-                            $provisioningSteps.QueueConfigured = $true
                             Write-StatusMessage "$($User.DisplayName) successfully added to Zoom Phone Queue: $($setQueue.name)" -Type 'OK'
                         } else {
                             Write-StatusMessage "Failed to add user to queue: $($phoneQueueResponse.Error.Message)" -Type 'ERROR'
                         }
                     } else {
                         Write-StatusMessage "User $($User.DisplayName)'s department ($($User.Department)) is not a valid Zoom Phone Queue" -Type 'INFO'
-                        $provisioningSteps.QueueConfigured = $true
                     }
                 } catch {
                     Write-StatusMessage "Failed to configure Zoom Phone Queue settings: $($_.Exception.Message)" -Type 'ERROR'
@@ -2837,22 +2821,10 @@ function Add-UserToZoom {
                 Write-StatusMessage "Failed to configure regular user settings: $($_.Exception.Message)" -Type 'ERROR'
             }
         }
-
-        # Final status report
-        $successCount = ($provisioningSteps.Values | Where-Object { $_ -eq $true }).Count
-        $totalSteps = $provisioningSteps.Count
-
-        Write-StatusMessage "Zoom provisioning completed for $($User.DisplayName). $successCount of $totalSteps steps successful." -Type $(
-            if ($successCount -eq $totalSteps) { 'OK' }
-            elseif ($successCount -gt 0) { 'WARNING' }
-            else { 'ERROR' }
-        )
-
-        return ($successCount -eq $totalSteps)
-
+        # Return true if everything completed successfully
+        return $true
     } catch {
-        Write-StatusMessage "Critical error in Add-UserToZoom: $($_.Exception.Message)" -Type 'ERROR'
-        Write-StatusMessage "Stack Trace: $($_.ScriptStackTrace)" -Type 'ERROR'
+        Write-StatusMessage -Message "Unexpected error in Add-UserToZoom: $_" -Type ERROR
         return $false
     }
 }
