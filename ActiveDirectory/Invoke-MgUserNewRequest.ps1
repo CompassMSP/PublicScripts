@@ -2267,6 +2267,162 @@ function Copy-UserEntraGroups {
     }
 }
 
+function Get-ZoomAccessToken {
+    param (
+        [string]$ClientId,
+        [string]$ClientSecret,
+        [string]$AccountId
+    )
+
+    # Encode client_id:client_secret in Base64
+    $pair = "$ClientId`:$ClientSecret"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+    $base64 = [Convert]::ToBase64String($bytes)
+
+    # Define the body and headers
+    $body = @{
+        grant_type = 'account_credentials'
+        account_id = $AccountId
+    }
+
+    $tokenheaders = @{
+        Authorization = "Basic $base64"
+    }
+
+    $params = @{
+        Method      = "POST"
+        Uri         = "https://zoom.us/oauth/token"
+        ContentType = "application/x-www-form-urlencoded"
+        Body        = $body
+        Headers     = $tokenheaders
+    }
+
+    try {
+        # Invoke the request
+        $response = Invoke-WebRequest @params -ErrorAction Stop
+        $token = $response.Content | ConvertFrom-Json | Select-Object -ExpandProperty access_token
+
+        $headers = @{
+            "Content-Type"  = "application/json"
+            "Authorization" = "Bearer $token"
+        }
+
+        return $headers
+    } catch {
+        Write-Error "Failed to retrieve access token: $_"
+        return $null
+    }
+}
+
+function Invoke-ZoomAPI {
+    param (
+        [string]$Method,
+        [string]$Endpoint,
+        [hashtable]$Headers,
+        [object]$Body,
+        [string]$ContentType = 'application/json',
+        [switch]$AsJson
+    )
+
+    try {
+        $params = @{
+            Method      = $Method
+            Uri         = "https://api.zoom.us/v2/$Endpoint"
+            Headers     = $Headers
+            ContentType = $ContentType
+        }
+
+        if ($Body) {
+            $params.Body = if ($Body -is [hashtable]) { $Body | ConvertTo-Json -Depth 10 } else { $Body }
+        }
+
+        $response = Invoke-WebRequest @params -ErrorAction Stop
+
+        # Create standard response object for all requests
+        $result = @{
+            StatusCode = $response.StatusCode
+            Content    = if ($response.Content) { $response.Content | ConvertFrom-Json } else { $null }
+            Response   = $response
+        }
+
+        # Handle JSON formatting if requested
+        if ($Method -eq 'GET' -and $AsJson) {
+            return ($result.Content | ConvertTo-Json -Depth 10)
+        }
+
+        return $result
+
+    } catch {
+        Write-StatusMessage "API call failed for $Endpoint : $($_.Exception.Message)" -Type 'ERROR'
+        throw $_
+    }
+}
+
+function Get-ZoomTimeZoneMapping {
+    param (
+        [Parameter(Mandatory)]
+        [string]$MicrosoftTimeZone
+    )
+
+    # Define the mapping between Microsoft TimeZone format and Zoom TimeZone IDs
+    $timeZoneMap = @{
+        "Midway Island, Samoa"            = "Pacific/Midway"
+        "Hawaiian Standard Time"          = "Pacific/Honolulu"
+        "Alaskan Standard Time"           = "America/Anchorage"
+        "Pacific Standard Time"           = "America/Los_Angeles"
+        "Pacific Standard Time (Mexico)"  = "America/Tijuana"
+        "Mountain Standard Time"          = "America/Denver"
+        "US Mountain Standard Time"       = "America/Phoenix"
+        "Mountain Standard Time (Mexico)" = "America/Mazatlan"
+        "Central Standard Time"           = "America/Chicago"
+        "Canada Central Standard Time"    = "America/Regina"
+        "Central Standard Time (Mexico)"  = "America/Mexico_City"
+        "Central America Standard Time"   = "America/Guatemala"
+        "Eastern Standard Time"           = "America/New_York"
+        "US Eastern Standard Time"        = "America/Indianapolis"
+        "SA Pacific Standard Time"        = "America/Bogota"
+        "Atlantic Standard Time"          = "America/Halifax"
+        "Venezuela Standard Time"         = "America/Caracas"
+        "Pacific SA Standard Time"        = "America/Santiago"
+        "Newfoundland Standard Time"      = "America/St_Johns"
+        "Montevideo Standard Time"        = "America/Montevideo"
+        "E. South America Standard Time"  = "America/Sao_Paulo"
+        "Argentina Standard Time"         = "America/Argentina/Buenos_Aires"
+        "Greenland Standard Time"         = "America/Godthab"
+        "Azores Standard Time"            = "Atlantic/Azores"
+        "Cape Verde Standard Time"        = "Atlantic/Cape_Verde"
+        "UTC"                             = "UTC"
+        "GMT Standard Time"               = "Europe/London"
+        "Morocco Standard Time"           = "Africa/Casablanca"
+        "W. Europe Standard Time"         = "Europe/Berlin"
+        "Romance Standard Time"           = "Europe/Paris"
+        "Central European Standard Time"  = "Europe/Warsaw"
+        "GTB Standard Time"               = "Europe/Athens"
+        "Turkey Standard Time"            = "Europe/Istanbul"
+        "Middle East Standard Time"       = "Asia/Beirut"
+        "Israel Standard Time"            = "Asia/Jerusalem"
+        "Egypt Standard Time"             = "Africa/Cairo"
+        "South Africa Standard Time"      = "Africa/Johannesburg"
+        "Russian Standard Time"           = "Europe/Moscow"
+        "Arabic Standard Time"            = "Asia/Baghdad"
+        "Arabian Standard Time"           = "Asia/Dubai"
+        "Iran Standard Time"              = "Asia/Tehran"
+        "Afghanistan Standard Time"       = "Asia/Kabul"
+        "India Standard Time"             = "Asia/Kolkata"
+        "Nepal Standard Time"             = "Asia/Kathmandu"
+        "Bangladesh Standard Time"        = "Asia/Dhaka"
+        "SE Asia Standard Time"           = "Asia/Bangkok"
+        "China Standard Time"             = "Asia/Shanghai"
+        "Tokyo Standard Time"             = "Asia/Tokyo"
+        "AUS Eastern Standard Time"       = "Australia/Sydney"
+        "Fiji Standard Time"              = "Pacific/Fiji"
+        "New Zealand Standard Time"       = "Pacific/Auckland"
+    }
+
+    # Return the mapped Zoom time zone or a default message if not found
+    return $timeZoneMap[$MicrosoftTimeZone] ?? $null
+}
+
 function Add-UserToZoom {
     [CmdletBinding()]
     param (
@@ -2300,151 +2456,35 @@ function Add-UserToZoom {
         [hashtable]$ContactCenterTemplateMap
     )
 
-    $isContactCenter = if ($User.Department -eq 'Reactive') { 'true' } else { 'false' }
-
-    function Get-ZoomTimeZoneMapping {
-        param (
-            [Parameter(Mandatory)]
-            [string]$MicrosoftTimeZone
-        )
-
-        # Define the mapping between Microsoft TimeZone format and Zoom TimeZone IDs
-        $timeZoneMap = @{
-            "Midway Island, Samoa"            = "Pacific/Midway"
-            "Hawaiian Standard Time"          = "Pacific/Honolulu"
-            "Alaskan Standard Time"           = "America/Anchorage"
-            "Pacific Standard Time"           = "America/Los_Angeles"
-            "Pacific Standard Time (Mexico)"  = "America/Tijuana"
-            "Mountain Standard Time"          = "America/Denver"
-            "US Mountain Standard Time"       = "America/Phoenix"
-            "Mountain Standard Time (Mexico)" = "America/Mazatlan"
-            "Central Standard Time"           = "America/Chicago"
-            "Canada Central Standard Time"    = "America/Regina"
-            "Central Standard Time (Mexico)"  = "America/Mexico_City"
-            "Central America Standard Time"   = "America/Guatemala"
-            "Eastern Standard Time"           = "America/New_York"
-            "US Eastern Standard Time"        = "America/Indianapolis"
-            "SA Pacific Standard Time"        = "America/Bogota"
-            "Atlantic Standard Time"          = "America/Halifax"
-            "Venezuela Standard Time"         = "America/Caracas"
-            "Pacific SA Standard Time"        = "America/Santiago"
-            "Newfoundland Standard Time"      = "America/St_Johns"
-            "Montevideo Standard Time"        = "America/Montevideo"
-            "E. South America Standard Time"  = "America/Sao_Paulo"
-            "Argentina Standard Time"         = "America/Argentina/Buenos_Aires"
-            "Greenland Standard Time"         = "America/Godthab"
-            "Azores Standard Time"            = "Atlantic/Azores"
-            "Cape Verde Standard Time"        = "Atlantic/Cape_Verde"
-            "UTC"                             = "UTC"
-            "GMT Standard Time"               = "Europe/London"
-            "Morocco Standard Time"           = "Africa/Casablanca"
-            "W. Europe Standard Time"         = "Europe/Berlin"
-            "Romance Standard Time"           = "Europe/Paris"
-            "Central European Standard Time"  = "Europe/Warsaw"
-            "GTB Standard Time"               = "Europe/Athens"
-            "Turkey Standard Time"            = "Europe/Istanbul"
-            "Middle East Standard Time"       = "Asia/Beirut"
-            "Israel Standard Time"            = "Asia/Jerusalem"
-            "Egypt Standard Time"             = "Africa/Cairo"
-            "South Africa Standard Time"      = "Africa/Johannesburg"
-            "Russian Standard Time"           = "Europe/Moscow"
-            "Arabic Standard Time"            = "Asia/Baghdad"
-            "Arabian Standard Time"           = "Asia/Dubai"
-            "Iran Standard Time"              = "Asia/Tehran"
-            "Afghanistan Standard Time"       = "Asia/Kabul"
-            "India Standard Time"             = "Asia/Kolkata"
-            "Nepal Standard Time"             = "Asia/Kathmandu"
-            "Bangladesh Standard Time"        = "Asia/Dhaka"
-            "SE Asia Standard Time"           = "Asia/Bangkok"
-            "China Standard Time"             = "Asia/Shanghai"
-            "Tokyo Standard Time"             = "Asia/Tokyo"
-            "AUS Eastern Standard Time"       = "Australia/Sydney"
-            "Fiji Standard Time"              = "Pacific/Fiji"
-            "New Zealand Standard Time"       = "Pacific/Auckland"
-        }
-
-        # Return the mapped Zoom time zone or a default message if not found
-        return $timeZoneMap[$MicrosoftTimeZone] ?? $null
-    }
-
-    function Invoke-ZoomAPI {
-        param (
-            [string]$Method,
-            [string]$Endpoint,
-            [hashtable]$Headers,
-            [object]$Body,
-            [string]$ContentType = 'application/json',
-            [switch]$AsJson
-        )
-
-        try {
-            $params = @{
-                Method      = $Method
-                Uri         = "https://api.zoom.us/v2/$Endpoint"
-                Headers     = $Headers
-                ContentType = $ContentType
-            }
-
-            if ($Body) {
-                $params.Body = if ($Body -is [hashtable]) { $Body | ConvertTo-Json -Depth 10 } else { $Body }
-            }
-
-            $response = Invoke-WebRequest @params -ErrorAction Stop
-
-            # Create standard response object for all requests
-            $result = @{
-                StatusCode = $response.StatusCode
-                Content    = if ($response.Content) { $response.Content | ConvertFrom-Json } else { $null }
-                Response   = $response
-            }
-
-            # Handle JSON formatting if requested
-            if ($Method -eq 'GET' -and $AsJson) {
-                return ($result.Content | ConvertTo-Json -Depth 10)
-            }
-
-            return $result
-
-        } catch {
-            Write-StatusMessage "API call failed for $Endpoint : $($_.Exception.Message)" -Type 'ERROR'
-            throw $_
-        }
-    }
-
     try {
-        Write-StatusMessage -Message "Starting Zoom user provisioning for $($User.DisplayName)" -Type INFO
-
-        # Obtain Zoom API Bearer Token
-        $tokenParams = @{
-            Uri         = "https://zoom.us/oauth/token"
-            Method      = 'POST'
-            ContentType = "application/x-www-form-urlencoded"
-            Body        = @{
-                grant_type = 'account_credentials'
-                account_id = $AccountId
-            }
-            Headers     = @{
-                Authorization = "Basic $([Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("$ClientId`:$ClientSecret")))"
-            }
-            ErrorAction = 'Stop'
-        }
-
-        try {
-            $tokenResponse = Invoke-WebRequest @tokenParams
-            $BearerToken = ($tokenResponse.Content | ConvertFrom-Json).access_token
-            Write-StatusMessage -Message "Successfully obtained Zoom API token" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to get Zoom API token: $_" -Type ERROR
+        # Input validation
+        if (-not $User.Mail -or -not $User.Department) {
+            Write-StatusMessage "User must have both Email and Department assigned" -Type 'ERROR'
             return $false
         }
 
-        # Prepare headers for API requests
-        $headers = @{
-            "Content-Type"  = "application/json"
-            "Authorization" = "Bearer $BearerToken"
+        # Standardize boolean values
+        $isContactCenter = [bool]($User.Department -eq 'Reactive')
+        $isWorkplace = [bool]($IsWorkPlaceLicense -eq 'true')
+
+        # Initialize tracking
+        $provisioningSteps = @{
+            UserCreated              = $false
+            TimeZoneSet              = $false
+            CallingPlanAssigned      = $false
+            ContactCenterProvisioned = $false
+            EmergencyAddressSet      = $false
+            QueueConfigured          = $false
+            SkillsConfigured         = $false
         }
 
-        # Define base user structure
+        # Get Zoom API Bearer Token
+        $headers = Get-ZoomAccessToken -ClientId $ClientId -ClientSecret $ClientSecret -AccountId $AccountId
+        if (-not $headers) {
+            throw "Failed to obtain Zoom access token"
+        }
+
+        # Create user with proper license type
         $createBody = @{
             action    = "autoCreate"
             user_info = @{
@@ -2453,140 +2493,124 @@ function Add-UserToZoom {
                 last_name    = $User.Surname
                 display_name = $User.DisplayName
                 password     = $Password
-                type         = 1  # Default to 1, will change if needed
+                type         = if ($isWorkplace) { 2 } else { 1 }
             }
         }
 
-        # Adjust features based on conditions
-        if ($IsWorkPlaceLicense -eq 'true') {
-            $createBody.user_info.type = 2
+        # Set feature flags based on license type
+        if ($isWorkplace) {
             $createBody.user_info.feature = @{
                 zoom_phone    = $true
                 zoom_one_type = 16
             }
-        } elseif ($isContactCenter -ne 'true') {
+        } elseif (-not $isContactCenter) {
             $createBody.user_info.feature = @{
                 zoom_phone = $true
             }
         }
 
-        # Create Zoom User
+        # Create and provision user
         try {
-            $createResponse = Invoke-ZoomAPI -Method 'POST' `
-                -Endpoint 'users' `
-                -Headers $headers `
-                -Body $createBody
+            $createResponse = Invoke-ZoomAPI -Method 'POST' -Endpoint 'users' -Headers $headers -Body $createBody
+            if ($createResponse.StatusCode -ne 201) {
+                throw "Failed to create user. Status: $($createResponse.StatusCode)"
+            }
+            $provisioningSteps.UserCreated = $true
 
-            if ($createResponse.StatusCode -eq 201) {
-                Write-StatusMessage -Message "Successfully created Zoom user: $($User.Mail)" -Type OK
-            } else {
-                Write-StatusMessage -Message "Failed to create Zoom user. Status code: $($createResponse.StatusCode)" -Type ERROR
-                return $false
+            # Wait for provisioning with exponential backoff
+            $maxAttempts = 6
+            $attempt = 0
+            $success = $false
+
+            do {
+                try {
+                    Start-Sleep -Seconds ([Math]::Pow(2, $attempt))
+                    $checkResponse = Invoke-ZoomAPI -Method 'GET' -Endpoint "users/$($User.Mail)" -Headers $headers
+                    if ($checkResponse.StatusCode -eq 200) {
+                        $success = $true
+                        break
+                    }
+                } catch {
+                    if (++$attempt -ge $maxAttempts) { throw }
+                }
+            } while ($attempt -lt $maxAttempts)
+
+            if (-not $success) {
+                throw "User provisioning timed out after $maxAttempts attempts"
             }
         } catch {
-            Write-StatusMessage -Message "Error creating Zoom user: $_" -Type ERROR
+            Write-StatusMessage "Error during user creation/provisioning: $($_.Exception.Message)" -Type 'ERROR'
             return $false
         }
 
-        # Wait for provisioning to complete
-        $maxAttempts = 6
-        $attempt = 0
-        $waitSeconds = 5
-
-        do {
-            try {
-                # Changed to handle the new GET response format
-                $checkResponse = Invoke-ZoomAPI -Method 'GET' `
-                    -Endpoint "users/$($User.Mail)" `
-                    -Headers $headers
-
-                if ($checkResponse.StatusCode -eq 200) {
-                    Write-StatusMessage -Message "Zoom user provisioning completed for $($User.Mail)" -Type OK
-                    break
-                }
-            } catch {
-                $attempt++
-                if ($attempt -ge $maxAttempts) {
-                    Write-StatusMessage -Message "Timeout waiting for user provisioning after $($maxAttempts * $waitSeconds) seconds" -Type ERROR
-                    return $false
-                }
-                Write-StatusMessage -Message "Waiting for user provisioning (attempt $attempt of $maxAttempts)..." -Type INFO
-                Start-Sleep -Seconds ($waitSeconds * $attempt)  # Exponential backoff
-            }
-        } while ($true)
-
-        # Update TimeZone
+        # Configure TimeZone if provided
         if ($TimeZone) {
-            $zoomTimeZone = Get-ZoomTimeZoneMapping -MicrosoftTimeZone $TimeZone
-            if ($zoomTimeZone) {
-                try {
+            try {
+                $zoomTimeZone = Get-ZoomTimeZoneMapping -MicrosoftTimeZone $TimeZone
+                if ($zoomTimeZone) {
                     $tzResponse = Invoke-ZoomAPI -Method 'PATCH' `
                         -Endpoint "users/$($User.Mail)" `
                         -Headers $headers `
                         -Body @{ timezone = $zoomTimeZone }
 
                     if ($tzResponse.StatusCode -eq 204) {
-                        Write-StatusMessage -Message "Successfully updated Zoom timezone to $zoomTimeZone" -Type OK
-                    }
-                } catch {
-                    Write-StatusMessage -Message "Failed to update timezone: $_" -Type WARN
-                }
-            }
-        }
-
-        # Assign Calling Plan if applicable
-        if ($IsWorkPlaceLicense -eq 'true') {
-            Write-StatusMessage -Message "Workplace license detected, skipping Contact Center provisioning" -Type INFO
-        } elseif ($isContactCenter -eq 'true') {
-            Write-StatusMessage -Message "Contact Center detected, skipping Calling Plan provisioning" -Type INFO
-        } else {
-            Write-StatusMessage -Message "Assigning US/CA Unlimited Calling Plan to $($User.Mail)" -Type INFO
-            try {
-                $callingPlanResponse = Invoke-ZoomAPI -Method 'GET' `
-                    -Endpoint 'phone/calling_plans' `
-                    -Headers $headers
-
-                $callingPlan = $callingPlanResponse.Content.calling_plans |
-                Where-Object { $_.name -eq 'US/CA Unlimited Calling Plan' }
-
-                if ($callingPlan -and $callingPlan.available -gt 0) {
-                    $planBody = @{
-                        calling_plans = @( @{ type = 200 } )
-                    }
-
-                    $planResponse = Invoke-ZoomAPI -Method 'POST' `
-                        -Endpoint "phone/users/$($User.Mail)/calling_plans" `
-                        -Headers $headers `
-                        -Body $planBody
-
-                    if ($planResponse.StatusCode -eq 201) {
-                        Write-StatusMessage -Message "Calling plan successfully assigned to $($User.Mail)" -Type OK
+                        $provisioningSteps.TimeZoneSet = $true
+                        Write-StatusMessage "Successfully updated Zoom timezone to $zoomTimeZone" -Type 'OK'
                     }
                 }
             } catch {
-                Write-StatusMessage "Failed to assign calling plan: $_" -Type 'ERROR'
+                Write-StatusMessage "Failed to update timezone: $($_.Exception.Message)" -Type 'WARN'
             }
         }
 
-        if ($isContactCenter -eq 'true') {
+        # Configure based on user type
+        if ($isContactCenter) {
+            try {
+                # Initialize empty array to store all templates
+                $allContactCenterTemplates = @()
+                $pageSize = 300
+                $pageNumber = 1
+                $hasMorePages = $true
+                $ContactCenterTemplates = $null
 
-            # Add Contact Center template map only if user is in Reactive department
-            $ContactCenterTemplateMap = @{
-                'South Florida' = "unIR_2-xQemLQ9pfvDKk3w"
-                'Northeast'     = "-Pil2tjcRaOTaIl6LUV_6g"
-                'North Florida' = "nQdKAwkhRh-ds0Yvp7QKsw"
-                'Mid-West'      = "ySmugPJ0Qc6O3IaWHi9jHA"
-                'Mid-Atlantic'  = "K-6ajeNsS4KJRf-6xfRnaA"
-            }
+                while ($hasMorePages) {
+                    $getContactCenterTemplates = Invoke-ZoomAPI -Method GET `
+                        -Endpoint "contact_center/users/templates?page_size=$pageSize&page_number=$pageNumber" `
+                        -Headers $headers
 
+                    if ($getContactCenterTemplates.Content.user_templates) {
+                        # Try to find exact template match
+                        $ContactCenterTemplates = $getContactCenterTemplates.Content.user_templates |
+                        Where-Object { $_.template_name -eq $($User.officeLocation) } |
+                        Select-Object template_name, template_id
 
-            if ($ContactCenterTemplateMap.ContainsKey($User.officeLocation)) {
-                $templateId = $ContactCenterTemplateMap[$User.officeLocation]
+                        if ($ContactCenterTemplates) {
+                            Write-StatusMessage "Found matching template for location: $($User.officeLocation)" -Type 'INFO'
+                            break  # Exit loop if match found
+                        }
 
+                        # Store templates in case we need them later
+                        $allContactCenterTemplates += $getContactCenterTemplates.Content.user_templates
+                    }
+
+                    # Check if we need more pages
+                    $totalRecords = $getContactCenterTemplates.Content.total_records
+                    $currentCount = $pageSize * $pageNumber
+                    $hasMorePages = $currentCount -lt $totalRecords
+
+                    $pageNumber++
+                }
+
+                if (-not $ContactCenterTemplates) {
+                    Write-StatusMessage "No matching template found for location: $($User.officeLocation)" -Type 'ERROR'
+                    return $false
+                }
+
+                # Assign Contact Center template
                 try {
                     $contantCenterBody = @{
                         user_email  = $User.Mail
-                        template_id = $templateId
+                        template_id = $ContactCenterTemplates.template_id
                     }
 
                     $ccResponse = Invoke-ZoomAPI -Method 'POST' `
@@ -2595,137 +2619,240 @@ function Add-UserToZoom {
                         -Body $contantCenterBody
 
                     if ($ccResponse.StatusCode -eq 201) {
-                        Write-StatusMessage -Message "Contact Center successfully provisioned for $($User.Mail)" -Type OK
+                        $provisioningSteps.ContactCenterProvisioned = $true
+                        Write-StatusMessage "Contact Center successfully provisioned for $($User.Mail)" -Type 'OK'
                     }
-
                 } catch {
-                    Write-StatusMessage -Message "Failed to provision Contact Center: $_" -Type ERROR
+                    Write-StatusMessage "Failed to provision Contact Center: $($_.Exception.Message)" -Type 'ERROR'
+                    return $false
                 }
 
-                # Fetch skills from template user
-                try {
-                    Write-StatusMessage -Message "Getting skills from selected copy user" -Type INFO
-                    $skillsResponse = Invoke-ZoomAPI -Method 'GET' `
-                        -Endpoint "contact_center/users/$UserToCopy/skills" `
+                # Configure skills if UserToCopy is provided
+                if ($UserToCopy) {
+                    try {
+                        Write-StatusMessage "Getting skills from selected copy user" -Type 'INFO'
+                        $skillsResponse = Invoke-ZoomAPI -Method 'GET' `
+                            -Endpoint "contact_center/users/$UserToCopy/skills" `
+                            -Headers $headers
+
+                        if ($skillsResponse.Content.skills.Count -eq 1) {
+                            $skillBody = @{
+                                skills = @(
+                                    @{
+                                        skill_id              = $skillsResponse.Content.skills[0].skill_id
+                                        max_proficiency_level = $skillsResponse.Content.skills[0].user_proficiency_level
+                                    }
+                                )
+                            }
+
+                            $setSkillResponse = Invoke-ZoomAPI -Method 'POST' `
+                                -Endpoint "contact_center/users/$($User.Mail)/skills" `
+                                -Headers $headers `
+                                -Body $skillBody
+
+                            if ($setSkillResponse.StatusCode -eq 201) {
+                                $provisioningSteps.SkillsConfigured = $true
+                                Write-StatusMessage "Skills successfully set for $($User.Mail)" -Type 'OK'
+                            }
+                        }
+                    } catch {
+                        Write-StatusMessage "Failed to set skills: $($_.Exception.Message)" -Type 'ERROR'
+                    }
+                }
+            } catch {
+                Write-StatusMessage "Failed to configure Contact Center: $($_.Exception.Message)" -Type 'ERROR'
+            }
+        } else {
+            try {
+                # Assign Calling Plan if applicable
+                if ($IsWorkPlaceLicense -eq 'true') {
+                    Write-StatusMessage "Workplace license detected, skipping Calling Plan provisioning" -Type 'INFO'
+                    $provisioningSteps.CallingPlanAssigned = $true
+                } else {
+                    Write-StatusMessage "Assigning US/CA Unlimited Calling Plan to $($User.Mail)" -Type 'INFO'
+
+                    $callingPlanResponse = Invoke-ZoomAPI -Method 'GET' `
+                        -Endpoint 'phone/calling_plans' `
                         -Headers $headers
 
-                    if ($skillsResponse.Content.skills.Count -eq 1) {
-                        $skillBody = @{
-                            skills = @(
-                                @{
-                                    skill_id              = $skillsResponse.Content.skills[0].skill_id
-                                    max_proficiency_level = $skillsResponse.Content.skills[0].user_proficiency_level
-                                }
-                            )
+                    $callingPlan = $callingPlanResponse.Content.calling_plans |
+                    Where-Object { $_.name -eq 'US/CA Unlimited Calling Plan' }
+
+                    if ($callingPlan -and $callingPlan.available -gt 0) {
+                        $planBody = @{
+                            calling_plans = @( @{ type = 200 } )
                         }
 
-                        $setSkillResponse = Invoke-ZoomAPI -Method 'POST' `
-                            -Endpoint "contact_center/users/$($User.Mail)/skills" `
+                        $planResponse = Invoke-ZoomAPI -Method 'POST' `
+                            -Endpoint "phone/users/$($User.Mail)/calling_plans" `
                             -Headers $headers `
-                            -Body $skillBody
+                            -Body $planBody
 
-                        if ($setSkillResponse.StatusCode -eq 201) {
-                            Write-StatusMessage -Message "Single skill successfully set for $($User.Mail)" -Type OK
+                        if ($planResponse.StatusCode -eq 201) {
+                            $provisioningSteps.CallingPlanAssigned = $true
+                            Write-StatusMessage "Calling plan successfully assigned to $($User.Mail)" -Type 'OK'
                         }
+                    }
+                }
+
+                # Emergency address assignment
+                try {
+                    $allEmergencyAddresses = @()
+                    $pageSize = 300
+                    $pageNumber = 1
+                    $hasMorePages = $true
+                    $emergencyAddress = $null
+
+                    while ($hasMorePages) {
+                        $gete911Addresses = Invoke-ZoomAPI -Method GET `
+                            -Endpoint "phone/emergency_addresses?page_size=$pageSize&page_number=$pageNumber" `
+                            -Headers $headers
+
+                        if ($gete911Addresses.Content.emergency_addresses) {
+                            # First try to find exact city match
+                            $emergencyAddress = $gete911Addresses.Content.emergency_addresses |
+                            Where-Object { $_.city -eq $($User.City) } |
+                            Select-Object city, id
+
+                            if ($emergencyAddress) {
+                                Write-StatusMessage "Found matching emergency address for: $($User.City)" -Type 'INFO'
+                                break  # Exit loop if match found
+                            }
+
+                            # If no match, store addresses for potential Hartford fallback
+                            $allEmergencyAddresses += $gete911Addresses.Content.emergency_addresses
+                        }
+
+                        # Check if we need more pages
+                        $totalRecords = $gete911Addresses.Content.total_records
+                        $currentCount = $pageSize * $pageNumber
+                        $hasMorePages = $currentCount -lt $totalRecords
+
+                        $pageNumber++
+                    }
+
+                    # If no direct match was found, look for Hartford in collected addresses
+                    if (-not $emergencyAddress) {
+                        Write-StatusMessage "No matching emergency address found for location: $($User.City). Using Hartford as default." -Type 'WARN'
+                        $emergencyAddress = $allEmergencyAddresses |
+                        Where-Object { $_.city -eq 'Hartford' } |
+                        Select-Object city, id
+                    }
+
+                    if ($emergencyAddress) {
+                        $e911Body = @{
+                            emergency_address_id = $emergencyAddress.id
+                        }
+
+                        $e911Response = Invoke-ZoomAPI -Method 'PATCH' `
+                            -Endpoint "phone/users/$($User.Mail)" `
+                            -Headers $headers `
+                            -Body $e911Body
+
+                        if ($e911Response.StatusCode -eq 204) {
+                            $provisioningSteps.EmergencyAddressSet = $true
+                            Write-StatusMessage "Emergency address assigned successfully: $($emergencyAddress.city)" -Type 'OK'
+                        }
+                    } else {
+                        Write-StatusMessage "Failed to find any valid emergency address, including Hartford default" -Type 'ERROR'
                     }
                 } catch {
-                    Write-StatusMessage "Failed to set skill for $($User.Mail): $_" -Type 'ERROR'
+                    Write-StatusMessage "Failed to assign emergency address: $($_.Exception.Message)" -Type 'ERROR'
                 }
+
+                # Add user to Zoom Phone Queue settings if applicable
+                try {
+                    # Initialize empty array to store all queues
+                    $allQueues = @()
+                    $pageSize = 300
+                    $pageNumber = 1
+                    $hasMorePages = $true
+                    $setQueue = $null
+
+                    while ($hasMorePages) {
+                        $getQueues = Invoke-ZoomAPI -Method GET `
+                            -Endpoint "phone/call_queues?page_size=$pageSize&page_number=$pageNumber" `
+                            -Headers $headers
+
+                        if ($getQueues.Content.call_queues) {
+                            # Try to find exact queue match
+                            $setQueue = $getQueues.Content.call_queues |
+                            Where-Object { $_.name -eq $($User.Department) } |
+                            Select-Object name, id
+
+                            if ($setQueue) {
+                                Write-StatusMessage "Found matching queue for department: $($User.Department)" -Type 'INFO'
+                                break  # Exit loop if match found
+                            }
+
+                            # Store queues for name list
+                            $allQueues += $getQueues.Content.call_queues
+                        }
+
+                        # Check if we need more pages
+                        $totalRecords = $getQueues.Content.total_records
+                        $currentCount = $pageSize * $pageNumber
+                        $hasMorePages = $currentCount -lt $totalRecords
+
+                        $pageNumber++
+                    }
+
+                    # Get list of all queue names for validation
+                    $ZoomPhoneQueues = $allQueues.name
+
+                    if ($ZoomPhoneQueues -contains $User.Department) {
+                        # Add user to queue
+                        $phoneQueueBody = @{
+                            members = @{
+                                users = @(
+                                    @{
+                                        email = $User.Mail
+                                        id    = $checkResponse.Content.id
+                                    }
+                                )
+                            }
+                        }
+
+                        Write-StatusMessage "Attempting to add $($User.DisplayName) to queue: $($setQueue.name)" -Type 'INFO'
+
+                        $phoneQueueResponse = Invoke-ZoomAPI -Method 'POST' `
+                            -Endpoint "phone/call_queues/$($setQueue.id)/members" `
+                            -Headers $headers `
+                            -Body $phoneQueueBody
+
+                        if ($phoneQueueResponse.Success) {
+                            $provisioningSteps.QueueConfigured = $true
+                            Write-StatusMessage "$($User.DisplayName) successfully added to Zoom Phone Queue: $($setQueue.name)" -Type 'OK'
+                        } else {
+                            Write-StatusMessage "Failed to add user to queue: $($phoneQueueResponse.Error.Message)" -Type 'ERROR'
+                        }
+                    } else {
+                        Write-StatusMessage "User $($User.DisplayName)'s department ($($User.Department)) is not a valid Zoom Phone Queue" -Type 'INFO'
+                        $provisioningSteps.QueueConfigured = $true
+                    }
+                } catch {
+                    Write-StatusMessage "Failed to configure Zoom Phone Queue settings: $($_.Exception.Message)" -Type 'ERROR'
+                }
+            } catch {
+                Write-StatusMessage "Failed to configure regular user settings: $($_.Exception.Message)" -Type 'ERROR'
             }
         }
 
-        # Configure E911, Voicemail and SMS settings if not Contact Center
-        if ($isContactCenter -eq 'false') {
-            # Emergency address assignment
-            try {
-                $e911AddressMap = @{
-                    'Hartford'     = "d7TOPWy0T1uFpkDNnmKRAA"
-                    'Itasca'       = "0Kex5RhJT6KJP_E8WcDcqg"
-                    'Coral Gables' = "XZiC3QseQIWummbG15G8KA"
-                    'Tarrytown'    = "_XgGsk4bQ9-BL1LTEOL_CQ"
-                    'Reading'      = "VkMtuzWyS4SkATA47X9mAA"
-                    'Princeton'    = "xSH1yokdQTqa8EZRHvCHxA"
-                    'Westminster'  = "_CxooGkaS52zT9BFFFa5Eg"
-                    'Jacksonville' = "swIy4r7kQCyqxkt8Sf0yRQ"
-                }
+        # Final status report
+        $successCount = ($provisioningSteps.Values | Where-Object { $_ -eq $true }).Count
+        $totalSteps = $provisioningSteps.Count
 
-                # Default to Hartford if no match found
-                $emergencyAddressId = if ($User.City -and $e911AddressMap.ContainsKey($User.City)) {
-                    $e911AddressMap[$User.City]
-                } else {
-                    Write-StatusMessage "No matching emergency address found for location: $($User.City). Using Hartford as default." -Type 'WARN'
-                    $e911AddressMap['Hartford']
-                }
+        Write-StatusMessage "Zoom provisioning completed for $($User.DisplayName). $successCount of $totalSteps steps successful." -Type $(
+            if ($successCount -eq $totalSteps) { 'OK' }
+            elseif ($successCount -gt 0) { 'WARNING' }
+            else { 'ERROR' }
+        )
 
-                $e911Body = @{
-                    emergency_address_id = $emergencyAddressId
-                }
+        return ($successCount -eq $totalSteps)
 
-                $e911Response = Invoke-ZoomAPI -Method 'PATCH' `
-                    -Endpoint "phone/users/$($User.Mail)" `
-                    -Headers $headers `
-                    -Body $e911Body
-
-                if ($e911Response.StatusCode -eq 204) {
-                    Write-StatusMessage "Emergency address assigned successfully" -Type 'OK'
-                }
-
-            } catch {
-                Write-StatusMessage "Failed to assign emergency address: $($_.Exception.Message)" -Type 'ERROR'
-            }
-
-            # Voicemail settings
-            try {
-                $voicemailBody = @{
-                    policy = @{
-                        voicemail = @{
-                            enable              = $true
-                            allow_delete        = $true
-                            allow_download      = $true
-                            allow_transcription = $true
-                        }
-                    }
-                }
-
-                $voicemailResponse = Invoke-ZoomAPI -Method 'PATCH' `
-                    -Endpoint "phone/users/$($User.Mail)" `
-                    -Headers $headers `
-                    -Body $voicemailBody
-
-                if ($voicemailResponse.StatusCode -eq 204) {
-                    Write-StatusMessage "Voicemail settings configured successfully" -Type 'OK'
-                }
-            } catch {
-                Write-StatusMessage "Failed to configure voicemail settings: $($_.Exception.Message)" -Type 'ERROR'
-            }
-
-            # SMS settings
-            try {
-                $smsBody = @{
-                    policy = @{
-                        sms = @{
-                            enable            = $true
-                            international_sms = $false
-                        }
-                    }
-                }
-
-                $smsResponse = Invoke-ZoomAPI -Method 'PATCH' `
-                    -Endpoint "phone/users/$($User.Mail)" `
-                    -Headers $headers `
-                    -Body $smsBody
-
-                if ($smsResponse.StatusCode -eq 204) {
-                    Write-StatusMessage "SMS settings configured successfully" -Type 'OK'
-                }
-            } catch {
-                Write-StatusMessage "Failed to configure SMS settings: $($_.Exception.Message)" -Type 'ERROR'
-            }
-        }
-        # Return true if everything completed successfully
-        return $true
     } catch {
-        Write-StatusMessage -Message "Unexpected error in Add-UserToZoom: $_" -Type ERROR
+        Write-StatusMessage "Critical error in Add-UserToZoom: $($_.Exception.Message)" -Type 'ERROR'
+        Write-StatusMessage "Stack Trace: $($_.ScriptStackTrace)" -Type 'ERROR'
         return $false
     }
 }
