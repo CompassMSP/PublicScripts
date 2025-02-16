@@ -840,8 +840,8 @@ function Get-FormattedLicenseInfo {
         if ($IgnoredLicenses -notcontains $SkuDisplayName) {
             @{
                 DisplayName = "$($SkuDisplayName) (Available: $available)"
-                SkuId      = $_.SkuId
-                SortName   = $SkuDisplayName
+                SkuId       = $_.SkuId
+                SortName    = $SkuDisplayName
             }
         }
     } | Where-Object { $_ -ne $null } | Sort-Object { $_.SortName }
@@ -2108,7 +2108,7 @@ function Wait-ForADUserSync {
                     'Department',
                     'officeLocation',
                     'City'
-                    )
+                )
                 $user = Get-MgUser -UserId $UserEmail -Property $properties | Select-Object $properties -ErrorAction Stop
                 if ($user) {
                     Write-StatusMessage -Message "User $UserEmail successfully synced to Azure AD" -Type OK
@@ -2552,6 +2552,8 @@ function Add-UserToZoom {
             } catch {
                 Write-StatusMessage "Failed to update timezone: $($_.Exception.Message)" -Type 'WARN'
             }
+        } else {
+            Write-StatusMessage "No TimeZone provided, skipping timezone update" -Type 'WARN'
         }
 
         # Configure based on user type
@@ -2650,11 +2652,14 @@ function Add-UserToZoom {
                 Write-StatusMessage "Failed to configure Contact Center: $($_.Exception.Message)" -Type 'ERROR'
             }
         } else {
-            try {
-                # Assign Calling Plan if applicable
-                if ($IsWorkPlaceLicense -eq 'true') {
-                    Write-StatusMessage "Workplace license detected, skipping Calling Plan provisioning" -Type 'INFO'
-                } else {
+
+            # Assign Calling Plan if applicable
+            if ($IsWorkPlaceLicense -eq 'true') {
+                Write-StatusMessage "Workplace license detected, skipping Calling Plan provisioning" -Type 'INFO'
+            } else {
+
+                # Assign Calling Plan to Zoom Phone User
+                try {
                     Write-StatusMessage "Assigning US/CA Unlimited Calling Plan to $($User.Mail)" -Type 'INFO'
 
                     $callingPlanResponse = Invoke-ZoomAPI -Method 'GET' `
@@ -2678,151 +2683,160 @@ function Add-UserToZoom {
                             Write-StatusMessage "Calling plan successfully assigned to $($User.Mail)" -Type 'OK'
                         }
                     }
+                } catch {
+                    Write-StatusMessage "Failed to assign Calling Plan: $($_.Exception.Message)" -Type 'ERROR'
                 }
+            }
 
-                # Emergency address assignment
-                try {
-                    $allEmergencyAddresses = @()
-                    $pageSize = 300
-                    $pageNumber = 1
-                    $hasMorePages = $true
-                    $emergencyAddress = $null
+            # Emergency address assignment
+            try {
+                $allEmergencyAddresses = @()
+                $pageSize = 300
+                $pageNumber = 1
+                $hasMorePages = $true
+                $emergencyAddress = $null
 
-                    while ($hasMorePages) {
-                        $gete911Addresses = Invoke-ZoomAPI -Method GET `
-                            -Endpoint "phone/emergency_addresses?page_size=$pageSize&page_number=$pageNumber" `
-                            -Headers $headers
+                while ($hasMorePages) {
+                    $gete911Addresses = Invoke-ZoomAPI -Method GET `
+                        -Endpoint "phone/emergency_addresses?page_size=$pageSize&page_number=$pageNumber" `
+                        -Headers $headers
 
-                        if ($gete911Addresses.Content.emergency_addresses) {
-                            # First try to find exact city match
-                            $emergencyAddress = $gete911Addresses.Content.emergency_addresses |
-                            Where-Object { $_.city -eq $($User.City) } |
-                            Select-Object city, id
-
-                            if ($emergencyAddress) {
-                                Write-StatusMessage "Found matching emergency address for: $($User.City)" -Type 'INFO'
-                                break  # Exit loop if match found
-                            }
-
-                            # If no match, store addresses for potential Hartford fallback
-                            $allEmergencyAddresses += $gete911Addresses.Content.emergency_addresses
-                        }
-
-                        # Check if we need more pages
-                        $totalRecords = $gete911Addresses.Content.total_records
-                        $currentCount = $pageSize * $pageNumber
-                        $hasMorePages = $currentCount -lt $totalRecords
-
-                        $pageNumber++
-                    }
-
-                    # If no direct match was found, look for Hartford in collected addresses
-                    if (-not $emergencyAddress) {
-                        Write-StatusMessage "No matching emergency address found for location: $($User.City). Using Hartford as default." -Type 'WARN'
-                        $emergencyAddress = $allEmergencyAddresses |
-                        Where-Object { $_.city -eq 'Hartford' } |
+                    if ($gete911Addresses.Content.emergency_addresses) {
+                        # First try to find exact city match
+                        $emergencyAddress = $gete911Addresses.Content.emergency_addresses |
+                        Where-Object { $_.city -eq $($User.City) } |
                         Select-Object city, id
-                    }
 
-                    if ($emergencyAddress) {
-                        $e911Body = @{
-                            emergency_address_id = $emergencyAddress.id
+                        if ($emergencyAddress) {
+                            Write-StatusMessage "Found matching emergency address for: $($User.City)" -Type 'INFO'
+                            break  # Exit loop if match found
                         }
 
-                        $e911Response = Invoke-ZoomAPI -Method 'PATCH' `
-                            -Endpoint "phone/users/$($User.Mail)" `
-                            -Headers $headers `
-                            -Body $e911Body
-
-                        if ($e911Response.StatusCode -eq 204) {
-                            Write-StatusMessage "Emergency address assigned successfully: $($emergencyAddress.city)" -Type 'OK'
-                        }
-                    } else {
-                        Write-StatusMessage "Failed to find any valid emergency address, including Hartford default" -Type 'ERROR'
+                        # If no match, store addresses for potential Hartford fallback
+                        $allEmergencyAddresses += $gete911Addresses.Content.emergency_addresses
                     }
-                } catch {
-                    Write-StatusMessage "Failed to assign emergency address: $($_.Exception.Message)" -Type 'ERROR'
+
+                    # Check if we need more pages
+                    $totalRecords = $gete911Addresses.Content.total_records
+                    $currentCount = $pageSize * $pageNumber
+                    $hasMorePages = $currentCount -lt $totalRecords
+
+                    $pageNumber++
                 }
 
-                # Add user to Zoom Phone Queue settings if applicable
-                try {
-                    # Initialize empty array to store all queues
-                    $allQueues = @()
-                    $pageSize = 300
-                    $pageNumber = 1
-                    $hasMorePages = $true
-                    $setQueue = $null
+                # If no direct match was found, look for Hartford in collected addresses
+                if (-not $emergencyAddress) {
+                    Write-StatusMessage "No matching emergency address found for location: $($User.City). Using Hartford as default." -Type 'WARN'
+                    $emergencyAddress = $allEmergencyAddresses |
+                    Where-Object { $_.city -eq 'Hartford' } |
+                    Select-Object city, id
+                }
 
-                    while ($hasMorePages) {
-                        $getQueues = Invoke-ZoomAPI -Method GET `
-                            -Endpoint "phone/call_queues?page_size=$pageSize&page_number=$pageNumber" `
-                            -Headers $headers
-
-                        if ($getQueues.Content.call_queues) {
-                            # Try to find exact queue match
-                            $setQueue = $getQueues.Content.call_queues |
-                            Where-Object { $_.name -eq $($User.Department) } |
-                            Select-Object name, id
-
-                            if ($setQueue) {
-                                Write-StatusMessage "Found matching queue for department: $($User.Department)" -Type 'INFO'
-                                break  # Exit loop if match found
-                            }
-
-                            # Store queues for name list
-                            $allQueues += $getQueues.Content.call_queues
-                        }
-
-                        # Check if we need more pages
-                        $totalRecords = $getQueues.Content.total_records
-                        $currentCount = $pageSize * $pageNumber
-                        $hasMorePages = $currentCount -lt $totalRecords
-
-                        $pageNumber++
+                if ($emergencyAddress) {
+                    $e911Body = @{
+                        emergency_address_id = $emergencyAddress.id
                     }
 
-                    # Get list of all queue names for validation
-                    $ZoomPhoneQueues = $allQueues.name
+                    $e911Response = Invoke-ZoomAPI -Method 'PATCH' `
+                        -Endpoint "phone/users/$($User.Mail)" `
+                        -Headers $headers `
+                        -Body $e911Body
 
-                    if ($ZoomPhoneQueues -contains $User.Department) {
-                        # Add user to queue
-                        $phoneQueueBody = @{
-                            members = @{
-                                users = @(
-                                    @{
-                                        email = $User.Mail
-                                        id    = $checkResponse.Content.id
-                                    }
-                                )
-                            }
-                        }
-
-                        Write-StatusMessage "Attempting to add $($User.DisplayName) to queue: $($setQueue.name)" -Type 'INFO'
-
-                        $phoneQueueResponse = Invoke-ZoomAPI -Method 'POST' `
-                            -Endpoint "phone/call_queues/$($setQueue.id)/members" `
-                            -Headers $headers `
-                            -Body $phoneQueueBody
-
-                        if ($phoneQueueResponse.Success) {
-                            Write-StatusMessage "$($User.DisplayName) successfully added to Zoom Phone Queue: $($setQueue.name)" -Type 'OK'
-                        } else {
-                            Write-StatusMessage "Failed to add user to queue: $($phoneQueueResponse.Error.Message)" -Type 'ERROR'
-                        }
-                    } else {
-                        Write-StatusMessage "User $($User.DisplayName)'s department ($($User.Department)) is not a valid Zoom Phone Queue" -Type 'INFO'
+                    if ($e911Response.StatusCode -eq 204) {
+                        Write-StatusMessage "Emergency address assigned successfully: $($emergencyAddress.city)" -Type 'OK'
                     }
-                } catch {
-                    Write-StatusMessage "Failed to configure Zoom Phone Queue settings: $($_.Exception.Message)" -Type 'ERROR'
+                } else {
+                    Write-StatusMessage "Failed to find any valid emergency address, including Hartford default" -Type 'ERROR'
                 }
             } catch {
-                Write-StatusMessage "Failed to configure regular user settings: $($_.Exception.Message)" -Type 'ERROR'
+                Write-StatusMessage "Failed to assign emergency address: $($_.Exception.Message)" -Type 'ERROR'
+            }
+
+            # Add user to Zoom Phone Queue settings if applicable
+            try {
+                # Initialize empty array to store all queues
+                $allQueues = @()
+                $pageSize = 300
+                $pageNumber = 1
+                $hasMorePages = $true
+                $setQueue = $null
+
+                while ($hasMorePages) {
+                    $getQueues = Invoke-ZoomAPI -Method GET `
+                        -Endpoint "phone/call_queues?page_size=$pageSize&page_number=$pageNumber" `
+                        -Headers $headers
+
+                    if ($getQueues.Content.call_queues) {
+                        # Try to find exact queue match
+                        $setQueue = $getQueues.Content.call_queues |
+                        Where-Object { $_.name -eq $($User.Department) } |
+                        Select-Object name, id
+
+                        if ($setQueue) {
+                            Write-StatusMessage "Found matching queue for department: $($User.Department)" -Type 'INFO'
+                            break  # Exit loop if match found
+                        }
+
+                        # Store queues for name list
+                        $allQueues += $getQueues.Content.call_queues
+                    }
+
+                    # Check if we need more pages
+                    $totalRecords = $getQueues.Content.total_records
+                    $currentCount = $pageSize * $pageNumber
+                    $hasMorePages = $currentCount -lt $totalRecords
+
+                    $pageNumber++
+                }
+
+                # Get list of all queue names for validation
+                $ZoomPhoneQueues = $allQueues.name
+
+                $excludedQueues = @(
+                    'Finance',
+                    'Procurement'
+                )
+
+                # Check if user's department is in excluded queues
+                if ($excludedQueues -contains $User.Department) {
+                    Write-StatusMessage "Excluded department: $($User.Department) found. Please check with manager to see if they need to be added to the queue." -Type 'WARNING'
+                }
+                # Check if user's department exists as a queue
+                elseif ($ZoomPhoneQueues -contains $User.Department) {
+                    # Add user to queue
+                    $phoneQueueBody = @{
+                        members = @{
+                            users = @(
+                                @{
+                                    email = $User.Mail
+                                    id    = $checkResponse.Content.id
+                                }
+                            )
+                        }
+                    }
+
+                    Write-StatusMessage "Attempting to add $($User.DisplayName) to queue: $($setQueue.name)" -Type 'INFO'
+
+                    $phoneQueueResponse = Invoke-ZoomAPI -Method 'POST' `
+                        -Endpoint "phone/call_queues/$($setQueue.id)/members" `
+                        -Headers $headers `
+                        -Body $phoneQueueBody
+
+                    if ($phoneQueueResponse.Success) {
+                        Write-StatusMessage "$($User.DisplayName) successfully added to Zoom Phone Queue: $($setQueue.name)" -Type 'OK'
+                    } else {
+                        Write-StatusMessage "Failed to add user to queue: $($phoneQueueResponse.Error.Message)" -Type 'ERROR'
+                    }
+                } else {
+                    Write-StatusMessage "User $($User.DisplayName)'s department ($($User.Department)) is not a valid Zoom Phone Queue" -Type 'INFO'
+                }
+            } catch {
+                Write-StatusMessage "Failed to configure Zoom Phone Queue settings: $($_.Exception.Message)" -Type 'ERROR'
             }
         }
-        # Return true if everything completed successfully
         return $true
     } catch {
-        Write-StatusMessage -Message "Unexpected error in Add-UserToZoom: $_" -Type ERROR
+        Write-StatusMessage "Unexpected error in Add-UserToZoom: $_" -Type 'ERROR'
         return $false
     }
 }
@@ -2842,16 +2856,16 @@ function Add-UserToZoomSSO {
     # Define constants
 
     if ($IsWorkPlaceLicense -eq 'true') {
-	    $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Workplace Users')"
+        $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Workplace Users')"
     } elseif ($User.Department -eq 'Reactive') {
-	    $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Contact Center Users')"
+        $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Contact Center Users')"
     } else {
-	    $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Phone Users')"
+        $zoomGroup = Get-MgGroup -Filter "startswith(displayName,'Zoom Phone Users')"
     }
 
     if ($zoomGroup) {
         $addGroupMemberParams = @{
-	        "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($user.id)"
+            "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($user.id)"
         }
 
         New-MgGroupMemberByRef -GroupId $($zoomGroup.Id) -BodyParameter $addGroupMemberParams
