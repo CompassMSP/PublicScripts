@@ -2652,7 +2652,6 @@ function Add-UserToZoom {
                 Write-StatusMessage "Failed to configure Contact Center: $($_.Exception.Message)" -Type 'ERROR'
             }
         } else {
-
             # Assign Calling Plan if applicable
             if ($IsWorkPlaceLicense -eq 'true') {
                 Write-StatusMessage "Workplace license detected, skipping Calling Plan provisioning" -Type 'INFO'
@@ -2794,12 +2793,13 @@ function Add-UserToZoom {
 
                 $excludedQueues = @(
                     'Finance',
+                    'Billing',
                     'Procurement'
                 )
 
                 # Check if user's department is in excluded queues
                 if ($excludedQueues -contains $User.Department) {
-                    Write-StatusMessage "Excluded department: $($User.Department) found. Please check with manager to see if they need to be added to the queue." -Type 'WARNING'
+                    Write-StatusMessage "Excluded department: $($User.Department) found." -Type 'WARN'
                 }
                 # Check if user's department exists as a queue
                 elseif ($ZoomPhoneQueues -contains $User.Department) {
@@ -2833,6 +2833,66 @@ function Add-UserToZoom {
             } catch {
                 Write-StatusMessage "Failed to configure Zoom Phone Queue settings: $($_.Exception.Message)" -Type 'ERROR'
             }
+
+            # Add default outbound number to users
+            try {
+                # Initialize empty array to store all queues
+                $pageSize = 300
+                $pageNumber = 1
+                $hasMorePages = $true
+                $setOutboundNumbers = $null
+
+                while ($hasMorePages) {
+                    $getOutboundNumbers = Invoke-ZoomAPI -Method GET `
+                        -Endpoint "phone/numbers?page_size=$pageSize&page_number=$pageNumber" `
+                        -Headers $headers
+
+                    $getIVRs = $getOutboundNumbers.Content.phone_numbers.assignee | Where-Object { $_.name -like '*IVR*' -and $_.Type -eq 'autoReceptionist' }
+
+                    if ($getIVRs) {
+                        # Try to find exact queue match
+                        $setOutboundNumbers = $getIVRs |
+                        Where-Object { $_.name -like "*$($User.OfficeLocation)*" }
+
+                        if ($setOutboundNumbers) {
+                            Write-StatusMessage "Found matching Outbound number for Office Location: $($User.OfficeLocation)" -Type 'INFO'
+                            break  # Exit loop if match found
+                        }
+                    }
+
+                    # Check if we need more pages
+                    $totalRecords = $getOutboundNumbers.Content.total_records
+                    $currentCount = $pageSize * $pageNumber
+                    $hasMorePages = $currentCount -lt $totalRecords
+
+                    $pageNumber++
+                }
+
+                if ($setOutboundNumbers) {
+                    # Add user to queue
+                    $phoneNumberBody = @{
+                        phone_number_ids = @($setOutboundNumbers.id)
+                    }
+
+                    Write-StatusMessage "Attempting to add $($User.DisplayName) to queue: $($setOutboundNumbers.name)" -Type 'INFO'
+
+                    $phoneQueueResponse = Invoke-ZoomAPI -Method 'POST' `
+                        -Endpoint "phone/users/$($User.Mail)/outbound_caller_id/customized_numbers" `
+                        -Headers $headers `
+                        -Body $phoneNumberBody
+
+                    if ($phoneQueueResponse.Success) {
+                        Write-StatusMessage "$($User.DisplayName) successfully added to Zoom Phone Outbound number: $($setOutboundNumbers.name)" -Type 'OK'
+                    } else {
+                        Write-StatusMessage "Failed to modified to outbound settings $($User.DisplayName): $($phoneQueueResponse.Error.Message)" -Type 'ERROR'
+                    }
+                } else {
+                    Write-StatusMessage "No outbound settings have been modified for $($User.DisplayName). $($User.OfficeLocation) does no contain a valid Zoom Phone Outbound number." -Type 'INFO'
+                }
+            } catch {
+                Write-StatusMessage "Failed to configure Zoom Phone Queue settings: $($_.Exception.Message)" -Type 'ERROR'
+            }
+
         }
         return $true
     } catch {
