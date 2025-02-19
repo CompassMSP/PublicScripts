@@ -2847,7 +2847,7 @@ function Add-UserToZoom {
                 <#
                 $getOutboundNumbers = Invoke-ZoomAPI -Method GET -Headers $headers -Endpoint "phone/numbers"
                 $getOutboundNumbers.Content.phone_numbers | Where-Object { $_.assignee.name -like '*IVR*' }
-            #>
+                #>
 
                 $outboundNumberMap = @{
                     'North Florida' = '+19048162754'
@@ -2876,7 +2876,7 @@ function Add-UserToZoom {
                 if ($setOutboundNumber) {
                     # Build outbound number body
                     $phoneNumberBody = @{
-                        outbound_caller_id = @($setOutboundNumber)
+                        outbound_caller_id = $setOutboundNumber
                     }
 
                     # Assign users outbound number
