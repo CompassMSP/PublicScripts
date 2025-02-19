@@ -2844,18 +2844,18 @@ function Add-UserToZoom {
                     'Deployment'
                 )
 
-            <#
+                <#
                 $getOutboundNumbers = Invoke-ZoomAPI -Method GET -Headers $headers -Endpoint "phone/numbers"
                 $getOutboundNumbers.Content.phone_numbers | Where-Object { $_.assignee.name -like '*IVR*' }
             #>
 
                 $outboundNumberMap = @{
-                    'North Florida' = 'k4qTEwbWQLmd3AXtTuGVlA'
-                    'South Florida' = 'hk-Fz0AITNCk0nZ1Zm1KtA'
-                    'Mid-Atlantic'  = 'iap3Bj10T7mBQH6tIIyoFg'
-                    'Mid-West'      = 'BxpYEgAoSh-Fuh1kZWffZQ'
-                    'Northeast'     = 'gxY5SqunQ0Ct7OWVDACcZw'
-                    'Main'          = 'HHL0IHx1RwyhNO3JPG63Ig'
+                    'North Florida' = '+19048162754'
+                    'South Florida' = '+19045861534'
+                    'Mid-Atlantic'  = '+19044683356'
+                    'Mid-West'      = '+19044683167'
+                    'Northeast'     = '+19044683258'
+                    'Main'          = '+19048172595'
                 }
 
                 if ($DepartmentMap -contains $MgUser.Department) {
@@ -2876,12 +2876,12 @@ function Add-UserToZoom {
                 if ($setOutboundNumber) {
                     # Build outbound number body
                     $phoneNumberBody = @{
-                        phone_number_ids = @($setOutboundNumber)
+                        outbound_caller_id = @($setOutboundNumber)
                     }
 
                     # Assign users outbound number
-                    $phoneNumberResponse = Invoke-ZoomAPI -Method 'POST' `
-                        -Endpoint "phone/users/$($User.Mail)/outbound_caller_id/customized_numbers" `
+                    $phoneNumberResponse = Invoke-ZoomAPI -Method 'PATCH' `
+                        -Endpoint "phone/users/$($User.Mail)/settings" `
                         -Headers $headers `
                         -Body $phoneNumberBody
 
