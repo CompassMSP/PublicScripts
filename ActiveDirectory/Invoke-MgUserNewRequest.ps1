@@ -2858,7 +2858,7 @@ function Add-UserToZoom {
                     'Main'          = 'HHL0IHx1RwyhNO3JPG63Ig'
                 }
 
-                if ($MgUser.Department -match $DepartmentMap) {
+                if ($DepartmentMap -contains $MgUser.Department) {
                     # Default to Main IVR if no match found
                     $setOutboundNumber = if ($User.OfficeLocation -and $outboundNumberMap.ContainsKey($User.OfficeLocation)) {
                         $outboundNumberMap[$User.OfficeLocation]
