@@ -2865,7 +2865,7 @@ function Add-UserToZoom {
                         Write-StatusMessage "$($User.DisplayName) setting location to '$($User.OfficeLocation)' as default outbound number." -Type 'Info'
                     } else {
                         Write-StatusMessage "No matching outbound map match found for location: $($User.OfficeLocation)." -Type 'ERROR'
-                        Write-StatusMessage "$($User.DisplayName) setting location to 'Main IVR' as default outbound number. Check with Chris Williams" -Type 'ERROR'
+                        Write-StatusMessage "Setting location to 'Main IVR' as default outbound number for $($User.DisplayName). Check with Chris Williams" -Type 'ERROR'
                         $outboundNumberMap['Main']
                     }
                 } else {
