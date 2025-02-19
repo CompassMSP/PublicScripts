@@ -2863,8 +2863,8 @@ function Add-UserToZoom {
                     $setOutboundNumber = if ($User.OfficeLocation -and $outboundNumberMap.ContainsKey($User.OfficeLocation)) {
                         $outboundNumberMap[$User.OfficeLocation]
                     } else {
-                        Write-StatusMessage "No matching outbound map match found for location: $($User.OfficeLocation)." -Type 'WARN'
-                        Write-StatusMessage "Setting location to Main IVR as default outbound number." -Type 'WARN'
+                Write-StatusMessage "No matching outbound map match found for location: $($User.OfficeLocation)." -Type 'ERROR'
+                Write-StatusMessage "Setting location to Main IVR as default outbound number. Check with Chris Williams" -Type 'ERROR'
                         $outboundNumberMap['Main']
                     }
                 } else {
