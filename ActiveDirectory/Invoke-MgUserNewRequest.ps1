@@ -2862,13 +2862,14 @@ function Add-UserToZoom {
                     # Default to Main IVR if no match found
                     $setOutboundNumber = if ($User.OfficeLocation -and $outboundNumberMap.ContainsKey($User.OfficeLocation)) {
                         $outboundNumberMap[$User.OfficeLocation]
+                        Write-StatusMessage "$($User.DisplayName) setting location to '$($User.OfficeLocation)' as default outbound number." -Type 'Info'
                     } else {
-                Write-StatusMessage "No matching outbound map match found for location: $($User.OfficeLocation)." -Type 'ERROR'
-                Write-StatusMessage "Setting location to Main IVR as default outbound number. Check with Chris Williams" -Type 'ERROR'
+                        Write-StatusMessage "No matching outbound map match found for location: $($User.OfficeLocation)." -Type 'ERROR'
+                        Write-StatusMessage "$($User.DisplayName) setting location to 'Main IVR' as default outbound number. Check with Chris Williams" -Type 'ERROR'
                         $outboundNumberMap['Main']
                     }
                 } else {
-                    Write-StatusMessage "Setting location to Main IVR as default outbound number." -Type 'WARN'
+                    Write-StatusMessage "$($User.DisplayName) setting location to 'Main IVR'" -Type 'Info'
                     $setOutboundNumber = $outboundNumberMap['Main']
                 }
 
