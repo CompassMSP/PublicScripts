@@ -2559,64 +2559,45 @@ function Add-UserToZoom {
         # Configure based on user type
         if ($isContactCenter) {
             try {
-                # Initialize empty array to store all templates
-                $allContactCenterTemplates = @()
-                $pageSize = 300
-                $pageNumber = 1
-                $hasMorePages = $true
-                $ContactCenterTemplates = $null
+                # Add Contact Center template
+                try {
 
-                while ($hasMorePages) {
-                    $getContactCenterTemplates = Invoke-ZoomAPI -Method GET `
-                        -Endpoint "contact_center/users/templates?page_size=$pageSize&page_number=$pageNumber" `
-                        -Headers $headers
+                    $ContactCenterTemplateMap = @{
+                        'South Florida' = "unIR_2-xQemLQ9pfvDKk3w"
+                        'Northeast'     = "-Pil2tjcRaOTaIl6LUV_6g"
+                        'North Florida' = "nQdKAwkhRh-ds0Yvp7QKsw"
+                        'Mid-West'      = "ySmugPJ0Qc6O3IaWHi9jHA"
+                        'Mid-Atlantic'  = "K-6ajeNsS4KJRf-6xfRnaA"
+                    }
 
-                    if ($getContactCenterTemplates.Content.user_templates) {
-                        # Try to find exact template match
-                        $ContactCenterTemplates = $getContactCenterTemplates.Content.user_templates |
-                        Where-Object { $_.template_name -eq $($User.officeLocation) } |
-                        Select-Object template_name, template_id
+                    $templateId = if ($User.officeLocation -and $ContactCenterTemplateMap.ContainsKey($User.officeLocation)) {
+                        $ContactCenterTemplateMap[$User.officeLocation]
+                        Write-StatusMessage "$($User.DisplayName) setting Contact Center template for location '$($User.officeLocation)'" -Type 'Info'
+                    } else {
+                        Write-StatusMessage "No matching Contact Center template found for location: $($User.officeLocation)" -Type 'ERROR'
+                        return
+                    }
 
-                        if ($ContactCenterTemplates) {
-                            Write-StatusMessage "Found matching template for location: $($User.officeLocation)" -Type 'INFO'
-                            break  # Exit loop if match found
+                    if ($templateId) {
+                        $contantCenterBody = @{
+                            user_email  = $User.Mail
+                            template_id = $templateId
                         }
 
-                        # Store templates in case we need them later
-                        $allContactCenterTemplates += $getContactCenterTemplates.Content.user_templates
-                    }
+                        $ccResponse = Invoke-ZoomAPI -Method 'POST' `
+                            -Endpoint 'contact_center/users' `
+                            -Headers $headers `
+                            -Body $contantCenterBody
 
-                    # Check if we need more pages
-                    $totalRecords = $getContactCenterTemplates.Content.total_records
-                    $currentCount = $pageSize * $pageNumber
-                    $hasMorePages = $currentCount -lt $totalRecords
-
-                    $pageNumber++
-                }
-
-                if (-not $ContactCenterTemplates) {
-                    Write-StatusMessage "No matching template found for location: $($User.officeLocation)" -Type 'ERROR'
-                }
-
-                # Assign Contact Center template
-                try {
-                    $contantCenterBody = @{
-                        user_email  = $User.Mail
-                        template_id = $ContactCenterTemplates.template_id
-                    }
-
-                    $ccResponse = Invoke-ZoomAPI -Method 'POST' `
-                        -Endpoint 'contact_center/users' `
-                        -Headers $headers `
-                        -Body $contantCenterBody
-
-                    if ($ccResponse.StatusCode -eq 201) {
-                        Write-StatusMessage "Contact Center successfully provisioned for $($User.Mail)" -Type 'OK'
+                        if ($ccResponse.Success) {
+                            Write-StatusMessage -Message "Contact Center successfully provisioned for $($User.DisplayName)" -Type 'OK'
+                        } else {
+                            Write-StatusMessage -Message "Failed to provision Contact Center for $($User.DisplayName): $($ccResponse.Error.Message)" -Type 'ERROR'
+                        }
                     }
                 } catch {
-                    Write-StatusMessage "Failed to provision Contact Center: $($_.Exception.Message)" -Type 'ERROR'
+                    Write-StatusMessage "Failed to add Contact Center template: $($_.Exception.Message)" -Type 'ERROR'
                 }
-
                 # Configure skills if UserToCopy is provided
                 if ($UserToCopy) {
                     try {
@@ -2652,7 +2633,6 @@ function Add-UserToZoom {
                 Write-StatusMessage "Failed to configure Contact Center: $($_.Exception.Message)" -Type 'ERROR'
             }
         } else {
-
             # Assign Calling Plan if applicable
             if ($IsWorkPlaceLicense -eq 'true') {
                 Write-StatusMessage "Workplace license detected, skipping Calling Plan provisioning" -Type 'INFO'
@@ -2687,53 +2667,32 @@ function Add-UserToZoom {
                 }
             }
 
-            # Emergency address assignment
+            # Add Emergency address assignment
             try {
-                $allEmergencyAddresses = @()
-                $pageSize = 300
-                $pageNumber = 1
-                $hasMorePages = $true
-                $emergencyAddress = $null
 
-                while ($hasMorePages) {
-                    $gete911Addresses = Invoke-ZoomAPI -Method GET `
-                        -Endpoint "phone/emergency_addresses?page_size=$pageSize&page_number=$pageNumber" `
-                        -Headers $headers
-
-                    if ($gete911Addresses.Content.emergency_addresses) {
-                        # First try to find exact city match
-                        $emergencyAddress = $gete911Addresses.Content.emergency_addresses |
-                        Where-Object { $_.city -eq $($User.City) } |
-                        Select-Object city, id
-
-                        if ($emergencyAddress) {
-                            Write-StatusMessage "Found matching emergency address for: $($User.City)" -Type 'INFO'
-                            break  # Exit loop if match found
-                        }
-
-                        # If no match, store addresses for potential Hartford fallback
-                        $allEmergencyAddresses += $gete911Addresses.Content.emergency_addresses
-                    }
-
-                    # Check if we need more pages
-                    $totalRecords = $gete911Addresses.Content.total_records
-                    $currentCount = $pageSize * $pageNumber
-                    $hasMorePages = $currentCount -lt $totalRecords
-
-                    $pageNumber++
+                $e911AddressMap = @{
+                    'Hartford'     = "d7TOPWy0T1uFpkDNnmKRAA"
+                    'Itasca'       = "0Kex5RhJT6KJP_E8WcDcqg"
+                    'Coral Gables' = "XZiC3QseQIWummbG15G8KA"
+                    'Tarrytown'    = "_XgGsk4bQ9-BL1LTEOL_CQ"
+                    'Reading'      = "VkMtuzWyS4SkATA47X9mAA"
+                    'Princeton'    = "xSH1yokdQTqa8EZRHvCHxA"
+                    'Westminster'  = "_CxooGkaS52zT9BFFFa5Eg"
+                    'Jacksonville' = "swIy4r7kQCyqxkt8Sf0yRQ"
                 }
 
-                # If no direct match was found, look for Hartford in collected addresses
-                if (-not $emergencyAddress) {
+                # Default to Hartford if no match found
+                $emergencyAddressId = if ($User.City -and $e911AddressMap.ContainsKey($User.City)) {
+                    $e911AddressMap[$User.City]
+                    Write-StatusMessage "$($User.DisplayName) setting emergency address for location '$($User.City)'" -Type 'Info'
+                } else {
                     Write-StatusMessage "No matching emergency address found for location: $($User.City). Using Hartford as default." -Type 'WARN'
-                    $emergencyAddress = $allEmergencyAddresses |
-                    Where-Object { $_.city -eq 'Hartford' } |
-                    Select-Object city, id
+                    $e911AddressMap['Hartford']
                 }
 
-                if ($emergencyAddress) {
+                if ($emergencyAddressId) {
                     $e911Body = @{
-                        emergency_address_id = $emergencyAddress.id
+                        emergency_address_id = $emergencyAddressId
                     }
 
                     $e911Response = Invoke-ZoomAPI -Method 'PATCH' `
@@ -2741,11 +2700,11 @@ function Add-UserToZoom {
                         -Headers $headers `
                         -Body $e911Body
 
-                    if ($e911Response.StatusCode -eq 204) {
-                        Write-StatusMessage "Emergency address assigned successfully: $($emergencyAddress.city)" -Type 'OK'
+                    if ($e911Response.Success) {
+                        Write-StatusMessage "$($User.DisplayName) emergency address assigned successfully" -Type 'OK'
+                    } else {
+                        Write-StatusMessage "Failed to assign emergency address for $($User.DisplayName): $($e911Response.Error.Message)" -Type 'ERROR'
                     }
-                } else {
-                    Write-StatusMessage "Failed to find any valid emergency address, including Hartford default" -Type 'ERROR'
                 }
             } catch {
                 Write-StatusMessage "Failed to assign emergency address: $($_.Exception.Message)" -Type 'ERROR'
@@ -2794,7 +2753,8 @@ function Add-UserToZoom {
                 $excludedQueues = @(
                     'Finance',
                     'Billing',
-                    'Procurement'
+                    'Procurement',
+                    'Marketing'
                 )
 
                 # Check if user's department is in excluded queues
@@ -2843,11 +2803,6 @@ function Add-UserToZoom {
                     'Professional Services'
                     'Deployment'
                 )
-
-                <#
-                $getOutboundNumbers = Invoke-ZoomAPI -Method GET -Headers $headers -Endpoint "phone/numbers"
-                $getOutboundNumbers.Content.phone_numbers | Where-Object { $_.assignee.name -like '*IVR*' }
-                #>
 
                 $outboundNumberMap = @{
                     'North Florida' = '+19048162754'
