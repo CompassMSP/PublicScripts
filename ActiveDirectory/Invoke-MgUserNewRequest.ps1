@@ -2321,7 +2321,7 @@ function Invoke-ZoomAPI {
         [hashtable]$Headers,
         [object]$Body,
         [string]$ContentType = 'application/json',
-        [switch]$AsJson
+        [switch]$WriteOut
     )
 
     try {
@@ -2336,24 +2336,81 @@ function Invoke-ZoomAPI {
             $params.Body = if ($Body -is [hashtable]) { $Body | ConvertTo-Json -Depth 10 } else { $Body }
         }
 
-        $response = Invoke-WebRequest @params -ErrorAction Stop
+        try {
+            $response = Invoke-WebRequest @params -ErrorAction Stop
 
-        # Create standard response object for all requests
-        $result = @{
-            StatusCode = $response.StatusCode
-            Content    = if ($response.Content) { $response.Content | ConvertFrom-Json } else { $null }
-            Response   = $response
+            # Create standard response object for successful requests
+            $result = @{
+                StatusCode = $response.StatusCode
+                Success    = $true
+                Content    = if ($response.Content) { $response.Content | ConvertFrom-Json } else { $null }
+                Response   = $response
+                Error      = $null
+            }
+        } catch {
+            # Handle API errors that return error response
+            if ($_.ErrorDetails.Message) {
+                $errorContent = $_.ErrorDetails.Message | ConvertFrom-Json
+                $errorMessage = $errorContent.message
+
+                # Enhanced error handling for specific Zoom error codes
+                switch ($errorContent.code) {
+                    124 { $errorMessage = "Invalid access token" }
+                    104 {
+                        if ($errorContent.message -match "does not contain scopes") {
+                            $requiredScopes = [regex]::Matches($errorContent.message, '\[(.*?)\]') |
+                                ForEach-Object { $_.Groups[1].Value }
+                            $errorMessage = "Missing required API scopes: $($requiredScopes -join ', ')"
+                        }
+                    }
+                    1001 { $errorMessage = "User does not exist: $($errorContent.message)" }
+                    1005 { $errorMessage = "Email address is invalid" }
+                    200 { $errorMessage = "API Validation failed: $($errorContent.message)" }
+                    default {
+                        $errorMessage = "$($errorContent.message) (Error Code: $($errorContent.code))"
+                    }
+                }
+
+                $result = @{
+                    StatusCode = $_.Exception.Response.StatusCode.value__
+                    Success    = $false
+                    Content    = $null
+                    Error      = @{
+                        Code    = $errorContent.code
+                        Message = $errorMessage
+                        Raw     = $errorContent.message
+                    }
+                }
+
+                # Write detailed error message
+                Write-StatusMessage $errorMessage -Type 'ERROR'
+            } else {
+                # Handle other types of errors
+                $result = @{
+                    StatusCode = 500
+                    Success    = $false
+                    Content    = $null
+                    Error      = @{
+                        Code    = 500
+                        Message = $_.Exception.Message
+                        Raw     = $_.Exception.Message
+                    }
+                }
+            }
         }
 
         # Handle JSON formatting if requested
-        if ($Method -eq 'GET' -and $AsJson) {
-            return ($result.Content | ConvertTo-Json -Depth 10)
+        if ($Method -eq 'GET' -and $result.Success) {
+            $result['JSON'] = $result.Content | ConvertTo-Json -Depth 10
+            if ($WriteOut) {
+                Write-Host $result.JSON
+            }
         }
 
         return $result
 
     } catch {
-        Write-StatusMessage "API call failed for $Endpoint : $($_.Exception.Message)" -Type 'ERROR'
+        Write-StatusMessage "Unexpected error in Invoke-ZoomAPI for $Endpoint : $($_.Exception.Message)" -Type 'ERROR'
         throw $_
     }
 }
