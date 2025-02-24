@@ -1621,7 +1621,7 @@ function Remove-UserFromEntraGroups {
                 # Not a directory role
                 $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and
                 # Not a dynamic group
-                $null -eq $_.AdditionalProperties.membershipRule -and
+                $_.AdditionalProperties.MembershipRuleProcessingState -ne 'Paused' -and
                 # Only sync-enabled groups (not false)
                 $null -eq $_.AdditionalProperties.onPremisesSyncEnabled
             }
@@ -2149,7 +2149,6 @@ $mailboxParams = @{
 # Only add these parameters if they exist and have values
 if ($SetUserMailFWD) {
     $mailboxParams['ForwardingAddress'] = $SetUserMailFWD
-
 }
 
 if ($GrantUserFullControl) {
@@ -2196,6 +2195,7 @@ Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].
 
 # Only create and run OneDrive params if needed
 if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
+
     $oneDriveParams = @{
         TermUser = $UserFromAD.UserPrincipalName
     }
@@ -2209,6 +2209,7 @@ if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
     }
 
     Set-TerminatedOneDrive @oneDriveParams
+
 }
 
 # Step 13: Final Sync and Summary
