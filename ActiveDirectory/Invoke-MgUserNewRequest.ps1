@@ -1537,7 +1537,7 @@ function Get-TemplateUser {
                 'Manager',
                 'physicalDeliveryOfficeName',
                 'Department',
-                'Description'.
+                'Description',
                 'facsimileTelephoneNumber',
                 'l', # l is for Location because Microsoft AD attributes are stupid
                 'c', # c is for Country because Microsoft AD attributes are stupid
