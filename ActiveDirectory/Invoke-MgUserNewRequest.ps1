@@ -2109,7 +2109,7 @@ function Wait-ForADUserSync {
                     'officeLocation',
                     'City'
                 )
-                $user = Get-MgUser -UserId $UserEmail -Property $properties | Select-Object $properties -ErrorAction Stop
+                $user = Get-MgUser -UserId $UserEmail -Property $properties -ErrorAction Stop | Select-Object $properties
                 if ($user) {
                     Write-StatusMessage -Message "User $UserEmail successfully synced to Azure AD" -Type OK
                     return $user
