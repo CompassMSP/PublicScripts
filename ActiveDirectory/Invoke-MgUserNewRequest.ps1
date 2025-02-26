@@ -182,19 +182,19 @@ Write-Host "`r  [✓] Core components loaded" -ForegroundColor Green
 
 Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
 $progressSteps = @(
-    @{ Number = 1; Name = "Initialization"; Description = "Loading configuration and connecting services" }
-    @{ Number = 2; Name = "User Input"; Description = "Gathering new user details" }
-    @{ Number = 3; Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
-    @{ Number = 4; Name = "New User AD Creation"; Description = "Creating user in Active Directory" }
-    @{ Number = 5; Name = "AD Group Copy"; Description = "Copying AD group memberships" }
-    @{ Number = 6; Name = "Azure Sync"; Description = "Syncing to Azure AD" }
-    @{ Number = 7; Name = "License Setup"; Description = "Assigning licenses" }
-    @{ Number = 8; Name = "Entra Group Copy"; Description = "Copying Entra group memberships" }
-    @{ Number = 9; Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
-    @{ Number = 10; Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
-    @{ Number = 11; Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
-    @{ Number = 12; Name = "Zoom Phone Setup"; Description = "Adding User to Zoom Phone" }
-    @{ Number = 13; Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
+    @{ Number = 0; Name = "Initialization"; Description = "Loading configuration and connecting services" }
+    @{ Number = 1; Name = "User Input"; Description = "Gathering new user details" }
+    @{ Number = 2; Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
+    @{ Number = 3; Name = "New User AD Creation"; Description = "Creating user in Active Directory" }
+    @{ Number = 4; Name = "AD Group Copy"; Description = "Copying AD group memberships" }
+    @{ Number = 5; Name = "Azure Sync"; Description = "Syncing to Azure AD" }
+    @{ Number = 6; Name = "License Setup"; Description = "Assigning licenses" }
+    @{ Number = 7; Name = "Entra Group Copy"; Description = "Copying Entra group memberships" }
+    @{ Number = 8; Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
+    @{ Number = 9; Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
+    @{ Number = 10; Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
+    @{ Number = 11; Name = "Zoom Phone Setup"; Description = "Adding User to Zoom Phone" }
+    @{ Number = 12; Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
 )
 Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
@@ -2109,7 +2109,7 @@ function Wait-ForADUserSync {
                     'officeLocation',
                     'City'
                 )
-                $user = Get-MgUser -UserId $UserEmail -Property $properties -ErrorAction Stop | Select-Object $properties
+                $user = Get-MgUser -UserId $UserEmail -Property $properties | Select-Object $properties -ErrorAction Stop
                 if ($user) {
                     Write-StatusMessage -Message "User $UserEmail successfully synced to Azure AD" -Type OK
                     return $user
@@ -3189,8 +3189,8 @@ Write-Host "`n  Ready to process user request..." -ForegroundColor Cyan
 Write-Host "`n  Beginning New User Request..." -ForegroundColor Cyan
 #Region Main Execution
 
-# Step 1: Initialization
-Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].Description
+# Step 0: Initialization
+Write-ProgressStep -StepName $progressSteps[0].Name -Status $progressSteps[0].Description
 
 # Load configuration
 $config = Get-ScriptConfig
@@ -3208,22 +3208,22 @@ $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
 
 Connect-ServiceEndpoints -ExchangeOnline -Graph
 
-# Step 2: User Input
-Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
+# Step 1: User Input
+Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].Description
 $userInput = Get-NewUserRequestInput
 
 # Set variables after input
 if ($userInput.TestModeEnabled -eq 'True') { $script:TestMode = $true }
 $script:TestEmailAddress = $config.TestMode.Email
 
-# Step 3: Validation and Preparation (AD)
-Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
+# Step 2: Validation and Preparation (AD)
+Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
 $UserToCopyAD = Get-TemplateUser -UserToCopy $userInput.InputUserToCopy
 $destinationOU = $UserToCopyAD.DistinguishedName.split(",", 2)[1]                 # Validates template user
 $newUserProperties = New-UserProperties -NewUser $userInput.InputNewUser -SourceUserUPN $UserToCopyAD.UserPrincipalName
 
-# Step 4: AD User Creation
-Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
+# Step 3: AD User Creation
+Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
 $passwordResult = New-ReadablePassword -GitHubToken $config.GitHub.Token
 
 # Show summary and get confirmation before creating
@@ -3242,18 +3242,18 @@ New-ADUserFromTemplate -NewUser $newUserProperties `
     -Password $passwordResult.SecurePassword `
     -DestinationOU $destinationOU
 
-# Step 5: AD Group Copy
-Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
+# Step 4: AD Group Copy
+Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
 Copy-UserADGroups -SourceUser $userInput.InputUserToCopy -TargetUser $userInput.InputUserToCopy
 
-# Step 6: Azure Sync
-Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
+# Step 5: Azure Sync
+Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
 $MgUser = Wait-ForADUserSync -UserEmail $newUserProperties.Email
 
 if ($MgUser) {
 
-    # Step 7: License Setup
-    Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
+    # Step 6: License Setup
+    Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
     Write-StatusMessage -Message "Setting Usage Location for new user" -Type INFO
     Update-MgUser -UserId $MgUser.Id -UsageLocation US
 
@@ -3272,23 +3272,23 @@ if ($MgUser) {
     if ($userInput.TimeZone -eq 'US Mountain Standard Time (Arizona)') { $userinput.TimeZone = 'US Mountain Standard Time' }
     Set-MailboxRegionalConfiguration -Identity $($MgUser.Mail) -TimeZone $userinput.TimeZone
 
-    # Step 8: Entra Group Copy
-    Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
+    # Step 7: Entra Group Copy
+    Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
     $MgUserCopyAD = Get-MgUser -UserId $UserToCopyAD.UserPrincipalName
     Copy-UserEntraGroups -SourceUser $MgUserCopyAD -TargetUser $MgUser
     $CopyUserGroupCount = (Get-MgUserMemberOf -UserId $MgUserCopyAD.Id).Count
     $NewUserGroupCount = (Get-MgUserMemberOf -UserId $MgUser.Id).Count
 
-    # Step 9: Email to SOC for KnowBe4
-    Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
+    # Step 8: Email to SOC for KnowBe4
+    Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
     $emailSubject = "KB4 – New User"
     $emailContent = "The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)"
     $MsgFrom = $config.Email.NotificationFrom
     $ToAddress = $config.Email.NotificationTo
     Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
 
-    # Step 10: OneDrive Provisioning
-    Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
+    # Step 9: OneDrive Provisioning
+    Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
     Write-StatusMessage -Message "Provisioning OneDrive for new user." -Type INFO
 
     try {
@@ -3303,12 +3303,12 @@ if ($MgUser) {
         Write-StatusMessage -Message "Failed to provision OneDrive: $_" -Type ERROR
     }
 
-    # Step 11: BookWithMeId Setup
-    Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
+    # Step 10: BookWithMeId Setup
+    Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
     Set-UserBookWithMeId -User $MgUser -SamAccountName $newUserProperties.SamAccountName
 
-    # Step 12: Zoom Phone Creation
-    Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
+    # Step 11: Zoom Phone Creation
+    Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
 
     if ($userInput.ZoomUserEnabled) {
 
@@ -3351,8 +3351,8 @@ if ($MgUser) {
         }
     }
 
-    # Step 13: Cleanup and Summary
-    Write-ProgressStep -StepName $progressSteps[13].Name -Status $progressSteps[13].Description
+    # Step 12: Cleanup and Summary
+    Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
     Write-StatusMessage -Message "Disconnecting from Exchange Online and Graph." -Type INFO
 
     Connect-ServiceEndpoints -Disconnect

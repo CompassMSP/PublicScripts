@@ -173,19 +173,19 @@ Write-Host "`r  [✓] Core components loaded" -ForegroundColor Green
 
 Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
 $progressSteps = @(
-    @{ Number = 1; Name = "Initialization"; Description = "Loading configuration and connecting services" }
-    @{ Number = 2; Name = "User Input"; Description = "Gathering termination details" }
-    @{ Number = 3; Name = "AD Tasks"; Description = "Disabling user in Active Directory" }
-    @{ Number = 4; Name = "Session Cleanup"; Description = "Removing user sessions and devices" }
-    @{ Number = 5; Name = "Exchange Tasks"; Description = "Convert to SharedMailbox and setting forwarding/grant acces" }
-    @{ Number = 6; Name = "Directory Roles"; Description = "Removing from directory roles" }
-    @{ Number = 7; Name = "Group Removal"; Description = "Removing and exporting Entra/Exchange groups" }
-    @{ Number = 8; Name = "License Removal"; Description = "Removing and exporting Entra licenses" }
-    @{ Number = 9; Name = "Remove Zoom SSO"; Description = "Removing user from Zoom SSO" }
-    @{ Number = 10; Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
-    @{ Number = 11; Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
-    @{ Number = 12; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
-    @{ Number = 13; Name = "Final Steps"; Description = "Running AD sync and finalizing" }
+    @{ Number = 0; Name = "Initialization"; Description = "Loading configuration and connecting services" }
+    @{ Number = 1; Name = "User Input"; Description = "Gathering termination details" }
+    @{ Number = 2; Name = "AD Tasks"; Description = "Disabling user in Active Directory" }
+    @{ Number = 3; Name = "Session Cleanup"; Description = "Removing user sessions and devices" }
+    @{ Number = 4; Name = "Exchange Tasks"; Description = "Convert to SharedMailbox and setting forwarding/grant acces" }
+    @{ Number = 5; Name = "Directory Roles"; Description = "Removing from directory roles" }
+    @{ Number = 6; Name = "Group Removal"; Description = "Removing and exporting Entra/Exchange groups" }
+    @{ Number = 7; Name = "License Removal"; Description = "Removing and exporting Entra licenses" }
+    @{ Number = 8; Name = "Remove Zoom SSO"; Description = "Removing user from Zoom SSO" }
+    @{ Number = 9; Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
+    @{ Number = 10; Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
+    @{ Number = 11; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
+    @{ Number = 12; Name = "Final Steps"; Description = "Running AD sync and finalizing" }
 )
 Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
@@ -2066,8 +2066,8 @@ Write-Host "`n  Ready to create new user account..." -ForegroundColor Cyan
 #Region Main Execution
 
 
-# Step 1: Initialization
-Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].Description
+# Step 0: Initialization
+Write-ProgressStep -StepName $progressSteps[0].Name -Status $progressSteps[0].Description
 
 # Load configuration
 $config = Get-ScriptConfig
@@ -2117,8 +2117,8 @@ if ($GrantUserOneDriveAccess) {
     }
 }
 
-# Step 2: User Input
-Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
+# Step 1: User Input
+Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].Description
 # Should this be a function in the New User Script?
 $userPropertiesPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Properties.csv"
 $adGroupsPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_ADGroups.csv"
@@ -2129,16 +2129,16 @@ $UserInfo = Get-TerminationPrerequisites `
 
 # Extract variables for use in the rest of the script
 
-# Step 3: AD Tasks
-Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
+# Step 2: AD Tasks
+Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
 Disable-ADUser -UserFromAD $userInfo.selectUserFromAD -DestinationOU $userInfo.selectDestinationOU
 
-# Step 4: Azure/Entra Tasks
-Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
+# Step 3: Azure/Entra Tasks
+Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
 Remove-UserSessions -User $UserInfo.selectMgUser
 
-# Step 5: Convert to SharedMailbox, Set forwarding/grant access
-Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
+# Step 4: Convert to SharedMailbox, Set forwarding/grant access
+Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
 
 $mailboxParams = @{
     Mailbox = $userInfo.selectMailbox
@@ -2155,41 +2155,41 @@ if ($GrantUserFullControl) {
 
 Set-TerminatedMailbox @mailboxParams
 
-# Step 6: Remove Directory Roles
-Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
+# Step 5: Remove Directory Roles
+Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
 Remove-UserFromEntraDirectoryRoles -User $userInfo.selectMgUser
 
-# Step 7: Remove Groups
-Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
+# Step 6: Remove Groups
+Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
 $groupExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Groups_Id.csv"
 Remove-UserFromEntraGroups -User $userInfo.selectMgUser -ExportPath $groupExportPath
 
-# Step 8: Remove Licenses
-Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
+# Step 7: Remove Licenses
+Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
 $licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
 Remove-UserLicenses -User $userInfo.selectMgUser -ExportPath $licensePath
 
-# Step 9: Remove from Zoom
-Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
+# Step 8: Remove from Zoom
+Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
 Remove-UserFromZoom -User $userInfo.selectMgUser `
     -ClientId $config.Zoom.ClientId `
     -ClientSecret $config.Zoom.ClientSecret `
     -AccountId $config.Zoom.AccountId
 
-#Step 10: Send Email Notification - SecurePath
-Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
+#Step 9: Send Email Notification - SecurePath
+Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
 $emailSubject = "KB4 – Remove User"
 $emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
 $MsgFrom = $config.Email.NotificationFrom
 $ToAddress = $config.Email.NotificationTo
 Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
 
-# Step 11: Disconnect from Exchange Online and Graph
-Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
+# Step 10: Disconnect from Exchange Online and Graph
+Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
 Connect-ServiceEndpoints -Disconnect -ExchangeOnline -Graph
 
-# Step 12: Configure OneDrive
-Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
+# Step 11: Configure OneDrive
+Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
 
 # Only create and run OneDrive params if needed
 if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
@@ -2210,8 +2210,8 @@ if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
 
 }
 
-# Step 13: Final Sync and Summary
-Write-ProgressStep -StepName $progressSteps[13].Name -Status $progressSteps[13].Description
+# Step 12: Final Sync and Summary
+Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
 
 Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
     -DestinationOU $userInfo.DestinationOU `
