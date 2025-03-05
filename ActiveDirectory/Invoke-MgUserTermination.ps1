@@ -181,11 +181,10 @@ $progressSteps = @(
     @{ Number = 5; Name = "Directory Roles"; Description = "Removing from directory roles" }
     @{ Number = 6; Name = "Group Removal"; Description = "Removing and exporting Entra/Exchange groups" }
     @{ Number = 7; Name = "License Removal"; Description = "Removing and exporting Entra licenses" }
-    @{ Number = 8; Name = "Remove Zoom SSO"; Description = "Removing user from Zoom SSO" }
-    @{ Number = 9; Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
-    @{ Number = 10; Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
-    @{ Number = 11; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
-    @{ Number = 12; Name = "Final Steps"; Description = "Running AD sync and finalizing" }
+    @{ Number = 8; Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
+    @{ Number = 9; Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
+    @{ Number = 10; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
+    @{ Number = 11; Name = "Final Steps"; Description = "Running AD sync and finalizing" }
 )
 Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
@@ -1755,144 +1754,6 @@ function Remove-UserLicenses {
     }
 }
 
-function Remove-UserFromZoom {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
-        $User,
-
-        [Parameter(Mandatory)]
-        [string]$ClientId,
-
-        [Parameter(Mandatory)]
-        [string]$ClientSecret,
-
-        [Parameter(Mandatory)]
-        [string]$AccountId,
-
-        [Parameter()]
-        [ValidateSet('delete', 'disassociate')]
-        [string]$Action = 'delete'
-    )
-
-    try {
-        # Get Bearer Token
-        try {
-            $pair = "$ClientId`:$ClientSecret"
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
-            $base64 = [Convert]::ToBase64String($bytes)
-
-            $tokenParams = @{
-                Method      = "POST"
-                Uri         = "https://zoom.us/oauth/token"
-                ContentType = "application/x-www-form-urlencoded"
-                Body        = @{
-                    grant_type = 'account_credentials'
-                    account_id = $AccountId
-                }
-                Headers     = @{
-                    Host          = 'zoom.us'
-                    Authorization = "Basic $base64"
-                }
-            }
-
-            $tokenResponse = Invoke-WebRequest @tokenParams
-            $BearerToken = ($tokenResponse.Content | ConvertFrom-Json).access_token
-
-            $headers = @{
-                "Authorization" = "Bearer $BearerToken"
-            }
-
-            Write-StatusMessage -Message "Successfully obtained Zoom API token" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to get Zoom API token: $_" -Type ERROR
-            return
-        }
-
-        # Delete Zoom User
-        try {
-            # Check if Zoom user exists first
-            try {
-                Write-StatusMessage -Message "Checking if Zoom user exists" -Type INFO
-                $checkUserResponse = Invoke-WebRequest `
-                    -Uri "https://api.zoom.us/v2/users/$($User.Mail)" `
-                    -Method GET `
-                    -Headers $headers
-
-                if ($checkUserResponse.StatusCode -eq 200) {
-                    Write-StatusMessage -Message "Zoom user found, proceeding with deletion" -Type OK
-                } else {
-                    Write-StatusMessage -Message "Zoom user not found. Status: $($checkUserResponse.StatusCode)" -Type INFO
-                    return
-                }
-            } catch {
-                Write-StatusMessage -Message "Error checking Zoom user: $_" -Type ERROR
-                return
-            }
-
-            # Delete based on department
-            if ($User.Department -eq 'Reactive') {
-                Write-StatusMessage -Message "Deleting Zoom Call Center user" -Type INFO
-                try {
-                    $deleteCallcenterResponse = Invoke-WebRequest `
-                        -Uri "https://api.zoom.us/v2/contact_center/users/$($User.Mail)" `
-                        -Method DELETE `
-                        -Headers $headers
-
-                    if ($deleteCallcenterResponse.StatusCode -eq 204) {
-                        Write-StatusMessage -Message "Successfully deleted Zoom Call Center user" -Type OK
-                    } else {
-                        Write-StatusMessage -Message "Failed to delete Zoom Call Center user. Status: $($deleteCallcenterResponse.StatusCode)" -Type ERROR
-                    }
-                } catch {
-                    Write-StatusMessage -Message "Error deleting Call Center user: $_" -Type ERROR
-                }
-            }
-
-            # Delete main Zoom user account
-            Write-StatusMessage -Message "Deleting Zoom user account" -Type INFO
-            $deleteZoomUserResponse = Invoke-WebRequest `
-                -Uri "https://api.zoom.us/v2/users/$($User.Mail)?action=$Action" `
-                -Method DELETE `
-                -Headers $headers
-
-            if ($deleteZoomUserResponse.StatusCode -eq 204) {
-                Write-StatusMessage -Message "Successfully deleted Zoom user" -Type OK
-            } else {
-                Write-StatusMessage -Message "Failed to delete Zoom user. Status: $($deleteZoomUserResponse.StatusCode)" -Type ERROR
-                return
-            }
-        } catch {
-            Write-StatusMessage -Message "Failed to delete Zoom user: $_" -Type ERROR
-            return
-        }
-
-        # Remove Enterprise App assignment
-        try {
-            Write-StatusMessage -Message "Removing Zoom Enterprise App assignment" -Type INFO
-            $ZoomSSO = Get-MgUserAppRoleAssignment -UserId $User.Id -ErrorAction Stop |
-            Where-Object { $_.ResourceDisplayName -eq 'Zoom Workplace Phones' }
-
-            if ($ZoomSSO) {
-                try {
-                    Remove-MgUserAppRoleAssignment -AppRoleAssignmentId $ZoomSSO.Id -UserId $User.Id -ErrorAction Stop
-                    Write-StatusMessage -Message "Successfully removed Zoom Enterprise App assignment" -Type OK
-                } catch {
-                    Write-StatusMessage -Message "Failed to remove Zoom Enterprise App assignment: $_" -Type ERROR
-                }
-            } else {
-                Write-StatusMessage -Message "No Zoom Enterprise App assignment found" -Type INFO
-            }
-        } catch {
-            Write-StatusMessage -Message "Failed to check Zoom Enterprise App assignments: $_" -Type ERROR
-        }
-    } catch {
-        Write-StatusMessage -Message "Critical error in Remove-UserFromZoom: $_" -Type ERROR
-        throw
-    }
-}
-
 function Set-TerminatedOneDrive {
     [CmdletBinding()]
     param(
@@ -2169,27 +2030,20 @@ Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].De
 $licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
 Remove-UserLicenses -User $userInfo.selectMgUser -ExportPath $licensePath
 
-# Step 8: Remove from Zoom
+#Step 8: Send Email Notification - SecurePath
 Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
-Remove-UserFromZoom -User $userInfo.selectMgUser `
-    -ClientId $config.Zoom.ClientId `
-    -ClientSecret $config.Zoom.ClientSecret `
-    -AccountId $config.Zoom.AccountId
-
-#Step 9: Send Email Notification - SecurePath
-Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
 $emailSubject = "KB4 – Remove User"
 $emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
 $MsgFrom = $config.Email.NotificationFrom
 $ToAddress = $config.Email.NotificationTo
 Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
 
-# Step 10: Disconnect from Exchange Online and Graph
-Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
+# Step 9: Disconnect from Exchange Online and Graph
+Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
 Connect-ServiceEndpoints -Disconnect -ExchangeOnline -Graph
 
-# Step 11: Configure OneDrive
-Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
+# Step 10: Configure OneDrive
+Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
 
 # Only create and run OneDrive params if needed
 if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
@@ -2210,8 +2064,8 @@ if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
 
 }
 
-# Step 12: Final Sync and Summary
-Write-ProgressStep -StepName $progressSteps[12].Name -Status $progressSteps[12].Description
+# Step 11: Final Sync and Summary
+Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
 
 Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
     -DestinationOU $userInfo.DestinationOU `
