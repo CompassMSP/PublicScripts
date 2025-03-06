@@ -2453,8 +2453,9 @@ if ($MgUser) {
 
     # Step 9: OneDrive Provisioning
     Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
-    Write-StatusMessage -Message "Provisioning OneDrive for new user." -Type INFO
+    Write-StatusMessage -Message "Provisioning OneDrive for new user. (Not currently working)" -Type INFO
 
+    <#
     try {
 
         $createOneDriveResponce = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.Id)/drive" -ErrorAction Stop
@@ -2466,6 +2467,7 @@ if ($MgUser) {
     } catch {
         Write-StatusMessage -Message "Failed to provision OneDrive: $_" -Type ERROR
     }
+    #>
 
     # Step 10: BookWithMeId Setup
     Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
