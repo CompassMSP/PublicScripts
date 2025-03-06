@@ -2068,7 +2068,7 @@ if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
 Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
 
 Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
-    -DestinationOU $userInfo.DestinationOU `
+    -DestinationOU $userInfo.selectDestinationOU `
     -GrantUserFullControl $GrantUserFullControl `
     -SetUserMailFWD $SetUserMailFWD `
     -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
