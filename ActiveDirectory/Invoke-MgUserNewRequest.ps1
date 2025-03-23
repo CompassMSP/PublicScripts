@@ -1052,12 +1052,36 @@ function Get-NewUserRequestInput {
         return $DisplayName -match '^[A-Za-z]+ [A-Za-z]+$'
     }
 
-    function Format-MobileNumber {
-        param ([string]$MobileNumber)
-        $digits = -join ($MobileNumber -replace '\D', '')
-        if ($digits.Length -eq 10) {
-            return "($($digits.Substring(0, 3))) $($digits.Substring(3, 3))-$($digits.Substring(6, 4))"
+    function Format-PhoneNumber {
+        param (
+            [string]$PhoneNumber
+        )
+
+        # Remove all non-digit characters except + for country codes
+        $cleanedNumber = $PhoneNumber -replace '[^\d+]', ''
+
+        # Handle 11-digit numbers starting with 1
+        if ($cleanedNumber -match '^1(\d{3})(\d{3})(\d{4})$') {
+            return "1-$($matches[1])-$($matches[2])-$($matches[3])"
         }
+
+        # Match phone numbers with optional country code
+        if ($cleanedNumber -match '^(\+\d{1,3})?(\d{3})(\d{3})(\d{4})$') {
+            $countryCode = $matches[1]
+            $areaCode = $matches[2]
+            $prefix = $matches[3]
+            $lineNumber = $matches[4]
+
+            # Format based on presence of country code
+            if ($countryCode) {
+                return "$countryCode $areaCode-$prefix-$lineNumber"
+            } else {
+                return "($areaCode) $prefix-$lineNumber"
+            }
+        }
+
+        #Write-Warning "Invalid phone number format: $PhoneNumber. Ensure the input has 10 digits or a valid country code."
+        #return $PhoneNumber  # Return original if invalid
     }
 
     function Show-ValidationError {
@@ -1097,16 +1121,14 @@ function Get-NewUserRequestInput {
             }
             'mobile' {
                 if ($this.Text -ne $this.Tag) {
-                    $formattedNumber = Format-MobileNumber $this.Text
+                    $formattedNumber = Format-PhoneNumber $this.Text
                     if ($null -eq $formattedNumber) {
                         $this.BorderBrush = 'Red'
                         $this.BorderThickness = 2
                     } else {
                         $this.BorderBrush = $null
                         $this.BorderThickness = 1
-                        if (-not $bypassFormattingCheckBox.IsChecked) {
-                            $this.Text = $formattedNumber
-                        }
+                        $this.Text = $formattedNumber
                     }
                 }
                 break
@@ -1230,7 +1252,7 @@ function Get-NewUserRequestInput {
     $mobileStack.Width = 240
     $mobileStack.Margin = '0,0,10,0'
 
-    # Create horizontal panel for mobile label and bypass checkbox
+    # Create horizontal panel for mobile label
     $mobileLabelPanel = New-Object System.Windows.Controls.DockPanel
 
     # Add mobile label
@@ -1238,15 +1260,6 @@ function Get-NewUserRequestInput {
     $mobileLabel.VerticalAlignment = 'Center'
     [System.Windows.Controls.DockPanel]::SetDock($mobileLabel, 'Left')
     $mobileLabelPanel.Children.Add($mobileLabel)
-
-    # Add bypass formatting checkbox
-    $bypassFormattingCheckBox = New-FormCheckBox `
-        -Content "Bypass" `
-        -ToolTip "Check this box to skip automatic formatting of the mobile number" `
-        -Margin "10,0,0,0"
-    $bypassFormattingCheckBox.VerticalAlignment = 'Center'
-    [System.Windows.Controls.DockPanel]::SetDock($bypassFormattingCheckBox, 'Right')
-    $mobileLabelPanel.Children.Add($bypassFormattingCheckBox)
 
     $mobileStack.Children.Add($mobileLabelPanel)
 
@@ -1354,17 +1367,6 @@ function Get-NewUserRequestInput {
         if (-not (Test-DisplayName $userToCopyTextBox.Text)) {
             Show-ValidationError -Message "Invalid format for User To Copy. Please use 'First Last' name format."
             return
-        }
-
-        # Validate Mobile Number
-        if ($mobileTextBox.Text -ne $mobileTextBox.Tag) {
-            if (-not $bypassFormattingCheckBox.IsChecked) {
-                $tempFormatted = Format-MobileNumber $mobileTextBox.Text
-                if ($null -eq $tempFormatted) {
-                    Show-ValidationError -Message "Invalid mobile number format. Please enter a valid 10-digit mobile number."
-                    return
-                }
-            }
         }
 
         # Validate required license selection
@@ -2140,7 +2142,7 @@ function Copy-UserEntraGroups {
                 # Not a directory role
                 $_.AdditionalProperties['@odata.type'] -eq '#microsoft.graph.group' -and
                 # Not a dynamic group
-                $null -eq $_.AdditionalProperties.membershipRule -and
+                $_.AdditionalProperties.groupTypes -notcontains 'DynamicMembership' -and
                 # Only sync-enabled groups (not false)
                 $null -eq $_.AdditionalProperties.onPremisesSyncEnabled -and
                 # Not in excluded groups list

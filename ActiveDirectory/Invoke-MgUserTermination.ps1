@@ -1619,6 +1619,8 @@ function Remove-UserFromEntraGroups {
             FilterScript = {
                 # Not a directory role
                 $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and
+                # Not a dynamic group
+                $_.AdditionalProperties.groupTypes -notcontains "DynamicMembership" -and
                 # Only sync-enabled groups (not false)
                 $null -eq $_.AdditionalProperties.onPremisesSyncEnabled
             }
