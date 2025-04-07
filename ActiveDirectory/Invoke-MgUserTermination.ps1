@@ -2077,7 +2077,6 @@ if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
 # Step: Final Sync and Summary
 Write-ProgressStep -StepName 'AD Sync and Summary'
 
-
 Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
     -DestinationOU $userInfo.selectDestinationOU `
     -GrantUserFullControl $GrantUserFullControl `
