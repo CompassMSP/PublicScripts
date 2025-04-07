@@ -1865,16 +1865,6 @@ function Get-NewUserRequest {
         # Set default value to US
         $ComboBox.SelectedItem = "US"
 
-        # Add validation when selection changes
-        $ComboBox.Add_SelectionChanged({
-                param($selectsender, $e)
-                $comboBox = [System.Windows.Controls.ComboBox]$selectsender
-                if ($countryCodes -notcontains $comboBox.Text) {
-                    $comboBox.SelectedItem = "US"
-                    Write-StatusMessage "Invalid country code detected, defaulting to US" -Type ERROR
-                }
-            })
-
         Write-StatusMessage "Usage location initialized with default value: US" -Type INFO
     }
 
