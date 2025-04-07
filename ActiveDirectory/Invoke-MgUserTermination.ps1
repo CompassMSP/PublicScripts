@@ -184,33 +184,41 @@ $progressSteps = @(
     @{ Number = 8; Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
     @{ Number = 9; Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
     @{ Number = 10; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
-    @{ Number = 11; Name = "Final Steps"; Description = "Running AD sync and finalizing" }
+    @{ Number = 11; Name = "AD Sync and Summary"; Description = "Running AD sync and Summary" }
 )
 Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
 Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Loading functions..." -NoNewline -ForegroundColor Yellow
-$script:totalSteps = $progressSteps.Count  # Make it script-scoped
+$script:totalSteps = $progressSteps.Count
 
+for ($i = 0; $i -lt $progressSteps.Count; $i++) {
+    $progressSteps[$i].Number = $i + 1
+}
 function Write-ProgressStep {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$StepName,
-
-        [Parameter(Mandatory)]
-        [string]$Status
+        [string]$StepName
     )
 
-    # Get the step number from the progress steps array
-    $stepNumber = ($progressSteps | Where-Object { $_.Name -eq $StepName }).Number
+    # Find the step object by name
+    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
 
-    # Guard against division by zero or missing step number
+    if (-not $step) {
+        Write-Warning "Progress step '$StepName' not found."
+        return
+    }
+
+    $stepNumber = $step.Number
+    $status = $step.Description
+
+    # Guard against division by zero or missing values
     if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
-        Write-StatusMessage -Message "Step $StepName - $Status" -Type INFO
-        Write-Progress -Activity "User Termination" -Status $Status
+        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
+        Write-Progress -Activity "New User Creation" -Status $status
     } else {
-        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $Status" -Type INFO
-        Write-Progress -Activity "User Termination" -Status $Status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
+        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
+        Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
     }
 }
 
@@ -1929,8 +1937,8 @@ Write-Host "`n  Ready to create new user account..." -ForegroundColor Cyan
 #Region Main Execution
 
 
-# Step 0: Initialization
-Write-ProgressStep -StepName $progressSteps[0].Name -Status $progressSteps[0].Description
+# Step: Initialization
+Write-ProgressStep -StepName 'Initialization'
 
 # Load configuration
 $config = Get-ScriptConfig
@@ -1980,8 +1988,8 @@ if ($GrantUserOneDriveAccess) {
     }
 }
 
-# Step 1: User Input
-Write-ProgressStep -StepName $progressSteps[1].Name -Status $progressSteps[1].Description
+# Step: User Input
+Write-ProgressStep -StepName 'User Input'
 # Should this be a function in the New User Script?
 $userPropertiesPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Properties.csv"
 $adGroupsPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_ADGroups.csv"
@@ -1992,16 +2000,16 @@ $UserInfo = Get-TerminationPrerequisites `
 
 # Extract variables for use in the rest of the script
 
-# Step 2: AD Tasks
-Write-ProgressStep -StepName $progressSteps[2].Name -Status $progressSteps[2].Description
+# Step: AD Tasks
+Write-ProgressStep -StepName 'AD Tasks'
 Disable-ADUser -UserFromAD $userInfo.selectUserFromAD -DestinationOU $userInfo.selectDestinationOU
 
-# Step 3: Azure/Entra Tasks
-Write-ProgressStep -StepName $progressSteps[3].Name -Status $progressSteps[3].Description
+# Step: Azure/Entra Tasks
+Write-ProgressStep -StepName 'Session Cleanup'
 Remove-UserSessions -User $UserInfo.selectMgUser
 
-# Step 4: Convert to SharedMailbox, Set forwarding/grant access
-Write-ProgressStep -StepName $progressSteps[4].Name -Status $progressSteps[4].Description
+# Step: Convert to SharedMailbox, Set forwarding/grant access
+Write-ProgressStep -StepName 'Exchange Tasks'
 
 $mailboxParams = @{
     Mailbox = $userInfo.selectMailbox
@@ -2018,34 +2026,34 @@ if ($GrantUserFullControl) {
 
 Set-TerminatedMailbox @mailboxParams
 
-# Step 5: Remove Directory Roles
-Write-ProgressStep -StepName $progressSteps[5].Name -Status $progressSteps[5].Description
+# Step: Remove Directory Roles
+Write-ProgressStep -StepName 'Directory Roles'
 Remove-UserFromEntraDirectoryRoles -User $userInfo.selectMgUser
 
-# Step 6: Remove Groups
-Write-ProgressStep -StepName $progressSteps[6].Name -Status $progressSteps[6].Description
+# Step: Remove Groups
+Write-ProgressStep -StepName 'Group Removal'
 $groupExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Groups_Id.csv"
 Remove-UserFromEntraGroups -User $userInfo.selectMgUser -ExportPath $groupExportPath
 
-# Step 7: Remove Licenses
-Write-ProgressStep -StepName $progressSteps[7].Name -Status $progressSteps[7].Description
+# Step: Remove Licenses
+Write-ProgressStep -StepName 'License Removal'
 $licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
 Remove-UserLicenses -User $userInfo.selectMgUser -ExportPath $licensePath
 
-#Step 8: Send Email Notification - SecurePath
-Write-ProgressStep -StepName $progressSteps[8].Name -Status $progressSteps[8].Description
+#Step: Send Email Notification - SecurePath
+Write-ProgressStep -StepName 'Notifications'
 $emailSubject = "KB4 – Remove User"
 $emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
 $MsgFrom = $config.Email.NotificationFrom
 $ToAddress = $config.Email.NotificationTo
 Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
 
-# Step 9: Disconnect from Exchange Online and Graph
-Write-ProgressStep -StepName $progressSteps[9].Name -Status $progressSteps[9].Description
+# Step : Disconnect from Exchange Online and Graph
+Write-ProgressStep -StepName 'Disconnecting from Exchange and Graph'
 Connect-ServiceEndpoints -Disconnect -ExchangeOnline -Graph
 
-# Step 10: Configure OneDrive
-Write-ProgressStep -StepName $progressSteps[10].Name -Status $progressSteps[10].Description
+# Step: Configure OneDrive
+Write-ProgressStep -StepName 'OneDrive Setup'
 
 # Only create and run OneDrive params if needed
 if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
@@ -2066,8 +2074,9 @@ if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
 
 }
 
-# Step 11: Final Sync and Summary
-Write-ProgressStep -StepName $progressSteps[11].Name -Status $progressSteps[11].Description
+# Step: Final Sync and Summary
+Write-ProgressStep -StepName 'AD Sync and Summary'
+
 
 Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
     -DestinationOU $userInfo.selectDestinationOU `
