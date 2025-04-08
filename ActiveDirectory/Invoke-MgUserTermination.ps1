@@ -28,57 +28,63 @@
 .NOTES
     Author: Chris Williams
     Created: 2021-12-20
-    Last Modified: 2025-02-03
+    Last Modified: 2025-07-04
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
-    3.2.0        2025-02-03  Zoom Phone Offboarding:
-                          - Added removeal steps for Zoom Phone and Contact Center
+    4.0.0      2025-07-04   UI Refactor:
+                                - Refactored the UI to use winui 3 styles for easier management and better visuals
 
-    3.0.0        2025-01-20  Major Rework:
-                          - Complete script reorganization and optimization
-                          - Optimized UI spacing and element alignment
-                          - Enhanced form layout for improved readability
-                          - Added secure configuration management via Get-ScriptConfig
-                          - Enhanced error handling and logging system
-                          - Added progress tracking and status messaging
-                          - Added Zoom phone offboarding
+    3.3.0      2025-04-01   Zoom Phone Removal:
+                                - Removed provisioning steps for Zoom Phone and Contact Center as we are moving to 8x8
 
-    2.1.0        2024-11-25  Feature Update:
-                          - Reworked GUI interface
-                          - Added QuickEdit and InsertMode management
-                          - Removed KnowBe4 SCIM integration per SecurePath Team
-                          - Added Email Forwarding functionality - KnowBe4 Notification
+    3.2.0      2025-02-03   Zoom Phone Offboarding:
+                                - Added removeal steps for Zoom Phone and Contact Cente
 
-    2.0.0        2024-07-15  Major Feature Update:
-                          - Added GUI input system
-                          - Enhanced UI for variable collection
-                          - Added KB4 offboarding integration
-                          - Added OneDrive read-only functionality
-                          - Updated KnowBe4 SCIM integration
-                          - Added directory role management
+    3.0.0      2025-01-20   Major Rework:
+                                - Complete script reorganization and optimization
+                                - Optimized UI spacing and element alignment
+                                - Enhanced form layout for improved readability
+                                - Added secure configuration management via Get-ScriptConfig
+                                - Enhanced error handling and logging system
+                                - Added progress tracking and status messaging
+                                - Added Zoom phone offboarding
 
-    1.2.0        2023-02-12  Feature Updates:
-                          - Enhanced license management
-                          - Improved group handling
-                          - Added KnowBe4 integration
-                          - Enhanced group function cleanup
-                          - Added OneDrive access management
+    2.1.0      2024-11-25   Feature Update:
+                                - Reworked GUI interface
+                                - Added QuickEdit and InsertMode management
+                                - Removed KnowBe4 SCIM integration per SecurePath Team
+                                - Added Email Forwarding functionality - KnowBe4 Notification
 
-    1.1.0        2022-06-27  Enhancement Update:
-                          - Added group and license exports
-                          - Improved user management functions
-                          - Enhanced manager removal process
-                          - Fixed group member removal
-                          - Added sign-in revocation
+    2.0.0      2024-07-15   Major Feature Update:
+                                - Added GUI input system
+                                - Enhanced UI for variable collection
+                                - Added KB4 offboarding integration
+                                - Added OneDrive read-only functionality
+                                - Updated KnowBe4 SCIM integration
+                                - Added directory role management
 
-    1.0.0        2021-12-20  Initial Release:
-                          - Basic termination functionality
-                          - AD user management
-                          - Group removal
-                          - License removal
+    1.2.0      2023-02-12   Feature Updates:
+                                - Enhanced license management
+                                - Improved group handling
+                                - Added KnowBe4 integration
+                                - Enhanced group function cleanup
+                                - Added OneDrive access management
+
+    1.1.0      2022-06-27   Enhancement Update:
+                                - Added group and license exports
+                                - Improved user management functions
+                                - Enhanced manager removal process
+                                - Fixed group member removal
+                                - Added sign-in revocation
+
+    1.0.0      2021-12-20   Initial Release:
+                                - Basic termination functionality
+                                - AD user management
+                                - Group removal
+                                - License removal
     ------------------------------------------------------------------------------
 #>
 
@@ -753,10 +759,115 @@ function Send-GraphMailMessage {
 
 #Region Custom Functions
 
-function Get-UserTerminationInput {
+function Show-CustomAlert {
+    param (
+        [string]$Message,
+        [ValidateSet("Error", "Warning", "Info", "Success")]
+        [string]$AlertType = "Error",
+        [string]$Title
+    )
+
+    if (-not $Title) {
+        $Title = $AlertType
+    }
+
+    switch ($AlertType) {
+        "Error" { $color = "#E81123"; $sound = [System.Media.SystemSounds]::Hand }
+        "Warning" { $color = "#FFB900"; $sound = [System.Media.SystemSounds]::Exclamation }
+        "Info" { $color = "#0078D7"; $sound = [System.Media.SystemSounds]::Asterisk }
+        "Success" { $color = "#107C10"; $sound = [System.Media.SystemSounds]::Beep }
+    }
+
+    $XAML = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="$Title" Height="110" Width="400"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontSize" Value="14"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border CornerRadius="12" Background="#2D2D30" Padding="15" BorderBrush="$color" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Top Bar for Dragging -->
+            <Border Name="Top_Bar" Background="Transparent" Height="5" Grid.Row="0" />
+
+            <!-- Content -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Icon -->
+                <Viewbox Grid.Row="0" Grid.RowSpan="2" Margin="0,0,15,0" Width="40" Height="40" VerticalAlignment="Top">
+                    <Canvas Width="48" Height="48">
+                        <Ellipse Width="48" Height="48" Fill="$color"/>
+                        <Rectangle Width="6" Height="20" Fill="White" Canvas.Left="21" Canvas.Top="10"/>
+                        <Rectangle Width="6" Height="6" Fill="White" Canvas.Left="21" Canvas.Top="34"/>
+                    </Canvas>
+                </Viewbox>
+
+                <!-- Message -->
+                <TextBlock Grid.Column="1" Grid.Row="0" TextWrapping="Wrap" Text="$Message" Margin="0,0,0,10"/>
+
+                <!-- Button -->
+                <Button Name="OkButton" Grid.Column="1" Grid.Row="1" Content="OK" Width="80" HorizontalAlignment="Right" IsDefault="True"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
+"@
+
+    Add-Type -AssemblyName PresentationFramework
+
+    $stringReader = New-Object System.IO.StringReader $xaml
+    $xmlReader = [System.Xml.XmlReader]::Create($stringReader)
+    $alertWindow = [Windows.Markup.XamlReader]::Load($xmlReader)
+
+    $okButton = $alertWindow.FindName("OkButton")
+    $okButton.Add_Click({ $alertWindow.Close() })
+
+    # Find the top bar and add the MouseDown event
+    $topBar = $alertWindow.FindName("Top_Bar")
+    $topBar.Add_MouseDown({
+            param($s, $e)
+            if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
+                $alertWindow.DragMove()
+            }
+        })
+
+    # Play the appropriate sound
+    $sound.Play()
+
+    $alertWindow.ShowDialog() | Out-Null
+}
+
+function Get-UserTermination {
     <#
     .SYNOPSIS
-    Shows a GUI window for processing a user termination request.
+    Shows a modern GUI window for processing a user termination request.
 
     .DESCRIPTION
     Displays a WPF window that collects information needed to terminate a user,
@@ -769,166 +880,276 @@ function Get-UserTerminationInput {
         InputUserFWD           : [string] Email address for mail forwarding (empty if not specified)
         InputUserOneDriveAccess: [string] Email of user to receive OneDrive access (empty if not specified)
         SetOneDriveReadOnly    : [bool] Whether to set OneDrive as read-only
-        TestModeEnabled       : [bool] Whether test mode is enabled
+        TestModeEnabled        : [bool] Whether test mode is enabled
     Returns $null if the user cancels the operation.
     #>
 
-    # 1. Add required assemblies
-    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+    # Add required assemblies
+    Add-Type -AssemblyName PresentationFramework
+    Add-Type -AssemblyName PresentationCore
+    Add-Type -AssemblyName WindowsBase
+    Add-Type -AssemblyName System.Windows.Forms
 
-    # Initialize test mode if not already set
-    if ($null -eq $script:TestMode) {
-        $script:TestMode = $false
+    # XAML Design
+    [xml]$XAML = @"
+<Window
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="User Termination Request" Height="650" Width="600"
+    WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- TabControl Style -->
+            <Style TargetType="TabControl">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="0"/>
+            </Style>
+
+            <!-- TabItem Style -->
+            <Style TargetType="TabItem">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="20,10"/>
+                <Setter Property="Margin" Value="0,0,4,0"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TabItem">
+                            <Border x:Name="Border"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{DynamicResource TextControlBorderBrush}"
+                                    BorderThickness="0,0,0,2"
+                                    CornerRadius="4,4,0,0">
+                                <ContentPresenter x:Name="ContentSite"
+                                                ContentSource="Header"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource TextControlBackgroundPointerOver}"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,2"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}"/>
+                                    <Setter Property="TextElement.Foreground" Value="{DynamicResource SystemAccentColor}"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource TextControlBackgroundPointerOver}"/>
+                                    <Setter TargetName="Border" Property="BorderThickness" Value="0,0,0,2"/>
+                                    <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource SystemAccentColorLight1}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="20,20,20,0">
+            <TextBlock Text="User Termination Request" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,20"/>
+            <Border Background="{DynamicResource TextControlBackgroundPointerOver}"
+                    BorderBrush="{DynamicResource TextControlBorderBrush}"
+                    BorderThickness="1"
+                    Padding="10"
+                    Margin="0,0,0,20">
+                <TextBlock TextWrapping="Wrap">
+                    Please fill in the required information for user termination. Fields marked with * are required.
+                </TextBlock>
+            </Border>
+        </StackPanel>
+
+        <!-- Main Content -->
+        <ScrollViewer Grid.Row="1" Margin="20,10,20,20" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- User Information Section -->
+                <GroupBox Header="User Information"
+                         Margin="0,0,0,15"
+                         BorderBrush="{DynamicResource TextControlBorderBrush}"
+                         Background="{DynamicResource TextControlBackgroundPointerOver}">
+                    <StackPanel Margin="15">
+                        <Label>
+                            <TextBlock>
+                                <Run Text="User to Terminate (Email)"/>
+                                <Run Text=" *" Foreground="Red"/>
+                            </TextBlock>
+                        </Label>
+                        <Grid Margin="0,0,0,15">
+                            <TextBox x:Name="txtUserToTerminate"
+                                   Height="32"
+                                   Padding="8,5,8,5"
+                                   VerticalContentAlignment="Center"/>
+                            <TextBlock IsHitTestVisible="False"
+                                     Text="Enter user's email address"
+                                     VerticalAlignment="Center"
+                                     Margin="8,0,0,0"
+                                     Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                <TextBlock.Style>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=txtUserToTerminate}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Access Delegation Section -->
+                <GroupBox Header="Access Delegation"
+                         Margin="0,0,0,15"
+                         BorderBrush="{DynamicResource TextControlBorderBrush}"
+                         Background="{DynamicResource TextControlBackgroundPointerOver}">
+                    <Grid Margin="15">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left Column -->
+                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                            <Label Content="Grant Full Mailbox Control To (Email)"/>
+                            <Grid Margin="0,0,0,15">
+                                <TextBox x:Name="txtMailboxControl"
+                                       Height="32"
+                                       Padding="8,5,8,5"
+                                       VerticalContentAlignment="Center"/>
+                                <TextBlock IsHitTestVisible="False"
+                                         Text="Enter delegate's email address"
+                                         VerticalAlignment="Center"
+                                         Margin="8,0,0,0"
+                                         Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="{x:Type TextBlock}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=txtMailboxControl}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <Label Content="Forward Mailbox To (Email)"/>
+                            <Grid Margin="0,0,0,15">
+                                <TextBox x:Name="txtForwardMailbox"
+                                       Height="32"
+                                       Padding="8,5,8,5"
+                                       VerticalContentAlignment="Center"/>
+                                <TextBlock IsHitTestVisible="False"
+                                         Text="Enter forward-to email address"
+                                         VerticalAlignment="Center"
+                                         Margin="8,0,0,0"
+                                         Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="{x:Type TextBlock}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=txtForwardMailbox}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Right Column -->
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                            <Label Content="Grant OneDrive Access To (Email)"/>
+                            <Grid Margin="0,0,0,15">
+                                <TextBox x:Name="txtOneDriveAccess"
+                                       Height="32"
+                                       Padding="8,5,8,5"
+                                       VerticalContentAlignment="Center"/>
+                                <TextBlock IsHitTestVisible="False"
+                                         Text="Enter delegate's email address"
+                                         VerticalAlignment="Center"
+                                         Margin="8,0,0,0"
+                                         Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="{x:Type TextBlock}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=txtOneDriveAccess}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <CheckBox x:Name="chkOneDriveReadOnly"
+                                    Content="Set OneDrive as Read-Only"
+                                    Margin="0,0,0,5"/>
+                        </StackPanel>
+                    </Grid>
+                </GroupBox>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource TextControlBorderBrush}"
+                BorderThickness="0,1,0,0"
+                Background="{DynamicResource TextControlBackgroundPointerOver}"
+                Padding="20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <CheckBox x:Name="chkTestMode" Content="Test Mode" Grid.Column="0"/>
+                <TextBlock x:Name="tbStatus" Grid.Column="1" VerticalAlignment="Center" Margin="20,0"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="btnSubmit" Content="Submit" Style="{DynamicResource AccentButtonStyle}" Padding="20,5" Height="32" Margin="0,0,10,0"/>
+                    <Button x:Name="btnReset" Content="Reset Form" Padding="20,5" Height="32" Margin="0,0,10,0"/>
+                    <Button x:Name="btnCancel" Content="Cancel" Padding="20,5" Height="32"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
+"@
+
+    # Parse XAML
+    $XAMLReader = [System.Xml.XmlNodeReader]::new($XAML)
+    $Window = [Windows.Markup.XamlReader]::Load($XAMLReader)
+
+    # Create namespace manager for XPath queries
+    $nsManager = New-Object System.Xml.XmlNamespaceManager($XAML.NameTable)
+    $nsManager.AddNamespace("x", "http://schemas.microsoft.com/winfx/2006/xaml")
+
+    # Get all form controls by name and create variables
+    $XAML.SelectNodes("//*[@x:Name]", $nsManager) | ForEach-Object {
+        $Name = $_.Name
+        Set-Variable -Name $Name -Value $Window.FindName($Name) -Force
     }
 
-    # 2. UI Assembly Helper Functions
-    function New-ScrollingStackPanel {
-        param (
-            [int]$MaxHeight = 0,
-            [string]$Margin = "5"
-        )
-        $scrollViewer = New-FormScrollViewer -MaxHeight $MaxHeight -Margin $Margin
-        $stackPanel = New-Object System.Windows.Controls.StackPanel
-        $scrollViewer.Content = $stackPanel
-        return @{
-            ScrollViewer = $scrollViewer
-            StackPanel   = $stackPanel
-        }
-    }
-
-    function New-FormScrollViewer {
-        param (
-            [int]$MaxHeight = 0,
-            [string]$Margin = "5"
-        )
-        $scrollViewer = New-Object System.Windows.Controls.ScrollViewer
-        $scrollViewer.VerticalScrollBarVisibility = "Auto"
-        if ($MaxHeight -gt 0) {
-            $scrollViewer.MaxHeight = $MaxHeight
-        }
-        $scrollViewer.Margin = $Margin
-        return $scrollViewer
-    }
-
-    function New-FormWindow {
-        param (
-            [string]$Title,
-            [int]$Width = 500,
-            [int]$Height,
-            [string]$Background = '#F0F0F0'
-        )
-        $window = New-Object System.Windows.Window
-        $window.Title = $Title
-        $window.Width = $Width
-        $window.Height = $Height
-        $window.WindowStartupLocation = 'CenterScreen'
-        $window.Background = $Background
-        return $window
-    }
-
-    function New-ButtonPanel {
-        param (
-            [string]$Margin = '0,10,0,0'
-        )
-        $buttonPanel = New-Object System.Windows.Controls.StackPanel
-        $buttonPanel.Orientation = 'Horizontal'
-        $buttonPanel.HorizontalAlignment = 'Right'
-        $buttonPanel.Margin = $Margin
-        return $buttonPanel
-    }
-
-    function New-FormDockPanel {
-        param (
-            [string]$Margin = '0,0,0,5'
-        )
-        $dockPanel = New-Object System.Windows.Controls.DockPanel
-        $dockPanel.Margin = $Margin
-        return $dockPanel
-    }
-
-    function New-MainPanel {
-        param (
-            [string]$Margin = '10'
-        )
-        $mainPanel = New-Object System.Windows.Controls.StackPanel
-        $mainPanel.Margin = $Margin
-        return $mainPanel
-    }
-
-    function New-HeaderPanel {
-        param ([string]$Text)
-        $headerPanel = New-Object System.Windows.Controls.Border
-        $headerPanel.Background = '#E1E1E1'
-        $headerPanel.Padding = '10'
-        $headerPanel.Margin = '0,0,0,15'
-        $headerPanel.BorderBrush = '#CCCCCC'
-        $headerPanel.BorderThickness = '1'
-
-        $headerText = New-Object System.Windows.Controls.TextBlock
-        $headerText.Text = $Text
-        $headerText.TextWrapping = 'Wrap'
-        $headerPanel.Child = $headerText
-
-        return $headerPanel
-    }
-
-    function New-FormButton {
-        param (
-            [string]$Content,
-            [scriptblock]$ClickHandler,
-            [string]$Margin = '0,0,0,0'
-        )
-        $button = New-Object System.Windows.Controls.Button
-        $button.Content = $Content
-        $button.Width = 100
-        $button.Height = 30
-        $button.Margin = $Margin
-        $button.Add_Click($ClickHandler)
-        return $button
-    }
-
-    function New-FormLabel {
-        param ([string]$Content)
-        $label = New-Object System.Windows.Controls.Label
-        $label.Content = $Content
-        return $label
-    }
-
-    function New-FormGroupBox {
-        param (
-            [string]$Header,
-            [string]$Margin = '0,0,0,10'
-        )
-        $group = New-Object System.Windows.Controls.GroupBox
-        $group.Header = $Header
-        $group.Margin = $Margin
-
-        $stack = New-Object System.Windows.Controls.StackPanel
-        $stack.Margin = '5'
-        $group.Content = $stack
-
-        return @{
-            Group = $group
-            Stack = $stack
-        }
-    }
-
-    function New-FormCheckBox {
-        param (
-            [string]$Content,
-            [string]$ToolTip,
-            [string]$Margin = "5,5,5,5",
-            [bool]$IsChecked = $false
-        )
-        $checkbox = New-Object System.Windows.Controls.CheckBox
-        $checkbox.Content = $Content
-        $checkbox.ToolTip = $ToolTip
-        $checkbox.Margin = $Margin
-        $checkbox.IsChecked = $IsChecked
-        return $checkbox
-    }
-
-    # 3. Validation Helper Functions
+    # Validation function
     function Test-EmailAddress {
         param ([string]$Email)
         return $Email -match '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -937,179 +1158,102 @@ function Get-UserTerminationInput {
     function Show-ValidationError {
         param (
             [string]$Message,
-            [string]$Title = "Input Error"
+            [string]$Title = "Validation Error"
         )
-        [System.Windows.MessageBox]::Show($Message, $Title, [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+        Show-CustomAlert -Message $Message -AlertType "Error" -Title $Title
     }
 
-    # 4. Event Handlers
-    $Script:emailGotFocusHandler = {
-        if ($this.Text -eq $this.Tag) {
-            $this.Text = ""
-            $this.Foreground = 'Black'
+    function Show-StatusMessage {
+        param (
+            [string]$Message,
+            [ValidateSet("Info", "Success", "Warning", "Error")]
+            [string]$Type = "Info"
+        )
+        $tbStatus.Text = $Message
+        switch ($Type) {
+            "Info" { $tbStatus.Foreground = "#0078D7" }
+            "Success" { $tbStatus.Foreground = "#107C10" }
+            "Warning" { $tbStatus.Foreground = "#FFB900" }
+            "Error" { $tbStatus.Foreground = "#E81123" }
         }
     }
 
-    $Script:emailLostFocusHandler = {
-        if ([string]::IsNullOrWhiteSpace($this.Text) -or $this.Text -eq $this.Tag) {
-            $this.Text = $this.Tag
-            $this.Foreground = 'Gray'
-            $this.BorderBrush = $null
-            $this.BorderThickness = 1
-            return
+    # Function to reset the form
+    function Reset-Form {
+        $txtUserToTerminate.Text = ""
+        $txtMailboxControl.Text = ""
+        $txtForwardMailbox.Text = ""
+        $txtOneDriveAccess.Text = ""
+        $chkOneDriveReadOnly.IsChecked = $false
+        $chkTestMode.IsChecked = $false
+        Show-StatusMessage -Message "Form has been reset" -Type "Info"
+    }
+
+    # Function to get form data
+    function Get-FormData {
+        return [PSCustomObject]@{
+            InputUser                = $txtUserToTerminate.Text
+            InputUserFullControl     = $txtMailboxControl.Text
+            InputUserFWD            = $txtForwardMailbox.Text
+            InputUserOneDriveAccess = $txtOneDriveAccess.Text
+            SetOneDriveReadOnly     = $chkOneDriveReadOnly.IsChecked
+            TestModeEnabled         = $chkTestMode.IsChecked
         }
-        if (-not (Test-EmailAddress -Email $this.Text)) {
+    }
+
+    # Add email validation to text boxes
+    $emailTextBoxes = @($txtUserToTerminate, $txtMailboxControl, $txtForwardMailbox, $txtOneDriveAccess)
+    foreach ($textBox in $emailTextBoxes) {
+        $textBox.Add_TextChanged({
+            if ($this.Text -and -not (Test-EmailAddress -Email $this.Text)) {
             $this.BorderBrush = 'Red'
             $this.BorderThickness = 2
         } else {
             $this.BorderBrush = $null
             $this.BorderThickness = 1
         }
+        })
     }
 
-    # 5. Input Control Initialization
-    function Initialize-EmailTextBox {
-        param (
-            [string]$PlaceholderText,
-            [string]$ToolTipText,
-            [string]$Name,
-            [string]$Margin = '0,0,0,10'
-        )
-
-        $textBox = New-Object System.Windows.Controls.TextBox
-        $textBox.Name = $Name
-        $textBox.Margin = $Margin
-        $textBox.Padding = '5,3,5,3'
-        $textBox.Tag = $PlaceholderText
-        $textBox.Text = $PlaceholderText
-        $textBox.Foreground = 'Gray'
-        $textBox.ToolTip = $ToolTipText
-
-        $textBox.Add_GotFocus($Script:emailGotFocusHandler)
-        $textBox.Add_LostFocus($Script:emailLostFocusHandler)
-
-        return $textBox
-    }
-
-    # 6. Main UI Creation and Logic
-    # Create window and main containers
-    $window = New-FormWindow -Title "User Termination Request" -Height 530
-    $scrollViewer = New-FormScrollViewer
-    $mainPanel = New-MainPanel -Margin '10'
-    $scrollViewer.Content = $mainPanel
-    $window.Content = $scrollViewer
-
-    # Add header
-    $mainPanel.Children.Add((New-HeaderPanel -Text "User Termination Request`nPlease fill in all required fields marked with *"))
-
-    # Create user termination group
-    $termSection = New-FormGroupBox -Header "User Information"
-    $termSection.Stack.Children.Add((New-FormLabel -Content "User to Terminate (Email) *"))
-    $txtUserToTerm = Initialize-EmailTextBox `
-        -Name "userToTerm" `
-        -PlaceholderText "Enter user's email address" `
-        -ToolTipText "Enter the email address of the user to be terminated"
-    $termSection.Stack.Children.Add($txtUserToTerm)
-    $mainPanel.Children.Add($termSection.Group)
-
-    # Create access delegation group
-    $delegateSection = New-FormGroupBox -Header "Access Delegation"
-
-    # OneDrive Access
-    $delegateSection.Stack.Children.Add((New-FormLabel -Content "Grant OneDrive Access To (Email):"))
-    $txtOneDriveAccess = Initialize-EmailTextBox `
-        -Name "oneDriveAccess" `
-        -PlaceholderText "Enter delegate's email address" `
-        -ToolTipText "Enter the email of the person who should receive OneDrive access"
-    $delegateSection.Stack.Children.Add($txtOneDriveAccess)
-
-    # Mailbox Control
-    $delegateSection.Stack.Children.Add((New-FormLabel -Content "Grant Mailbox Full Control To (Email):"))
-    $txtMailboxControl = Initialize-EmailTextBox `
-        -Name "mailboxControl" `
-        -PlaceholderText "Enter delegate's email address" `
-        -ToolTipText "Enter the email of the person who should receive mailbox access"
-    $delegateSection.Stack.Children.Add($txtMailboxControl)
-
-    # Forward Mailbox
-    $delegateSection.Stack.Children.Add((New-FormLabel -Content "Forward Mailbox To (Email):"))
-    $txtForwardMailbox = Initialize-EmailTextBox `
-        -Name "forwardMailbox" `
-        -PlaceholderText "Enter forward-to email address" `
-        -ToolTipText "Enter the email address where future emails should be forwarded"
-    $delegateSection.Stack.Children.Add($txtForwardMailbox)
-
-    # OneDrive Read-Only option
-    $oneDrivePanel = New-FormDockPanel -Margin "0,0,0,5"
-
-    $chkOneDriveReadOnly = New-FormCheckBox `
-        -Content "Set OneDrive as Read-Only" `
-        -ToolTip "Check to make the OneDrive content read-only" `
-        -Margin "10,0,0,0"
-
-    $oneDrivePanel.Children.Add($chkOneDriveReadOnly)
-    $delegateSection.Stack.Children.Add($oneDrivePanel)
-
-    $mainPanel.Children.Add($delegateSection.Group)
-
-    # Create buttons
-    $buttonPanel = New-ButtonPanel -Margin "0,10,0,0"
-
-    # Add test mode checkbox to button panel
-    $testModeButton = New-FormCheckBox `
-        -Content "Test Mode" `
-        -ToolTip "Enable to redirect emails to: $($config.TestMode.Email)" `
-        -IsChecked ($script:TestMode -eq $true) `
-        -Margin "0,5,10,0"
-
-    $buttonPanel.Children.Add($testModeButton)
-
-    $okButton = New-FormButton -Content "OK" -Margin "0,0,10,0" -ClickHandler {
-        # Validate required fields first
-        if (-not $txtUserToTerm.Text -or $txtUserToTerm.Text -eq $txtUserToTerm.Tag -or -not (Test-EmailAddress -Email $txtUserToTerm.Text)) {
-            Show-ValidationError -Message "Invalid or missing email for required field: User to Terminate"
+    # Add button click handlers
+    $btnSubmit.Add_Click({
+        # Validate required user email
+        if (-not $txtUserToTerminate.Text -or -not (Test-EmailAddress -Email $txtUserToTerminate.Text)) {
+            Show-ValidationError -Message "Please enter a valid email address for the user to terminate."
             return
         }
 
-        # Validate optional fields if they have content
-        $optionalTextBoxes = @{
-            'OneDrive Access' = $txtOneDriveAccess
+        # Validate optional email fields if they're not empty
+        $optionalEmails = @{
             'Mailbox Control' = $txtMailboxControl
             'Forward Mailbox' = $txtForwardMailbox
+            'OneDrive Access' = $txtOneDriveAccess
         }
 
-        foreach ($field in $optionalTextBoxes.GetEnumerator()) {
-            if ($field.Value.Text -ne $field.Value.Tag -and -not (Test-EmailAddress -Email $field.Value.Text)) {
-                Show-ValidationError -Message "Invalid email format for: $($field.Key)"
+        foreach ($field in $optionalEmails.GetEnumerator()) {
+            if ($field.Value.Text -and -not (Test-EmailAddress -Email $field.Value.Text)) {
+                Show-ValidationError -Message "Please enter a valid email address for $($field.Key)."
                 return
             }
         }
 
-        $window.DialogResult = $true
-        $window.Close()
-    }
-    $buttonPanel.Children.Add($okButton)
+        $Window.DialogResult = $true
+        $Window.Close()
+    })
 
-    $cancelButton = New-FormButton -Content "Cancel" -ClickHandler {
-        $window.DialogResult = $false
-        $window.Close()
-    }
-    $buttonPanel.Children.Add($cancelButton)
+    $btnCancel.Add_Click({
+        $Window.DialogResult = $false
+        $Window.Close()
+    })
 
-    $mainPanel.Children.Add($buttonPanel)
+    $btnReset.Add_Click({ Reset-Form })
 
-    # Show the window and return results
-    $result = $window.ShowDialog()
+    # Show the window
+    $result = $Window.ShowDialog()
 
+    # Return results if the form was submitted
     if ($result -eq $true) {
-        return @{
-            InputUser               = $txtUserToTerm.Text
-            InputUserFullControl    = if ($txtMailboxControl.Text -eq $txtMailboxControl.Tag) { "" } else { $txtMailboxControl.Text }
-            InputUserFWD            = if ($txtForwardMailbox.Text -eq $txtForwardMailbox.Tag) { "" } else { $txtForwardMailbox.Text }
-            InputUserOneDriveAccess = if ($txtOneDriveAccess.Text -eq $txtOneDriveAccess.Tag) { "" } else { $txtOneDriveAccess.Text }
-            SetOneDriveReadOnly     = $chkOneDriveReadOnly.IsChecked
-            TestModeEnabled         = ($testModeButton.IsChecked -eq $true)
-        }
+        return Get-FormData
     } else {
         return $null
     }
@@ -1960,7 +2104,7 @@ Connect-ServiceEndpoints -ExchangeOnline -Graph
 
 # Call the custom input window function
 
-$result = Get-UserTerminationInput
+$result = Get-UserTermination
 if (-not $result) {
     Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
 }

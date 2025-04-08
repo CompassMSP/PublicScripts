@@ -881,6 +881,1309 @@ function Get-FormattedLicenseInfo {
 }
 
 # UI Functions
+function Show-CustomAlert {
+    param (
+        [string]$Message,
+        [ValidateSet("Error", "Warning", "Info", "Success")]
+        [string]$AlertType = "Error",
+        [string]$Title
+    )
+
+    if (-not $Title) {
+        $Title = $AlertType
+    }
+
+    switch ($AlertType) {
+        "Error" { $color = "#E81123"; $sound = [System.Media.SystemSounds]::Hand }
+        "Warning" { $color = "#FFB900"; $sound = [System.Media.SystemSounds]::Exclamation }
+        "Info" { $color = "#0078D7"; $sound = [System.Media.SystemSounds]::Asterisk }
+        "Success" { $color = "#107C10"; $sound = [System.Media.SystemSounds]::Beep }
+    }
+
+    $XAML = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="$Title" Height="110" Width="400"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontSize" Value="14"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border CornerRadius="12" Background="#2D2D30" Padding="15" BorderBrush="$color" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Top Bar for Dragging -->
+            <Border Name="Top_Bar" Background="Transparent" Height="5" Grid.Row="0" />
+
+            <!-- Content -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Icon -->
+                <Viewbox Grid.Row="0" Grid.RowSpan="2" Margin="0,0,15,0" Width="40" Height="40" VerticalAlignment="Top">
+                    <Canvas Width="48" Height="48">
+                        <Ellipse Width="48" Height="48" Fill="$color"/>
+                        <Rectangle Width="6" Height="20" Fill="White" Canvas.Left="21" Canvas.Top="10"/>
+                        <Rectangle Width="6" Height="6" Fill="White" Canvas.Left="21" Canvas.Top="34"/>
+                    </Canvas>
+                </Viewbox>
+
+                <!-- Message -->
+                <TextBlock Grid.Column="1" Grid.Row="0" TextWrapping="Wrap" Text="$Message" Margin="0,0,0,10"/>
+
+                <!-- Button -->
+                <Button Name="OkButton" Grid.Column="1" Grid.Row="1" Content="OK" Width="80" HorizontalAlignment="Right" IsDefault="True"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
+"@
+
+    Add-Type -AssemblyName PresentationFramework
+
+    $stringReader = New-Object System.IO.StringReader $xaml
+    $xmlReader = [System.Xml.XmlReader]::Create($stringReader)
+    $alertWindow = [Windows.Markup.XamlReader]::Load($xmlReader)
+
+    $okButton = $alertWindow.FindName("OkButton")
+    $okButton.Add_Click({ $alertWindow.Close() })
+
+    # Find the top bar and add the MouseDown event
+    $topBar = $alertWindow.FindName("Top_Bar")
+    $topBar.Add_MouseDown({
+            param($s, $e)
+            if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
+                $alertWindow.DragMove()
+            }
+        })
+
+    # Play the appropriate sound
+    $sound.Play()
+
+    $alertWindow.ShowDialog() | Out-Null
+}
+
+function Get-NewUserRequest {
+    #region Assembly and Namespace loading
+    Add-Type -AssemblyName PresentationFramework
+    Add-Type -AssemblyName PresentationCore
+    Add-Type -AssemblyName WindowsBase
+    Add-Type -AssemblyName System.Windows.Forms
+
+    #region XAML Design
+    [xml]$XAML = @"
+<Window
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="User Creation Form" Height="800" Width="820"
+    WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="User Creation Form" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,20"/>
+            <Border Background="{DynamicResource TextControlBackgroundPointerOver}"
+                    BorderBrush="{DynamicResource TextControlBorderBrush}"
+                    BorderThickness="1"
+                    Padding="10"
+                    Margin="0,0,0,20">
+                <TextBlock TextWrapping="Wrap">
+                    Please fill in the required information for the new user. Fields marked with * are required.
+                </TextBlock>
+            </Border>
+            <WrapPanel Margin="0,0,0,20">
+                <Button x:Name="btnLoadJson" Content="Load JSON" Style="{DynamicResource AccentButtonStyle}" Width="120" Height="32" Margin="0,0,10,0"/>
+                <Button x:Name="btnSaveJson" Content="Save JSON" Width="120" Height="32" Margin="0,0,10,0"/>
+                <Button x:Name="btnRefreshLicenses" Content="Refresh Licenses" Width="120" Height="32" Margin="0,0,10,0"/>
+            </WrapPanel>
+        </StackPanel>
+
+        <!-- Main Content -->
+        <TabControl Grid.Row="1" Margin="0,10">
+            <!-- User Information Tab -->
+            <TabItem Header="User Information">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10" Padding="0,0,20,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Left Column -->
+                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                <Label>
+                                    <TextBlock>
+                                        <Run Text="Required License"/>
+                                        <Run Text=" *" Foreground="Red"/>
+                                    </TextBlock>
+                                </Label>
+                                <ComboBox x:Name="cboRequiredLicense" Height="32" Margin="0,0,0,15"/>
+
+                                <Label>
+                                    <TextBlock>
+                                        <Run Text="Display Name"/>
+                                        <Run Text=" *" Foreground="Red"/>
+                                    </TextBlock>
+                                </Label>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtDisplayName" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter full name (First Last)"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtDisplayName}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Email Address"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                    <Grid Width="150">
+                                        <TextBox x:Name="txtSamAccountName" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                        <TextBlock IsHitTestVisible="False"
+                                                 Text="Username"
+                                                 VerticalAlignment="Center"
+                                                 Margin="8,0,0,0"
+                                                 Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="{x:Type TextBlock}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Text, ElementName=txtSamAccountName}" Value="">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                    </TextBlock>
+                                    </Grid>
+                                    <TextBlock Text="@" VerticalAlignment="Center" Margin="5,0" Padding="0,5,0,0"/>
+                                    <ComboBox x:Name="cboDomain" Width="150" Height="32" VerticalAlignment="Center"/>
+                                    <Button x:Name="btnRefreshDomains" Content="⟳" Width="32" Height="32" VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                </StackPanel>
+
+                                <Label Content="Mobile Phone"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtMobilePhone" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter mobile phone number"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtMobilePhone}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Time Zone"/>
+                                <ComboBox x:Name="cboTimeZone" Height="32" Margin="0,0,0,15"/>
+
+                                <Label Content="365 Usage Location"/>
+                                <ComboBox x:Name="cboUsageLocation" Height="32" Margin="0,0,0,15"/>
+                            </StackPanel>
+
+                            <!-- Right Column -->
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                <Label Content="Copy User Operations"/>
+                                <ComboBox x:Name="cboCopyUserOperations" Height="32" Margin="0,0,0,15"/>
+
+                                <Label Content="User To Copy"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtUserToCopy" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter email of user to copy"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtUserToCopy}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Ancillary Licenses (Multiple Selection)"/>
+                                <ListBox x:Name="lstAncillaryLicenses"
+                                    SelectionMode="Multiple"
+                                        MinHeight="100"
+                                        MaxHeight="270"
+                                        ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                        Margin="0,0,0,15"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Employee Information Tab -->
+            <TabItem Header="Employee Information">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10" Padding="0,0,20,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Left Column -->
+                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                <Label Content="Given Name"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtGivenName" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter first name"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtGivenName}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Job Title"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtJobTitle" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter job title"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtJobTitle}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Company Name"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtCompanyName" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter company name"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtCompanyName}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Employee Hire Date"/>
+                                <DatePicker x:Name="dateEmployeeHireDate" Height="32" Margin="0,0,0,15"/>
+
+                                <Label Content="Business Phone"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtBusinessPhone" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter business phone number"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtBusinessPhone}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Right Column -->
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                <Label Content="Surname"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtSurname" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter last name"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtSurname}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Department"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtDepartment" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter department name"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtDepartment}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Office Location"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtOfficeLocation" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter office location"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtOfficeLocation}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Manager"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtManager" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter manager's email"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtManager}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
+                                <Label Content="Fax Number"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtFaxNumber" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter fax number"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtFaxNumber}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Location Information Tab -->
+            <TabItem Header="Location Information">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10" Padding="0,0,20,0">
+                    <StackPanel>
+                        <Label Content="Street Address"/>
+                        <Grid Margin="0,0,0,15">
+                            <TextBox x:Name="txtStreetAddress" Height="64" Padding="8,5,8,5" TextWrapping="Wrap" AcceptsReturn="True" VerticalContentAlignment="Top"/>
+                            <TextBlock IsHitTestVisible="False"
+                                     Text="Enter street address"
+                                     VerticalAlignment="Top"
+                                     Margin="8,5,0,0"
+                                     Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                <TextBlock.Style>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=txtStreetAddress}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+
+                        <Label Content="City"/>
+                        <Grid Margin="0,0,0,15">
+                            <TextBox x:Name="txtCity" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                            <TextBlock IsHitTestVisible="False"
+                                     Text="Enter city"
+                                     VerticalAlignment="Center"
+                                     Margin="8,0,0,0"
+                                     Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                <TextBlock.Style>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=txtCity}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+
+                        <Label Content="State"/>
+                        <Grid Margin="0,0,0,15">
+                            <TextBox x:Name="txtState" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                            <TextBlock IsHitTestVisible="False"
+                                     Text="Enter state"
+                                     VerticalAlignment="Center"
+                                     Margin="8,0,0,0"
+                                     Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                <TextBlock.Style>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=txtState}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+
+                        <Label Content="Postal Code"/>
+                        <Grid Margin="0,0,0,15">
+                            <TextBox x:Name="txtPostalCode" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                            <TextBlock IsHitTestVisible="False"
+                                     Text="Enter postal code"
+                                     VerticalAlignment="Center"
+                                     Margin="8,0,0,0"
+                                     Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                <TextBlock.Style>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=txtPostalCode}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+
+                        <Label Content="Country"/>
+                        <Grid Margin="0,0,0,15">
+                            <TextBox x:Name="txtCountry" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                            <TextBlock IsHitTestVisible="False"
+                                     Text="Enter country"
+                                     VerticalAlignment="Center"
+                                     Margin="8,0,0,0"
+                                     Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                <TextBlock.Style>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=txtCountry}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- Footer -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource TextControlBorderBrush}"
+                BorderThickness="0,1,0,0"
+                Background="{DynamicResource TextControlBackgroundPointerOver}"
+                Padding="20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <CheckBox x:Name="cbTestMode" Content="Test Mode" Grid.Column="0"/>
+                <TextBlock x:Name="tbStatus" Grid.Column="1" VerticalAlignment="Center" Margin="20,0"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="btnSubmit" Content="Submit" Style="{DynamicResource AccentButtonStyle}" Padding="20,5" Height="32" Margin="0,0,10,0"/>
+                    <Button x:Name="btnReset" Content="Reset" Padding="20,5" Height="32" Margin="0,0,10,0"/>
+                    <Button x:Name="btnCancel" Content="Cancel" Padding="20,5" Height="32"/>
+        </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
+"@
+
+    # Parse the XAML
+    $XAMLReader = [System.Xml.XmlNodeReader]::new($XAML)
+    $Window = [Windows.Markup.XamlReader]::Load($XAMLReader)
+
+    # Create namespace manager for XPath queries
+    $nsManager = New-Object System.Xml.XmlNamespaceManager($XAML.NameTable)
+    $nsManager.AddNamespace("x", "http://schemas.microsoft.com/winfx/2006/xaml")
+
+    # Get all form controls by name and create variables
+    $XAML.SelectNodes("//*[@x:Name]", $nsManager) | ForEach-Object {
+        $Name = $_.Name
+        $Variable = New-Variable -Name $Name -Value $Window.FindName($Name) -Force
+    }
+
+    # Function to load JSON data
+    function Invoke-LoadJsonFile {
+        $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+        $openFileDialog.Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
+        $openFileDialog.Title = "Select a JSON file"
+
+        if ($openFileDialog.ShowDialog() -eq "OK") {
+            try {
+                $jsonContent = Get-Content -Path $openFileDialog.FileName -Raw | ConvertFrom-Json
+
+                # Set the required license
+                if ($jsonContent.requiredLicense) {
+                    foreach ($item in $cboRequiredLicense.Items) {
+                        $itemText = $item.Content.ToString() -replace '\s+\(Available:.*?\)', ''
+                        if ($itemText -eq $jsonContent.requiredLicense) {
+                            $cboRequiredLicense.SelectedItem = $item
+                            break
+                        }
+                    }
+                }
+
+                # Set ancillary licenses (multi-select)
+                $ancillaryLicenseData = if ($jsonContent.ancillaryLicense) { $jsonContent.ancillaryLicense }
+
+                if ($ancillaryLicenseData) {
+                    # Convert input to array regardless of type
+                    $licenses = @()
+                    if ($ancillaryLicenseData -is [string]) {
+                        # If it's a single string, split by comma if it contains commas, otherwise use as is
+                        if ($ancillaryLicenseData -match ',') {
+                            $licenses = $ancillaryLicenseData -split ',' | ForEach-Object { $_.Trim() }
+                        } else {
+                            $licenses = @($ancillaryLicenseData.Trim())
+                        }
+                    } elseif ($ancillaryLicenseData -is [array]) {
+                        # If it's already an array, use it directly
+                        $licenses = $ancillaryLicenseData
+                    }
+
+                    # Clear any existing selections
+                    $lstAncillaryLicenses.SelectedItems.Clear()
+
+                    # Process each license
+                    foreach ($license in $licenses) {
+                        $trimmedLicense = $license.Trim()
+                        for ($i = 0; $i -lt $lstAncillaryLicenses.Items.Count; $i++) {
+                            # Only strip the availability count from the ListBox items
+                            $itemText = $lstAncillaryLicenses.Items[$i].Content -replace '\s*\(Available:.*\)', ''
+
+                            # Compare the stripped ListBox item text with the JSON license name
+                            if ($itemText -eq $trimmedLicense) {
+                                $lstAncillaryLicenses.SelectedItems.Add($lstAncillaryLicenses.Items[$i])
+                                break
+                            }
+                        }
+                    }
+                }
+
+                # Set the employee hire date
+                if ($jsonContent.employeeHireDate -and $jsonContent.employeeHireDate -ne "") {
+                    try {
+                        $dateEmployeeHireDate.SelectedDate = [DateTime]::Parse($jsonContent.employeeHireDate)
+                    } catch {
+                        Write-StatusMessage "Failed to parse date: $($jsonContent.employeeHireDate)" -Type ERROR
+                    }
+                }
+
+                # Set copy user operations
+                if ($jsonContent.copyUserOperations) {
+                    foreach ($item in $cboCopyUserOperations.Items) {
+                        if ($item -eq $jsonContent.copyUserOperations) {
+                            $cboCopyUserOperations.SelectedItem = $item
+                            break
+                        }
+                    }
+                }
+
+                # Set the domain and username from userPrincipalName
+                if ($jsonContent.userPrincipalName -and $jsonContent.userPrincipalName -match '@') {
+                    $upnParts = $jsonContent.userPrincipalName -split '@'
+                    $txtSamAccountName.Text = $upnParts[0]
+
+                    # Try to set domain from either the domain field or from the UPN
+                    $domainToSet = if ($jsonContent.domain) { $jsonContent.domain } else { $upnParts[1] }
+                    foreach ($item in $cboDomain.Items) {
+                        if ($item.ToString() -eq $domainToSet) {
+                            $cboDomain.SelectedItem = $item
+                            break
+                        }
+                    }
+                } elseif ($jsonContent.domain) {
+                    # If no UPN but domain exists, try to set just the domain
+                    foreach ($item in $cboDomain.Items) {
+                        if ($item.ToString() -eq $jsonContent.domain) {
+                            $cboDomain.SelectedItem = $item
+                            break
+                        }
+                    }
+                }
+
+                # Populate the form fields with JSON data
+                $txtDisplayName.Text = $jsonContent.displayName
+                $txtSamAccountName.Text = $jsonContent.userPrincipalName.Split('@')[0]
+                $txtMobilePhone.Text = $jsonContent.mobilePhone
+                $cboTimeZone.SelectedItem = $jsonContent.timeZone
+                $txtUserToCopy.Text = $jsonContent.userToCopy
+                $txtGivenName.Text = $jsonContent.givenName
+                $txtSurname.Text = $jsonContent.surname
+                $txtJobTitle.Text = $jsonContent.jobTitle
+                $txtDepartment.Text = $jsonContent.department
+                $txtCompanyName.Text = $jsonContent.companyName
+                $txtOfficeLocation.Text = $jsonContent.officeLocation
+                $txtManager.Text = $jsonContent.manager
+                $txtBusinessPhone.Text = $jsonContent.businessPhone
+                $txtFaxNumber.Text = $jsonContent.faxNumber
+                $txtStreetAddress.Text = $jsonContent.streetAddress
+                $txtCity.Text = $jsonContent.city
+                $txtState.Text = $jsonContent.state
+                $txtPostalCode.Text = $jsonContent.postalCode
+                $txtCountry.Text = $jsonContent.country
+
+                # Set department groups (multi-select) - DISABLED
+                if ($jsonContent.departmentGroupsDISABLED) {
+                    $groups = $jsonContent.departmentGroups -split ','
+                    foreach ($group in $groups) {
+                        $trimmedGroup = $group.Trim()
+                        for ($i = 0; $i -lt $lstDepartmentGroups.Items.Count; $i++) {
+                            if ($lstDepartmentGroups.Items[$i] -eq $trimmedGroup) {
+                                $lstDepartmentGroups.SelectedItems.Add($lstDepartmentGroups.Items[$i])
+                            }
+                        }
+                    }
+                }
+
+                Show-CustomAlert -Message "JSON file loaded successfully" -AlertType "Success" -Title "Success"
+            } catch {
+                Show-CustomAlert -Message "Error loading JSON file: $_" -AlertType "Error" -Title "Error"
+            }
+        }
+    }
+
+    # Function to save JSON data
+    function Save-JsonData {
+        # Get form data using the existing Get-FormData function
+        $formDataJSON = Get-FormData
+
+        if ($cboRequiredLicense.SelectedItem) {
+            $formDataJSON.requiredLicense = $cboRequiredLicense.SelectedItem.Content -replace '\s*\(Available:.*\)', ''
+        } else { "" }
+
+        # Get the ancillary licenses as an array of display names
+        $selectedAncillaryLicenses = @()
+        foreach ($item in $lstAncillaryLicenses.SelectedItems) {
+            # Strip out the (Available: X) part and add to array
+            $licenseName = $item.Content -replace '\s*\(Available:.*\)', ''
+            $selectedAncillaryLicenses += $licenseName
+        }
+
+        if ($selectedAncillaryLicenses -ne 0) {
+            $formDataJSON.ancillaryLicense = $selectedAncillaryLicenses
+        }
+
+        # Get the department groups as an array
+        if ($lstDepartmentGroups) {
+            $selectedDepartmentGroups = @()
+            foreach ($item in $lstDepartmentGroups.SelectedItems) {
+                $selectedDepartmentGroups += $item.Content
+            }
+        }
+
+        # Open save file dialog
+        $saveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
+        $saveFileDialog.Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
+        $saveFileDialog.Title = "Save JSON File"
+        $saveFileDialog.DefaultExt = "json"
+
+        if ($saveFileDialog.ShowDialog() -eq "OK") {
+            try {
+                $formDataJSON | ConvertTo-Json -Depth 5 | Set-Content -Path $saveFileDialog.FileName
+                Show-CustomAlert -Message "JSON file saved successfully" -AlertType "Success" -Title "Success"
+            } catch {
+                Show-CustomAlert -Message "Error saving JSON file: $_" -AlertType "Error" -Title "Error"
+            }
+        }
+    }
+
+    # Function to reset the form
+    function Reset-Form {
+        $cboRequiredLicense.SelectedIndex = -1
+        $txtDisplayName.Text = ""
+        $txtSamAccountName.Text = ""
+        $txtMobilePhone.Text = ""
+        $cboTimeZone.SelectedIndex = -1
+        $cboCopyUserOperations.SelectedIndex = -1
+        $txtUserToCopy.Text = ""
+        $lstAncillaryLicenses.SelectedItems.Clear()
+        $txtGivenName.Text = ""
+        $txtSurname.Text = ""
+        $txtJobTitle.Text = ""
+        $txtDepartment.Text = ""
+        $txtOfficeLocation.Text = ""
+        $txtManager.Text = ""
+        $dateEmployeeHireDate.SelectedDate = $null
+        $txtCompanyName.Text = ""
+        $txtBusinessPhone.Text = ""
+        $txtFaxNumber.Text = ""
+        $txtStreetAddress.Text = ""
+        $txtCity.Text = ""
+        $txtState.Text = ""
+        $txtPostalCode.Text = ""
+        $txtCountry.Text = ""
+        $chkTestMode.IsChecked = $false
+        #$lstDepartmentGroups.SelectedItems.Clear()
+        Show-StatusMessage -Message "Form has been reset" -Type "Info"
+    }
+
+    # Function to get form data and store in variables
+    function Get-FormData {
+        # Helper function to return $null for empty strings
+        function Get-ValueOrNull($value) {
+            if ([string]::IsNullOrWhiteSpace($value)) {
+                return $null
+            }
+            return $value
+        }
+
+        # Store form data in a custom object
+        $formData = [PSCustomObject]@{
+            requiredLicense        = @()
+            displayName            = Get-ValueOrNull $txtDisplayName.Text
+            samAccountName         = Get-ValueOrNull $txtSamAccountName.Text
+            domain                 = if ($cboDomain.SelectedItem) { $cboDomain.SelectedItem.ToString() } else { "" }
+            userPrincipalName      = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
+            mobilePhone            = Get-ValueOrNull $txtMobilePhone.Text
+            timeZone               = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
+            usageLocation          = if ($cboUsageLocation.SelectedItem) { $cboUsageLocation.SelectedItem.ToString() } else { "" }
+            copyUserOperations     = if ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
+            userToCopy             = Get-ValueOrNull $txtUserToCopy.Text
+            ancillaryLicense       = @()
+            givenName              = Get-ValueOrNull $txtGivenName.Text
+            surname                = Get-ValueOrNull $txtSurname.Text
+            jobTitle               = Get-ValueOrNull $txtJobTitle.Text
+            department             = Get-ValueOrNull $txtDepartment.Text
+            companyName            = Get-ValueOrNull $txtCompanyName.Text
+            officeLocation         = Get-ValueOrNull $txtOfficeLocation.Text
+            employeeHireDate       = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
+            manager                = Get-ValueOrNull $txtManager.Text
+            businessPhone          = Get-ValueOrNull $txtBusinessPhone.Text
+            faxNumber              = Get-ValueOrNull $txtFaxNumber.Text
+            streetAddress          = Get-ValueOrNull $txtStreetAddress.Text
+            city                   = Get-ValueOrNull $txtCity.Text
+            state                  = Get-ValueOrNull $txtState.Text
+            postalCode             = Get-ValueOrNull $txtPostalCode.Text
+            country                = Get-ValueOrNull $txtCountry.Text
+            departmentGroupOptions = @()
+            testModeEnabled        = $false
+        }
+
+        # Store required licenses in an array of objects with DisplayName and SkuId
+        foreach ($item in $cboRequiredLicense.SelectedItem) {
+            $formData.requiredLicense += [PSCustomObject]@{
+                DisplayName = $item.Content
+                SkuId       = $item.Tag
+            }
+        }
+
+        # Store ancillary licenses in an array of objects with DisplayName and SkuId
+        foreach ($item in $lstAncillaryLicenses.SelectedItems) {
+            $formData.ancillaryLicense += [PSCustomObject]@{
+                DisplayName = $item.Content
+                SkuId       = $item.Tag
+            }
+        }
+
+        # Store department groups in an array
+        if ($lstDepartmentGroups) {
+            $selectedDepartmentGroups = @()
+            foreach ($item in $lstDepartmentGroups.SelectedItems) {
+                $selectedDepartmentGroups += $item.Content
+            }
+        }
+
+        if ($cbTestMode.IsChecked -eq $true) {
+            $formData.testModeEnabled = $true
+        } else {
+            $formData.testModeEnabled = $false
+        }
+
+        return $formData
+    }
+
+    # Function to initialize and refresh licenses
+    function Initialize-Licenses {
+        try {
+            Write-StatusMessage "Retrieving licenses..." -Type INFO
+            $btnRefreshLicenses.IsEnabled = $false
+
+            # Clear current items
+            $cboRequiredLicense.Items.Clear()
+            $lstAncillaryLicenses.Items.Clear()
+
+            # Get license info from Microsoft Graph
+            $skus = Get-MgSubscribedSku | Select-Object SkuId, SkuPartNumber, ConsumedUnits, @{
+                Name = 'PrepaidUnits'; Expression = { $_.PrepaidUnits.Enabled }
+            }
+
+            # Format license info if needed (or assume licenseInfo = $skus)
+            $licenseInfo = Get-FormattedLicenseInfo -Skus $skus
+
+            # Define the licenses you care about
+            $requiredLicenses = @(
+                "Exchange Online (Plan 1)",
+                "Office 365 E3",
+                "Microsoft 365 Business Basic",
+                "Microsoft 365 E3",
+                "Microsoft 365 Business Premium"
+            )
+
+            # Populate the combo box with matching licenses
+            foreach ($license in $licenseInfo) {
+                foreach ($reqLicense in $requiredLicenses) {
+                    if ($license.DisplayName -like "*$reqLicense*") {
+                        $comboItem = New-Object System.Windows.Controls.ComboBoxItem
+                        $comboItem.Content = $license.DisplayName
+                        $comboItem.Tag = $license.SkuId  # Store the SkuId for use later
+                        $cboRequiredLicense.Items.Add($comboItem)
+                    }
+                }
+            }
+
+            # Loop through licenseInfo and only add licenses not in the required list
+            foreach ($license in $licenseInfo) {
+                $isRequired = $false
+                foreach ($reqLicense in $requiredLicenses) {
+                    if ($license.DisplayName -like "*$reqLicense*") {
+                        $isRequired = $true
+                        break
+                    }
+                }
+
+                if (-not $isRequired) {
+                    $listItem = New-Object System.Windows.Controls.ListBoxItem
+                    $listItem.Content = $license.DisplayName
+                    $listItem.Tag = $license.SkuId
+                    $lstAncillaryLicenses.Items.Add($listItem)
+                }
+            }
+
+            Write-StatusMessage "Licenses refreshed successfully" -Type OK
+        } catch {
+            Write-StatusMessage "Error retrieving licenses: $($_.Exception.Message)" -Type ERROR
+            Show-CustomAlert -Message "Error retrieving licenses: $($_.Exception.Message)" -AlertType "Error" -Title "Error"
+        } finally {
+            $btnRefreshLicenses.IsEnabled = $true
+        }
+    }
+
+    # Function to validate required data
+    function Invoke-ValidateForm {
+        param (
+            [Parameter()]
+            $DisplayName, # TextBox for Display Name
+
+            [Parameter()]
+            $RequiredLicense  # ComboBox for Required License
+        )
+
+        # Validate DisplayName for "First Last" format using a regex pattern
+        $namePattern = "^[A-Za-z]+\s[A-Za-z]+$"  # Matches First Last format with only letters
+
+        if (-not $DisplayName -or $DisplayName -notmatch $namePattern) {
+            # Invalid format or empty
+            Show-CustomAlert -Message "Please enter a valid full name (First Last)"
+            return $false
+        }
+
+        # Check if an item is selected in the ComboBox
+        if (-not $RequiredLicense -or -not $cboRequiredLicense.SelectedItem) {
+            # No item selected
+            Show-CustomAlert -Message "Please select a required license."
+            return $false
+        }
+
+        # Validate required license availability
+        $requiredLicenseText = $cboRequiredLicense.SelectedItem.Content
+        if ($requiredLicenseText -match "\(Available:\s*(\d+)\)") {
+            $availableLicenses = [int]$Matches[1]
+            if ($availableLicenses -le 0) {
+                $licenseName = $requiredLicenseText -replace '\s*\(Available:.*\)', ''
+                Show-CustomAlert -Message "The selected required license '$licenseName' has no available licenses."
+                return $false
+            }
+        }
+
+        # Validate ancillary licenses availability
+        foreach ($selectedItem in $lstAncillaryLicenses.SelectedItems) {
+            $licenseText = $selectedItem.Content
+            if ($licenseText -match "\(Available:\s*(\d+)\)") {
+                $availableLicenses = [int]$Matches[1]
+                if ($availableLicenses -le 0) {
+                    $licenseName = $licenseText -replace '\s*\(Available:.*\)', ''
+                    Show-CustomAlert -Message "The selected ancillary license '$licenseName' has no available licenses."
+                    return $false
+                }
+            }
+        }
+
+        # If both validations pass, return true
+        return $true
+    }
+
+    # Function to initialize domains
+    function Initialize-Domains {
+        try {
+            Write-StatusMessage "Retrieving domains..." -Type INFO
+            $btnRefreshDomains.IsEnabled = $false
+
+            # Get domains from Graph API
+            $domains = Get-MgDomain -All | Where-Object { $_.IsVerified -eq $true } | Sort-Object Id
+
+            if ($null -eq $domains -or $domains.Count -eq 0) {
+                Write-StatusMessage "No verified domains found" -Type WARN
+                return
+            }
+
+            # Clear and reload domains
+            $cboDomain.Items.Clear()
+
+            # Add verified domains and find default domain
+            $defaultDomain = $null
+            foreach ($domain in $domains) {
+                $cboDomain.Items.Add($domain.Id)
+                if ($domain.IsDefault) {
+                    $defaultDomain = $domain.Id
+                }
+            }
+
+            # Select default domain
+            if ($defaultDomain) {
+                $cboDomain.SelectedItem = $defaultDomain
+                Write-StatusMessage "Selected default domain: $defaultDomain" INFO
+            } elseif ($cboDomain.Items.Count -gt 0) {
+                $cboDomain.SelectedIndex = 0
+            }
+
+            Write-StatusMessage "Retrieved $($domains.Count) domains" -Type OK
+        } catch {
+            Write-StatusMessage "Error retrieving domains: $($_.Exception.Message)" -Type ERROR
+            Show-CustomAlert -Message "Error retrieving domains: $($_.Exception.Message)" -AlertType "Error" -Title "Error"
+        } finally {
+            $btnRefreshDomains.IsEnabled = $true
+        }
+    }
+
+    function Initialize-UsageLocation {
+        param (
+            [System.Windows.Controls.ComboBox]$ComboBox
+        )
+
+        # Define country codes array
+        $countryCodes = @(
+            "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ", "BA", "BB",
+            "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY",
+            "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CU", "CV", "CW", "CX",
+            "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK",
+            "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS",
+            "GT", "GU", "GW", "GY", "HK", "HM", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR",
+            "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA",
+            "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK",
+            "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE",
+            "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM",
+            "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG",
+            "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF",
+            "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY",
+            "UZ", "VA", "VC", "VE", "VG", "VI", "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW"
+        )
+
+        # Clear existing items
+        $ComboBox.Items.Clear()
+
+        # Add all country codes to the ComboBox
+        foreach ($code in $countryCodes) {
+            [void]$ComboBox.Items.Add($code)
+        }
+
+        # Set default value to US
+        $ComboBox.SelectedItem = "US"
+
+        Write-StatusMessage "Usage location initialized with default value: US" -Type INFO
+    }
+
+    # Function to initialize department groups
+    function Initialize-DepartmentGroups {
+        try {
+            Write-StatusMessage "Initializing department groups..." -Type INFO
+
+            # Clear existing items
+            $lstDepartmentGroups.Items.Clear()
+
+            # Define department group options
+            $departmentGroupOptions = @(
+                "Marketing Group",
+                "Sales Group",
+                "Engineering Group",
+                "Finance Group",
+                "HR Group",
+                "Executive Group",
+                "IT Support Group",
+                "Customer Service Group"
+            )
+
+            # Add items to the listbox
+            foreach ($option in $departmentGroupOptions) {
+                $lstDepartmentGroups.Items.Add($option)
+            }
+
+            Write-StatusMessage "Department groups initialized successfully" -Type OK
+        } catch {
+            Write-StatusMessage "Error initializing department groups: $($_.Exception.Message)" -Type ERROR
+            Show-CustomAlert -Message "Error initializing department groups: $($_.Exception.Message)" -AlertType "Error" -Title "Error"
+        }
+    }
+
+    # Function to get selected items
+    function Get-SelectedDepartments {
+        $selectedDepartments = @()
+        if ($chkNFLROC.IsChecked) { $selectedDepartments += "NFL ROC" }
+        if ($chkSFLOC.IsChecked) { $selectedDepartments += "SFL OC" }
+        if ($chkNEROC.IsChecked) { $selectedDepartments += "NE ROC" }
+        if ($chkBilling.IsChecked) { $selectedDepartments += "Billing" }
+        if ($chkPSALL.IsChecked) { $selectedDepartments += "PS ALL" }
+        if ($chkPST1.IsChecked) { $selectedDepartments += "PS T1" }
+        if ($chkPST2.IsChecked) { $selectedDepartments += "PS T2" }
+        return $selectedDepartments
+    }
+
+    function Show-StatusMessage {
+        param (
+            [string]$Message,
+            [ValidateSet("Info", "Success", "Warning", "Error")]
+            [string]$Type = "Info"
+        )
+        $tbStatus.Text = $Message
+        switch ($Type) {
+            "Info" { $tbStatus.Foreground = "#0078D7" }
+            "Success" { $tbStatus.Foreground = "#107C10" }
+            "Warning" { $tbStatus.Foreground = "#FFB900" }
+            "Error" { $tbStatus.Foreground = "#E81123" }
+        }
+    }
+
+
+    # Add event handlers
+    $btnLoadJson.Add_Click({
+            Reset-Form
+            Invoke-LoadJsonFile
+        })
+    $btnSaveJson.Add_Click({ Save-JsonData })
+    $btnReset.Add_Click({ Reset-Form })
+    $btnRefreshLicenses.Add_Click({ Initialize-Licenses })
+    #$btnRefreshDepartments.Add_Click({ Initialize-DepartmentGroups })
+    $btnSubmit.Add_Click({
+            # Run the validation first
+            $isValid = Invoke-ValidateForm -DisplayName $txtDisplayName.Text -RequiredLicense $cboRequiredLicense
+
+            if ($isValid) {
+                # If validation passes, collect the form data
+                $formData = Get-FormData
+                $Window.Close()  # Close the window after submission
+                return $formData  # Return the form data
+            } else {
+                # If validation fails, do not close the window and optionally show a message
+                Write-StatusMessage "Validation failed. Please fix the errors and try again." -Type ERROR
+            }
+        })
+
+    $btnCancel.Add_Click({
+        $Window.DialogResult = $false
+        $Window.Close()
+        })
+
+    # Add event handler for the refresh button
+    $btnRefreshDomains.Add_Click({ Initialize-Domains })
+
+    # Initialize licenses
+    Initialize-Licenses
+
+    # Initialize domains
+    Initialize-Domains
+
+    # Set default location to US
+    Initialize-UsageLocation -ComboBox $cboUsageLocation
+
+    # Initialize department groups
+    # Initialize-DepartmentGroups
+
+    # Define copy user operations options
+    $copyUserOperationsOptions = @(
+        "Copy Attributes",
+        "Copy Groups",
+        "Copy Attributes and Groups"
+    )
+
+    # Populate the copy user operations dropdown
+    foreach ($option in $copyUserOperationsOptions) {
+        $cboCopyUserOperations.Items.Add($option)
+    }
+
+    # Define timezone options
+    $timeZoneOptions = @(
+        'Eastern Standard Time',
+        'Central Standard Time',
+        'Mountain Standard Time',
+        'US Mountain Standard Time (Arizona)',
+        'Pacific Standard Time'
+    )
+
+    # Populate the timezone dropdown
+    foreach ($timeZone in $timeZoneOptions) {
+        $cboTimeZone.Items.Add($timeZone)
+    }
+
+    # Add validation for DisplayName
+    $txtDisplayName.Add_TextChanged({
+        $namePattern = "^[A-Za-z]+\s[A-Za-z]+$"
+        if ($this.Text -and -not ($this.Text -match $namePattern)) {
+            $this.BorderBrush = 'Red'
+            $this.BorderThickness = 2
+            $this.ToolTip = "Name must be in 'First Last' format"
+        } else {
+            $this.BorderBrush = $null
+            $this.BorderThickness = 1
+            $this.ToolTip = $null
+        }
+    })
+
+    # Show the form
+    $Window.ShowDialog() | Out-Null
+
+    # Return the form data
+    return Get-FormData
+}
+
 function New-DuplicatePromptForm {
     [CmdletBinding()]
     param(
@@ -1019,975 +2322,6 @@ function New-DuplicatePromptForm {
     } else {
         return $null
     }
-}
-
-function Show-CustomAlert {
-    param (
-        [string]$Message,
-        [ValidateSet("Error", "Warning", "Info", "Success")]
-        [string]$AlertType = "Error",
-        [string]$Title
-    )
-
-    if (-not $Title) {
-        $Title = $AlertType
-    }
-
-    switch ($AlertType) {
-        "Error" { $color = "#E81123"; $sound = [System.Media.SystemSounds]::Hand }
-        "Warning" { $color = "#FFB900"; $sound = [System.Media.SystemSounds]::Exclamation }
-        "Info" { $color = "#0078D7"; $sound = [System.Media.SystemSounds]::Asterisk }
-        "Success" { $color = "#107C10"; $sound = [System.Media.SystemSounds]::Beep }
-    }
-
-    $XAML = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="$Title" Height="110" Width="400"
-        WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent">
-    <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <Style TargetType="TextBlock">
-                <Setter Property="Foreground" Value="White"/>
-                <Setter Property="FontSize" Value="14"/>
-            </Style>
-        </ResourceDictionary>
-    </Window.Resources>
-
-    <Border CornerRadius="12" Background="#2D2D30" Padding="15" BorderBrush="$color" BorderThickness="2">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <!-- Top Bar for Dragging -->
-            <Border Name="Top_Bar" Background="Transparent" Height="5" Grid.Row="0" />
-
-            <!-- Content -->
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- Icon -->
-                <Viewbox Grid.Row="0" Grid.RowSpan="2" Margin="0,0,15,0" Width="40" Height="40" VerticalAlignment="Top">
-                    <Canvas Width="48" Height="48">
-                        <Ellipse Width="48" Height="48" Fill="$color"/>
-                        <Rectangle Width="6" Height="20" Fill="White" Canvas.Left="21" Canvas.Top="10"/>
-                        <Rectangle Width="6" Height="6" Fill="White" Canvas.Left="21" Canvas.Top="34"/>
-                    </Canvas>
-                </Viewbox>
-
-                <!-- Message -->
-                <TextBlock Grid.Column="1" Grid.Row="0" TextWrapping="Wrap" Text="$Message" Margin="0,0,0,10"/>
-
-                <!-- Button -->
-                <Button Name="OkButton" Grid.Column="1" Grid.Row="1" Content="OK" Width="80" HorizontalAlignment="Right" IsDefault="True"/>
-            </Grid>
-        </Grid>
-    </Border>
-</Window>
-"@
-
-    Add-Type -AssemblyName PresentationFramework
-
-    $stringReader = New-Object System.IO.StringReader $xaml
-    $xmlReader = [System.Xml.XmlReader]::Create($stringReader)
-    $alertWindow = [Windows.Markup.XamlReader]::Load($xmlReader)
-
-    $okButton = $alertWindow.FindName("OkButton")
-    $okButton.Add_Click({ $alertWindow.Close() })
-
-    # Find the top bar and add the MouseDown event
-    $topBar = $alertWindow.FindName("Top_Bar")
-    $topBar.Add_MouseDown({
-            param($s, $e)
-            if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
-                $alertWindow.DragMove()
-            }
-        })
-
-    # Play the appropriate sound
-    $sound.Play()
-
-    $alertWindow.ShowDialog() | Out-Null
-}
-
-function Get-NewUserRequest {
-    #region Assembly and Namespace loading
-    Add-Type -AssemblyName PresentationFramework
-    Add-Type -AssemblyName PresentationCore
-    Add-Type -AssemblyName WindowsBase
-    Add-Type -AssemblyName System.Windows.Forms
-
-    #region XAML Design
-    [xml]$XAML = @"
-<Window
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="User Creation Form" Height="800" Width="820" ResizeMode="CanResize"
-    WindowStartupLocation="CenterScreen">
-
-    <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <Style TargetType="Label">
-                <Setter Property="FontWeight" Value="Bold"/>
-                <Setter Property="Margin" Value="0,0,0,5"/>
-                <Setter Property="Foreground" Value="White"/>
-            </Style>
-        </ResourceDictionary>
-    </Window.Resources>
-
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-
-        <StackPanel Grid.Row="0">
-            <TextBlock Text="User Creation Form" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,30"/>
-            <WrapPanel Margin="0,0,0,20">
-                <Button x:Name="btnLoadJson" Content="Load JSON" Width="120" HorizontalAlignment="Left" Margin="0,0,10,0"/>
-                <Button x:Name="btnSaveJson" Content="Save JSON" Width="120" HorizontalAlignment="Left" Margin="0,0,10,0"/>
-                <Button x:Name="btnRefreshLicenses" Content="Refresh Licenses" Width="120" HorizontalAlignment="Left" Margin="0,0,10,0"/>
-                <!-- <Button x:Name="btnRefreshDepartments" Content="Refresh Departments" Width="120" HorizontalAlignment="Left"/> -->
-            </WrapPanel>
-        </StackPanel>
-
-        <TabControl Grid.Row="1" Margin="0,10">
-            <!-- Existing Content Tab -->
-            <TabItem Header="User Information">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10" Padding="0,0,20,0">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <!-- Left Column -->
-                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                <Label>
-                                    <TextBlock>
-                                        <Run Text="Required License" Foreground="White"/>
-                                        <Run Text=" *" Foreground="Red"/>
-                                    </TextBlock>
-                                </Label>
-                                <ComboBox x:Name="cboRequiredLicense" Margin="0,0,0,10"/>
-
-                                <Label>
-                                    <TextBlock>
-                                        <Run Text="Display Name" Foreground="White"/>
-                                        <Run Text=" *" Foreground="Red"/>
-                                    </TextBlock>
-                                </Label>
-                                <TextBox x:Name="txtDisplayName" Margin="0,0,0,10"/>
-
-                                <Label>
-                                    <TextBlock>
-                                        <Run Text="Email Address" Foreground="White"/>
-                                    </TextBlock>
-                                </Label>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                    <TextBox x:Name="txtSamAccountName" Width="150" VerticalAlignment="Center"/>
-                                    <TextBlock Text="@" VerticalAlignment="Center" Margin="5,0"/>
-                                    <ComboBox x:Name="cboDomain" Width="150" VerticalAlignment="Center"/>
-                                    <Button x:Name="btnRefreshDomains" Content="⟳" Width="30" VerticalAlignment="Center" Margin="5,0,0,0"/>
-                                </StackPanel>
-
-                                <Label Content="Mobile Phone"/>
-                                <TextBox x:Name="txtMobilePhone" Margin="0,0,0,10"/>
-
-                                <Label>
-                                    <TextBlock>
-                                        <Run Text="Time Zone" Foreground="White"/>
-                                    </TextBlock>
-                                </Label>
-                                <ComboBox x:Name="cboTimeZone" Margin="0,0,0,10"/>
-
-                                <Label>
-                                    <TextBlock>
-                                        <Run Text="365 Usage Location" Foreground="White"/>
-                                    </TextBlock>
-                                </Label>
-                                <ComboBox x:Name="cboUsageLocation" Margin="0,0,0,10"/>
-
-                            </StackPanel>
-
-                            <!-- Right Column -->
-                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
-
-                                <Label>
-                                    <TextBlock>
-                                        <Run Text="Copy User Operations" Foreground="White"/>
-                                    </TextBlock>
-                                </Label>
-                                <ComboBox x:Name="cboCopyUserOperations" Margin="0,0,0,10"/>
-
-                                <Label>
-                                    <TextBlock>
-                                        <Run Text="User To Copy" Foreground="White"/>
-                                    </TextBlock>
-                                </Label>
-                                <TextBox x:Name="txtUserToCopy" Margin="0,0,0,10"/>
-
-                                <Label>
-                                    <TextBlock>
-                                        <Run Text="Ancillary Licenses (Multiple Selection)" Foreground="White"/>
-                                    </TextBlock>
-                                </Label>
-                                <ListBox x:Name="lstAncillaryLicenses"
-                                    SelectionMode="Multiple"
-                                    MinHeight="50"
-                                    Margin="0,0,0,10"/>
-
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- New Tab for Employee Information -->
-            <TabItem Header="Employee Information">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10" Padding="0,0,20,0">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="1*"/>
-                                <ColumnDefinition Width="1*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <!-- Left Column -->
-                            <StackPanel Grid.Column="0" Margin="0,0,20,0">
-
-                                <Label Content="Given Name"/>
-                                <TextBox x:Name="txtGivenName" Margin="0,0,0,10"/>
-
-                                <Label Content="Job Title"/>
-                                <TextBox x:Name="txtJobTitle" Margin="0,0,0,10"/>
-
-                                <Label Content="Company Name"/>
-                                <TextBox x:Name="txtCompanyName" Margin="0,0,0,10"/>
-
-                                <Label Content="Employee Hire Date"/>
-                                <DatePicker x:Name="dateEmployeeHireDate" Margin="0,0,0,10"/>
-
-                                <Label Content="Business Phone"/>
-                                <TextBox x:Name="txtBusinessPhone" Margin="0,0,0,10"/>
-
-                            </StackPanel>
-
-                            <!-- Right Column -->
-                            <StackPanel Grid.Column="1" Margin="20,0,20,0">
-
-                                <Label Content="Surname"/>
-                                <TextBox x:Name="txtSurname" Margin="0,0,0,10"/>
-
-                                <Label Content="Department"/>
-                                <TextBox x:Name="txtDepartment" Margin="0,0,0,10"/>
-
-                                <Label Content="Office Location"/>
-                                <TextBox x:Name="txtOfficeLocation" Margin="0,0,0,10"/>
-
-                                <Label Content="Manager"/>
-                                <TextBox x:Name="txtManager" Margin="0,0,0,10"/>
-
-                                <Label Content="Fax Number"/>
-                                <TextBox x:Name="txtFaxNumber" Margin="0,0,0,10"/>
-
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-
-            <!-- New Tab for Location Information -->
-            <TabItem Header="Location Information">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="10">
-                    <StackPanel>
-                        <Label Content="Street Address"/>
-                        <TextBox x:Name="txtStreetAddress" Margin="0,0,0,10" TextWrapping="Wrap" AcceptsReturn="True"/>
-
-                        <Label Content="City"/>
-                        <TextBox x:Name="txtCity" Margin="0,0,0,10"/>
-
-                        <Label Content="State"/>
-                        <TextBox x:Name="txtState" Margin="0,0,0,10"/>
-
-                        <Label Content="Postal Code"/>
-                        <TextBox x:Name="txtPostalCode" Margin="0,0,0,10"/>
-
-                        <Label Content="Country"/>
-                        <TextBox x:Name="txtCountry" Margin="0,0,0,10"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-        </TabControl>
-
-
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-            <CheckBox x:Name="cbTestMode" Content="Test Mode" Margin="0,0,20,0"/>
-            <TextBlock x:Name="tbStatus" Width="150" Margin="0,0,20,0"/>
-            <Button x:Name="btnSubmit" Content="Submit" Width="120" Margin="0,0,10,0"/>
-            <Button x:Name="btnReset" Content="Reset" Width="120"/>
-        </StackPanel>
-    </Grid>
-</Window>
-"@
-
-    # Parse the XAML
-    $XAMLReader = [System.Xml.XmlNodeReader]::new($XAML)
-    $Window = [Windows.Markup.XamlReader]::Load($XAMLReader)
-
-    # Create namespace manager for XPath queries
-    $nsManager = New-Object System.Xml.XmlNamespaceManager($XAML.NameTable)
-    $nsManager.AddNamespace("x", "http://schemas.microsoft.com/winfx/2006/xaml")
-
-    # Get all form controls by name and create variables
-    $XAML.SelectNodes("//*[@x:Name]", $nsManager) | ForEach-Object {
-        $Name = $_.Name
-        $Variable = New-Variable -Name $Name -Value $Window.FindName($Name) -Force
-    }
-
-    # Function to load JSON data
-    function Invoke-LoadJsonFile {
-        $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
-        $openFileDialog.Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
-        $openFileDialog.Title = "Select a JSON file"
-
-        if ($openFileDialog.ShowDialog() -eq "OK") {
-            try {
-                $jsonContent = Get-Content -Path $openFileDialog.FileName -Raw | ConvertFrom-Json
-
-                # Set the required license
-                if ($jsonContent.requiredLicense) {
-                    foreach ($item in $cboRequiredLicense.Items) {
-                        $itemText = $item.Content.ToString() -replace '\s+\(Available:.*?\)', ''
-                        if ($itemText -eq $jsonContent.requiredLicense) {
-                            $cboRequiredLicense.SelectedItem = $item
-                            break
-                        }
-                    }
-                }
-
-                # Set ancillary licenses (multi-select)
-                $ancillaryLicenseData = if ($jsonContent.ancillaryLicense) { $jsonContent.ancillaryLicense }
-
-                if ($ancillaryLicenseData) {
-                    # Convert input to array regardless of type
-                    $licenses = @()
-                    if ($ancillaryLicenseData -is [string]) {
-                        # If it's a single string, split by comma if it contains commas, otherwise use as is
-                        if ($ancillaryLicenseData -match ',') {
-                            $licenses = $ancillaryLicenseData -split ',' | ForEach-Object { $_.Trim() }
-                        } else {
-                            $licenses = @($ancillaryLicenseData.Trim())
-                        }
-                    } elseif ($ancillaryLicenseData -is [array]) {
-                        # If it's already an array, use it directly
-                        $licenses = $ancillaryLicenseData
-                    }
-
-                    # Clear any existing selections
-                    $lstAncillaryLicenses.SelectedItems.Clear()
-
-                    # Process each license
-                    foreach ($license in $licenses) {
-                        $trimmedLicense = $license.Trim()
-                        for ($i = 0; $i -lt $lstAncillaryLicenses.Items.Count; $i++) {
-                            # Only strip the availability count from the ListBox items
-                            $itemText = $lstAncillaryLicenses.Items[$i].Content -replace '\s*\(Available:.*\)', ''
-
-                            # Compare the stripped ListBox item text with the JSON license name
-                            if ($itemText -eq $trimmedLicense) {
-                                $lstAncillaryLicenses.SelectedItems.Add($lstAncillaryLicenses.Items[$i])
-                                break
-                            }
-                        }
-                    }
-                }
-
-                # Set the employee hire date
-                if ($jsonContent.employeeHireDate -and $jsonContent.employeeHireDate -ne "") {
-                    try {
-                        $dateEmployeeHireDate.SelectedDate = [DateTime]::Parse($jsonContent.employeeHireDate)
-                    } catch {
-                        Write-Host "Failed to parse date: $($jsonContent.employeeHireDate)"
-                    }
-                }
-
-                # Set copy user operations
-                if ($jsonContent.copyUserOperations) {
-                    foreach ($item in $cboCopyUserOperations.Items) {
-                        if ($item -eq $jsonContent.copyUserOperations) {
-                            $cboCopyUserOperations.SelectedItem = $item
-                            break
-                        }
-                    }
-                }
-
-                # Set the domain and username from userPrincipalName
-                if ($jsonContent.userPrincipalName -and $jsonContent.userPrincipalName -match '@') {
-                    $upnParts = $jsonContent.userPrincipalName -split '@'
-                    $txtSamAccountName.Text = $upnParts[0]
-
-                    # Try to set domain from either the domain field or from the UPN
-                    $domainToSet = if ($jsonContent.domain) { $jsonContent.domain } else { $upnParts[1] }
-                    foreach ($item in $cboDomain.Items) {
-                        if ($item.ToString() -eq $domainToSet) {
-                            $cboDomain.SelectedItem = $item
-                            break
-                        }
-                    }
-                } elseif ($jsonContent.domain) {
-                    # If no UPN but domain exists, try to set just the domain
-                    foreach ($item in $cboDomain.Items) {
-                        if ($item.ToString() -eq $jsonContent.domain) {
-                            $cboDomain.SelectedItem = $item
-                            break
-                        }
-                    }
-                }
-
-                # Populate the form fields with JSON data
-                $txtDisplayName.Text = $jsonContent.displayName
-                $txtSamAccountName.Text = $jsonContent.userPrincipalName.Split('@')[0]
-                $txtMobilePhone.Text = $jsonContent.mobilePhone
-                $cboTimeZone.SelectedItem = $jsonContent.timeZone
-                $txtUserToCopy.Text = $jsonContent.userToCopy
-                $txtGivenName.Text = $jsonContent.givenName
-                $txtSurname.Text = $jsonContent.surname
-                $txtJobTitle.Text = $jsonContent.jobTitle
-                $txtDepartment.Text = $jsonContent.department
-                $txtCompanyName.Text = $jsonContent.companyName
-                $txtOfficeLocation.Text = $jsonContent.officeLocation
-                $txtManager.Text = $jsonContent.manager
-                $txtBusinessPhone.Text = $jsonContent.businessPhone
-                $txtFaxNumber.Text = $jsonContent.faxNumber
-                $txtStreetAddress.Text = $jsonContent.streetAddress
-                $txtCity.Text = $jsonContent.city
-                $txtState.Text = $jsonContent.state
-                $txtPostalCode.Text = $jsonContent.postalCode
-                $txtCountry.Text = $jsonContent.country
-
-
-                # Set department groups (multi-select) - DISABLED
-                if ($jsonContent.departmentGroupsDISABLED) {
-                    $groups = $jsonContent.departmentGroups -split ','
-                    foreach ($group in $groups) {
-                        $trimmedGroup = $group.Trim()
-                        for ($i = 0; $i -lt $lstDepartmentGroups.Items.Count; $i++) {
-                            if ($lstDepartmentGroups.Items[$i] -eq $trimmedGroup) {
-                                $lstDepartmentGroups.SelectedItems.Add($lstDepartmentGroups.Items[$i])
-                            }
-                        }
-                    }
-                }
-
-                [System.Windows.MessageBox]::Show("JSON file loaded successfully", "Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-            } catch {
-                [System.Windows.MessageBox]::Show("Error loading JSON file: $_", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            }
-        }
-    }
-
-    # Function to save JSON data
-    function Save-JsonData {
-        # Get form data using the existing Get-FormData function
-        $formDataJSON = Get-FormData
-
-        if ($cboRequiredLicense.SelectedItem) {
-            $formDataJSON.requiredLicense = $cboRequiredLicense.SelectedItem.Content -replace '\s*\(Available:.*\)', ''
-        } else { "" }
-
-        # Get the ancillary licenses as an array of display names
-        $selectedAncillaryLicenses = @()
-        foreach ($item in $lstAncillaryLicenses.SelectedItems) {
-            # Strip out the (Available: X) part and add to array
-            $licenseName = $item.Content -replace '\s*\(Available:.*\)', ''
-            $selectedAncillaryLicenses += $licenseName
-        }
-
-        if ($selectedAncillaryLicenses -ne 0) {
-            $formDataJSON.ancillaryLicense = $selectedAncillaryLicenses
-        }
-
-        # Get the department groups as an array
-        if ($lstDepartmentGroups) {
-            $selectedDepartmentGroups = @()
-            foreach ($item in $lstDepartmentGroups.SelectedItems) {
-                $selectedDepartmentGroups += $item.Content
-            }
-        }
-
-        # Open save file dialog
-        $saveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
-        $saveFileDialog.Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
-        $saveFileDialog.Title = "Save JSON File"
-        $saveFileDialog.DefaultExt = "json"
-
-        if ($saveFileDialog.ShowDialog() -eq "OK") {
-            try {
-                $formDataJSON | ConvertTo-Json -Depth 5 | Set-Content -Path $saveFileDialog.FileName
-                [System.Windows.MessageBox]::Show("JSON file saved successfully", "Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
-            } catch {
-                [System.Windows.MessageBox]::Show("Error saving JSON file: $_", "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
-            }
-        }
-    }
-
-    # Function to reset the form
-    function Reset-Form {
-        $cboRequiredLicense.SelectedIndex = -1
-        $txtDisplayName.Text = ""
-        $txtSamAccountName.Text = ""
-        $txtMobilePhone.Text = ""
-        $cboTimeZone.SelectedIndex = -1
-        $cboCopyUserOperations.SelectedIndex = -1
-        $txtUserToCopy.Text = ""
-        $lstAncillaryLicenses.SelectedItems.Clear()
-        $txtGivenName.Text = ""
-        $txtSurname.Text = ""
-        $txtJobTitle.Text = ""
-        $txtDepartment.Text = ""
-        $txtOfficeLocation.Text = ""
-        $txtManager.Text = ""
-        $dateEmployeeHireDate.SelectedDate = $null
-        $txtCompanyName.Text = ""
-        $txtBusinessPhone.Text = ""
-        $txtFaxNumber.Text = ""
-        $txtStreetAddress.Text = ""
-        $txtCity.Text = ""
-        $txtState.Text = ""
-        $txtPostalCode.Text = ""
-        $txtCountry.Text = ""
-        #$lstDepartmentGroups.SelectedItems.Clear()
-    }
-
-    # Function to get form data and store in variables
-    function Get-FormData {
-        # Helper function to return $null for empty strings
-        function Get-ValueOrNull($value) {
-            if ([string]::IsNullOrWhiteSpace($value)) {
-                return $null
-            }
-            return $value
-        }
-
-        # Store form data in a custom object
-        $formData = [PSCustomObject]@{
-            requiredLicense        = @()
-            displayName            = Get-ValueOrNull $txtDisplayName.Text
-            samAccountName         = Get-ValueOrNull $txtSamAccountName.Text
-            domain                 = if ($cboDomain.SelectedItem) { $cboDomain.SelectedItem.ToString() } else { "" }
-            userPrincipalName      = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
-            mobilePhone            = Get-ValueOrNull $txtMobilePhone.Text
-            timeZone               = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
-            usageLocation          = if ($cboUsageLocation.SelectedItem) { $cboUsageLocation.SelectedItem.ToString() } else { "" }
-            copyUserOperations     = if ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
-            userToCopy             = Get-ValueOrNull $txtUserToCopy.Text
-            ancillaryLicense       = @()
-            givenName              = Get-ValueOrNull $txtGivenName.Text
-            surname                = Get-ValueOrNull $txtSurname.Text
-            jobTitle               = Get-ValueOrNull $txtJobTitle.Text
-            department             = Get-ValueOrNull $txtDepartment.Text
-            companyName            = Get-ValueOrNull $txtCompanyName.Text
-            officeLocation         = Get-ValueOrNull $txtOfficeLocation.Text
-            employeeHireDate       = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
-            manager                = Get-ValueOrNull $txtManager.Text
-            businessPhone          = Get-ValueOrNull $txtBusinessPhone.Text
-            faxNumber              = Get-ValueOrNull $txtFaxNumber.Text
-            streetAddress          = Get-ValueOrNull $txtStreetAddress.Text
-            city                   = Get-ValueOrNull $txtCity.Text
-            state                  = Get-ValueOrNull $txtState.Text
-            postalCode             = Get-ValueOrNull $txtPostalCode.Text
-            country                = Get-ValueOrNull $txtCountry.Text
-            departmentGroupOptions = @()
-            testModeEnabled        = $false
-        }
-
-        # Store required licenses in an array of objects with DisplayName and SkuId
-        foreach ($item in $cboRequiredLicense.SelectedItem) {
-            $formData.requiredLicense += [PSCustomObject]@{
-                DisplayName = $item.Content
-                SkuId       = $item.Tag
-            }
-        }
-
-        # Store ancillary licenses in an array of objects with DisplayName and SkuId
-        foreach ($item in $lstAncillaryLicenses.SelectedItems) {
-            $formData.ancillaryLicense += [PSCustomObject]@{
-                DisplayName = $item.Content
-                SkuId       = $item.Tag
-            }
-        }
-
-        # Store department groups in an array
-        if ($lstDepartmentGroups) {
-            $selectedDepartmentGroups = @()
-            foreach ($item in $lstDepartmentGroups.SelectedItems) {
-                $selectedDepartmentGroups += $item.Content
-            }
-        }
-
-        if ($cbTestMode.IsChecked -eq $true) {
-            $formData.testModeEnabled = $true
-        } else {
-            $formData.testModeEnabled = $false
-        }
-
-        return $formData
-    }
-
-    # Function to initialize and refresh licenses
-    function Initialize-Licenses {
-        try {
-            Write-StatusMessage "Retrieving licenses..." -Type INFO
-            $btnRefreshLicenses.IsEnabled = $false
-
-            # Clear current items
-            $cboRequiredLicense.Items.Clear()
-            $lstAncillaryLicenses.Items.Clear()
-
-            # Get license info from Microsoft Graph
-            $skus = Get-MgSubscribedSku | Select-Object SkuId, SkuPartNumber, ConsumedUnits, @{
-                Name = 'PrepaidUnits'; Expression = { $_.PrepaidUnits.Enabled }
-            }
-
-            # Format license info if needed (or assume licenseInfo = $skus)
-            $licenseInfo = Get-FormattedLicenseInfo -Skus $skus
-
-            # Define the licenses you care about
-            $requiredLicenses = @(
-                "Exchange Online (Plan 1)",
-                "Office 365 E3",
-                "Microsoft 365 Business Basic",
-                "Microsoft 365 E3",
-                "Microsoft 365 Business Premium"
-            )
-
-            # Populate the combo box with matching licenses
-            foreach ($license in $licenseInfo) {
-                foreach ($reqLicense in $requiredLicenses) {
-                    if ($license.DisplayName -like "*$reqLicense*") {
-                        $comboItem = New-Object System.Windows.Controls.ComboBoxItem
-                        $comboItem.Content = $license.DisplayName
-                        $comboItem.Tag = $license.SkuId  # Store the SkuId for use later
-                        $cboRequiredLicense.Items.Add($comboItem)
-                    }
-                }
-            }
-
-            # Loop through licenseInfo and only add licenses not in the required list
-            foreach ($license in $licenseInfo) {
-                $isRequired = $false
-                foreach ($reqLicense in $requiredLicenses) {
-                    if ($license.DisplayName -like "*$reqLicense*") {
-                        $isRequired = $true
-                        break
-                    }
-                }
-
-                if (-not $isRequired) {
-                    $listItem = New-Object System.Windows.Controls.ListBoxItem
-                    $listItem.Content = $license.DisplayName
-                    $listItem.Tag = $license.SkuId
-                    $lstAncillaryLicenses.Items.Add($listItem)
-                }
-            }
-
-            Write-StatusMessage "Licenses refreshed successfully" -Type OK
-        } catch {
-            Write-StatusMessage "Error retrieving licenses: $($_.Exception.Message)" -Type ERROR
-            [System.Windows.MessageBox]::Show(
-                "Error retrieving licenses: $($_.Exception.Message)",
-                "Error",
-                [System.Windows.MessageBoxButton]::OK,
-                [System.Windows.MessageBoxImage]::Error
-            )
-        } finally {
-            $btnRefreshLicenses.IsEnabled = $true
-        }
-    }
-
-    # Function to validate required data
-    function Invoke-ValidateForm {
-        param (
-            [Parameter()]
-            $DisplayName, # TextBox for Display Name
-
-            [Parameter()]
-            $RequiredLicense  # ComboBox for Required License
-        )
-
-        # Validate DisplayName for "First Last" format using a regex pattern
-        $namePattern = "^[A-Za-z]+ [A-Za-z]+$"  # Matches First Last format with only letters
-
-        if (-not $DisplayName -or $DisplayName -notmatch $namePattern) {
-            # Invalid format or empty
-            Show-CustomAlert -Message "Please enter a valid full name (First Last)"
-            return $false
-        }
-
-        # Check if an item is selected in the ComboBox
-        if (-not $RequiredLicense -or -not $cboRequiredLicense.SelectedItem) {
-            # No item selected
-            Show-CustomAlert -Message "Please select a required license."
-            return $false
-        }
-
-        # Validate required license availability
-        $requiredLicenseText = $cboRequiredLicense.SelectedItem.Content
-        if ($requiredLicenseText -match "\(Available:\s*(\d+)\)") {
-            $availableLicenses = [int]$Matches[1]
-            if ($availableLicenses -le 0) {
-                $licenseName = $requiredLicenseText -replace '\s*\(Available:.*\)', ''
-                Show-CustomAlert -Message "The selected required license '$licenseName' has no available licenses."
-                return $false
-            }
-        }
-
-        # Validate ancillary licenses availability
-        foreach ($selectedItem in $lstAncillaryLicenses.SelectedItems) {
-            $licenseText = $selectedItem.Content
-            if ($licenseText -match "\(Available:\s*(\d+)\)") {
-                $availableLicenses = [int]$Matches[1]
-                if ($availableLicenses -le 0) {
-                    $licenseName = $licenseText -replace '\s*\(Available:.*\)', ''
-                    Show-CustomAlert -Message "The selected ancillary license '$licenseName' has no available licenses."
-                    return $false
-                }
-            }
-        }
-
-        # If both validations pass, return true
-        return $true
-    }
-
-    # Function to initialize domains
-    function Initialize-Domains {
-        try {
-            Write-StatusMessage "Retrieving domains..." -Type INFO
-            $btnRefreshDomains.IsEnabled = $false
-
-            # Get domains from Graph API
-            $domains = Get-MgDomain -All | Where-Object { $_.IsVerified -eq $true } | Sort-Object Id
-
-            if ($null -eq $domains -or $domains.Count -eq 0) {
-                Write-StatusMessage "No verified domains found" -Type WARN
-                return
-            }
-
-            # Clear and reload domains
-            $cboDomain.Items.Clear()
-
-            # Add verified domains and find default domain
-            $defaultDomain = $null
-            foreach ($domain in $domains) {
-                $cboDomain.Items.Add($domain.Id)
-                if ($domain.IsDefault) {
-                    $defaultDomain = $domain.Id
-                }
-            }
-
-            # Select default domain
-            if ($defaultDomain) {
-                $cboDomain.SelectedItem = $defaultDomain
-                Write-StatusMessage "Selected default domain: $defaultDomain" INFO
-            } elseif ($cboDomain.Items.Count -gt 0) {
-                $cboDomain.SelectedIndex = 0
-            }
-
-            Write-StatusMessage "Retrieved $($domains.Count) domains" -Type OK
-        } catch {
-            Write-StatusMessage "Error retrieving domains: $($_.Exception.Message)" -Type ERROR
-            [System.Windows.MessageBox]::Show(
-                "Error retrieving domains: $($_.Exception.Message)",
-                "Error",
-                [System.Windows.MessageBoxButton]::OK,
-                [System.Windows.MessageBoxImage]::Error
-            )
-        } finally {
-            $btnRefreshDomains.IsEnabled = $true
-        }
-    }
-
-    function Initialize-UsageLocation {
-        param (
-            [System.Windows.Controls.ComboBox]$ComboBox
-        )
-
-        # Define country codes array
-        $countryCodes = @(
-            "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ", "BA", "BB",
-            "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY",
-            "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CU", "CV", "CW", "CX",
-            "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK",
-            "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS",
-            "GT", "GU", "GW", "GY", "HK", "HM", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR",
-            "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA",
-            "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK",
-            "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE",
-            "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM",
-            "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG",
-            "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF",
-            "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY",
-            "UZ", "VA", "VC", "VE", "VG", "VI", "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW"
-        )
-
-        # Clear existing items
-        $ComboBox.Items.Clear()
-
-        # Add all country codes to the ComboBox
-        foreach ($code in $countryCodes) {
-            [void]$ComboBox.Items.Add($code)
-        }
-
-        # Set default value to US
-        $ComboBox.SelectedItem = "US"
-
-        Write-StatusMessage "Usage location initialized with default value: US" -Type INFO
-    }
-
-    # Function to initialize department groups
-    function Initialize-DepartmentGroups {
-        try {
-            Write-StatusMessage "Initializing department groups..." -Type INFO
-
-            # Clear existing items
-            $lstDepartmentGroups.Items.Clear()
-
-            # Define department group options
-            $departmentGroupOptions = @(
-                "Marketing Group",
-                "Sales Group",
-                "Engineering Group",
-                "Finance Group",
-                "HR Group",
-                "Executive Group",
-                "IT Support Group",
-                "Customer Service Group"
-            )
-
-            # Add items to the listbox
-            foreach ($option in $departmentGroupOptions) {
-                $lstDepartmentGroups.Items.Add($option)
-            }
-
-            Write-StatusMessage "Department groups initialized successfully" -Type OK
-        } catch {
-            Write-StatusMessage "Error initializing department groups: $($_.Exception.Message)" -Type ERROR
-            [System.Windows.MessageBox]::Show(
-                "Error initializing department groups: $($_.Exception.Message)",
-                "Error",
-                [System.Windows.MessageBoxButton]::OK,
-                [System.Windows.MessageBoxImage]::Error
-            )
-        }
-    }
-
-    # Function to get selected items
-    function Get-SelectedDepartments {
-        $selectedDepartments = @()
-        if ($chkNFLROC.IsChecked) { $selectedDepartments += "NFL ROC" }
-        if ($chkSFLOC.IsChecked) { $selectedDepartments += "SFL OC" }
-        if ($chkNEROC.IsChecked) { $selectedDepartments += "NE ROC" }
-        if ($chkBilling.IsChecked) { $selectedDepartments += "Billing" }
-        if ($chkPSALL.IsChecked) { $selectedDepartments += "PS ALL" }
-        if ($chkPST1.IsChecked) { $selectedDepartments += "PS T1" }
-        if ($chkPST2.IsChecked) { $selectedDepartments += "PS T2" }
-        return $selectedDepartments
-    }
-
-    # Add event handlers
-    $btnLoadJson.Add_Click({
-            Reset-Form
-            Invoke-LoadJsonFile
-        })
-    $btnSaveJson.Add_Click({ Save-JsonData })
-    $btnReset.Add_Click({ Reset-Form })
-    $btnRefreshLicenses.Add_Click({ Initialize-Licenses })
-    #$btnRefreshDepartments.Add_Click({ Initialize-DepartmentGroups })
-    $btnSubmit.Add_Click({
-            # Run the validation first
-            $isValid = Invoke-ValidateForm -DisplayName $txtDisplayName.Text -RequiredLicense $cboRequiredLicense
-
-            if ($isValid) {
-                # If validation passes, collect the form data
-                $formData = Get-FormData
-                $Window.Close()  # Close the window after submission
-                return $formData  # Return the form data
-            } else {
-                # If validation fails, do not close the window and optionally show a message
-                Write-Host "Validation failed. Please fix the errors and try again." -ForegroundColor Red
-            }
-        })
-
-    # Add event handler for the refresh button
-    $btnRefreshDomains.Add_Click({ Initialize-Domains })
-
-    # Initialize licenses
-    Initialize-Licenses
-
-    # Initialize domains
-    Initialize-Domains
-
-    # Set default location to US
-    Initialize-UsageLocation -ComboBox $cboUsageLocation
-
-    # Initialize department groups
-    # Initialize-DepartmentGroups
-
-    # Define copy user operations options
-    $copyUserOperationsOptions = @(
-        "Copy Attributes",
-        "Copy Groups",
-        "Copy Attributes and Groups"
-    )
-
-    # Populate the copy user operations dropdown
-    foreach ($option in $copyUserOperationsOptions) {
-        $cboCopyUserOperations.Items.Add($option)
-    }
-
-    # Define timezone options
-    $timeZoneOptions = @(
-        'Eastern Standard Time',
-        'Central Standard Time',
-        'Mountain Standard Time',
-        'US Mountain Standard Time (Arizona)',
-        'Pacific Standard Time'
-    )
-
-    # Populate the timezone dropdown
-    foreach ($timeZone in $timeZoneOptions) {
-        $cboTimeZone.Items.Add($timeZone)
-    }
-
-    # Show the form
-    $Window.ShowDialog() | Out-Null
-
-    # Return the form data
-    return Get-FormData
 }
 
 # Main Exection Functions
