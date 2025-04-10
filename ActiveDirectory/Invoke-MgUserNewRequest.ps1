@@ -106,8 +106,6 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
     ------------------------------------------------------------------------------
 #>
 
-$script:TestMode = $false  # Default to false
-
 # Disable console quick edit
 function Set-ConsoleProperties {
     [CmdletBinding()]
@@ -178,55 +176,22 @@ function Set-ConsoleProperties {
 
 Set-ConsoleProperties -QuickEditMode Disable -InsertMode Disable
 
-# Initialize loading animation
-Clear-Host
-$loadingChars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-$i = 0
+$script:TestMode = $false  # Default to false
 
-try {
-    $loadingJob = Start-Job -ScriptBlock { while ($true) { Start-Sleep -Milliseconds 100 } }
-} catch {
-    Write-Host "`n  [!] Failed to start loading animation: $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "`n  Initializing New User Creation Script v4.0.0..." -ForegroundColor Cyan
-Write-Host "  Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
-
-Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Loading core components..." -NoNewline -ForegroundColor Yellow
 $ErrorActionPreference = 'Stop'
 # Only show verbose output if -Verbose is specified
 if (-not $PSBoundParameters['Verbose']) {
     $VerbosePreference = 'SilentlyContinue'
 }
+
+Clear-Host
+
+Write-Host "`n  Initializing New User Creation Script v4.0.0..." -ForegroundColor Cyan
 $startTime = Get-Date
-Write-Host "`r  [✓] Core components loaded" -ForegroundColor Green
+Write-Host "  Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
 
-Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
-$progressSteps = @(
-    @{ Number = 0; Name = "Initialization"; Description = "Loading configuration and connecting services" }
-    @{ Number = 1; Name = "User Input"; Description = "Gathering new user details" }
-    @{ Number = 2; Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
-    @{ Number = 3; Name = "New User AD Creation"; Description = "Creating user in Active Directory" }
-    @{ Number = 4; Name = "AD Group Copy"; Description = "Copying AD group memberships" }
-    @{ Number = 5; Name = "Azure Sync"; Description = "Syncing to Azure AD" }
-    @{ Number = 6; Name = "License Setup"; Description = "Assigning licenses" }
-    @{ Number = 7; Name = "Mailbox Provisioning"; Description = "Waiting for 365 to provision mailbox" }
-    @{ Number = 8; Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
-    @{ Number = 9; Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
-    @{ Number = 10; Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
-    @{ Number = 11; Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
-    @{ Number = 12; Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
-)
-Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
+Write-Host "  [ ] Loading functions..." -NoNewline -ForegroundColor Yellow
 
-Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Loading functions..." -NoNewline -ForegroundColor Yellow
-
-$script:totalSteps = $progressSteps.Count
-
-for ($i = 0; $i -lt $progressSteps.Count; $i++) {
-    $progressSteps[$i].Number = $i + 1
-}
 function Write-ProgressStep {
     [CmdletBinding()]
     param(
@@ -242,7 +207,7 @@ function Write-ProgressStep {
         return
     }
 
-    $stepNumber = $step.Number
+    $stepNumber = $script:currentStep
     $status = $step.Description
 
     # Guard against division by zero or missing values
@@ -253,6 +218,36 @@ function Write-ProgressStep {
         Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
         Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
     }
+    $script:currentStep += 1
+}
+
+function Write-ProgressStep {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$StepName
+    )
+
+    # Find the step object by name
+    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
+
+    if (-not $step) {
+        Write-Warning "Progress step '$StepName' not found."
+        return
+    }
+
+    $stepNumber = $script:currentStep
+    $status = $step.Description
+
+    # Guard against division by zero or missing values
+    if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
+        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
+        Write-Progress -Activity "New User Creation" -Status $status
+    } else {
+        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
+        Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
+    }
+    $script:currentStep += 1
 }
 
 #Region Standard Functions
@@ -1752,7 +1747,6 @@ function Get-NewUserRequest {
         $txtState.Text = ""
         $txtPostalCode.Text = ""
         $txtCountry.Text = ""
-        $chkTestMode.IsChecked = $false
         #$lstDepartmentGroups.SelectedItems.Clear()
         Show-StatusMessage -Message "Form has been reset" -Type "Info"
     }
@@ -2118,8 +2112,8 @@ function Get-NewUserRequest {
         })
 
     $btnCancel.Add_Click({
-        $Window.DialogResult = $false
-        $Window.Close()
+            $Window.DialogResult = $false
+            $Window.Close()
         })
 
     # Add event handler for the refresh button
@@ -2165,17 +2159,17 @@ function Get-NewUserRequest {
 
     # Add validation for DisplayName
     $txtDisplayName.Add_TextChanged({
-        $namePattern = "^[A-Za-z]+\s[A-Za-z]+$"
-        if ($this.Text -and -not ($this.Text -match $namePattern)) {
-            $this.BorderBrush = 'Red'
-            $this.BorderThickness = 2
-            $this.ToolTip = "Name must be in 'First Last' format"
-        } else {
-            $this.BorderBrush = $null
-            $this.BorderThickness = 1
-            $this.ToolTip = $null
-        }
-    })
+            $namePattern = "^[A-Za-z]+\s[A-Za-z]+$"
+            if ($this.Text -and -not ($this.Text -match $namePattern)) {
+                $this.BorderBrush = 'Red'
+                $this.BorderThickness = 2
+                $this.ToolTip = "Name must be in 'First Last' format"
+            } else {
+                $this.BorderBrush = $null
+                $this.BorderThickness = 1
+                $this.ToolTip = $null
+            }
+        })
 
     # Show the form
     $Window.ShowDialog() | Out-Null
@@ -2213,7 +2207,7 @@ function New-DuplicatePromptForm {
     [xml]$XAML = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="DuplicatePromptForm" Height="150" Width="530"
+        Title="DuplicatePromptForm" Height="190" Width="530"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent">
 
@@ -2376,7 +2370,6 @@ function Get-TemplateUser {
     }
 }
 
-
 function Get-ADUserCopiedAttributes {
     [CmdletBinding()]
     param (
@@ -2413,7 +2406,7 @@ function New-UserProperties {
 
         [string]$FirstName,
         [string]$LastName,
-        [string]$Email
+        [string]$userPrincipalName
     )
 
     try {
@@ -2431,11 +2424,11 @@ function New-UserProperties {
         }
 
         # Use provided email or generate one
-        if (-not $Email) {
+        if (-not $userPrincipalName) {
             $samAccountName = (($FirstName.Substring(0, 1) + $LastName).ToLower())
-            $Email = ($samAccountName + $Domain).ToLower()
+            $userPrincipalName = ($samAccountName + $Domain).ToLower()
         } else {
-            $samAccountName = ($email -split '@')[0]
+            $samAccountName = ($userPrincipalName -split '@')[0]
         }
 
         # Check for duplicate samAccountName in AD
@@ -2457,7 +2450,7 @@ function New-UserProperties {
                 }
                 Write-StatusMessage -Message "Using custom SamAccountName: $samAccountName" -Type OK
                 # Update email with new samAccountName
-                $Email = ($samAccountName + $Domain).ToLower()
+                $userPrincipalName = ($samAccountName + $Domain).ToLower()
             } else {
                 Write-StatusMessage -Message "User cancelled SAM account name selection" -Type WARN
                 Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
@@ -2466,27 +2459,28 @@ function New-UserProperties {
 
         # Check for existing mailbox
         try {
-            $mailbox = Get-Mailbox -Filter "EmailAddresses -like '*$Email*'" -ErrorAction Stop
+            $mailbox = Get-Mailbox -Filter "EmailAddresses -like '*$userPrincipalName*'" -ErrorAction Stop
             if ($mailbox) {
-                Write-StatusMessage -Message "Email address $Email (or similar) already exists for mailbox: $($mailbox.UserPrincipalName)" -Type WARN
+                Write-StatusMessage -Message "Email address $userPrincipalName (or similar) already exists for mailbox: $($mailbox.UserPrincipalName)" -Type WARN
 
                 # For email prompt:
                 $formDuplicateEmail = New-DuplicatePromptForm `
                     -Title "Duplicate Email Address" `
-                    -ExistingValue $Email `
-                    -PromptText "Please enter a different emailAddress: '$Email' already exists."
+                    -ExistingValue $samAccountName `
+                    -PromptText "Please enter a different emailAddress: '$userPrincipalName' already exists."
 
-                if ($formDuplicateEmail -ne $Email) {
-                    $Email = $formDuplicateEmail
+                if ($formDuplicateEmail -ne $userPrincipalName) {
+                    $samAccountName = $formDuplicateEmail
                     # Verify the new email is unique
                     try {
-                        $checkMailbox = Get-Mailbox -Filter "EmailAddresses -like '*$Email*'" -ErrorAction Stop
+                        $userPrincipalName = ($samAccountName + $Domain).ToLower()
+                        $checkMailbox = Get-Mailbox -Filter "EmailAddresses -like '*$userPrincipalName*'" -ErrorAction Stop
                         if ($checkMailbox) {
-                            Write-StatusMessage -Message "New email address $Email is also in use by: $($checkMailbox.displayName)" -Type ERROR
+                            Write-StatusMessage -Message "New email address $userPrincipalName is also in use by: $($checkMailbox.displayName)" -Type ERROR
                             Exit-Script -Message "Unable to generate unique email address" -ExitCode DuplicateUser
                         }
                     } catch [Microsoft.Exchange.Management.RestApiClient.RestApiException] {
-                        Write-StatusMessage -Message "Using custom email address: $Email" -Type OK
+                        Write-StatusMessage -Message "Using custom email address: $userPrincipalName" -Type OK
                     }
                 } else {
                     Write-StatusMessage -Message "User cancelled email address selection" -Type WARN
@@ -2500,11 +2494,12 @@ function New-UserProperties {
 
         Write-StatusMessage -Message "Successfully generated user properties" -Type OK
         return @{
-            FirstName      = $FirstName
-            LastName       = $LastName
-            DisplayName    = $DisplayName
-            Email          = $Email
-            SamAccountName = $samAccountName
+            FirstName         = $FirstName
+            LastName          = $LastName
+            DisplayName       = $DisplayName
+            userPrincipalName = $userPrincipalName
+            Email             = $userPrincipalName
+            SamAccountName    = $samAccountName
         }
 
     } catch {
@@ -2851,7 +2846,6 @@ New User Details:
         Exit-Script -Message "Failed to confirm user creation" -ExitCode GeneralError
     }
 }
-
 function Copy-UserADGroups {
     [CmdletBinding()]
     param (
@@ -3796,20 +3790,41 @@ function Start-NewUserFinalize {
 #EndRegion Functions
 
 Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
-Write-Host "`n  Ready to process user request..." -ForegroundColor Cyan
-Write-Host "`n  Beginning New User Request..." -ForegroundColor Cyan
+
 #Region Main Execution
 
-# Step: Initialization
-Write-ProgressStep -StepName 'Initialization'
+Write-Host "  [ ] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
+$progressSteps = @(
+    @{ Number = 0; Name = "Initialization"; Description = "Loading configuration and connecting services" }
+    @{ Number = 1; Name = "User Input"; Description = "Gathering new user details" }
+    @{ Number = 2; Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
+    @{ Number = 3; Name = "New User Creation"; Description = "Creating user in Entra" }
+    @{ Number = 4; Name = "License Setup"; Description = "Assigning licenses" }
+    @{ Number = 5; Name = "Set Timezone"; Description = "Setting Timezone for new user" }
+    @{ Number = 6; Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
+    @{ Number = 7; Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
+    @{ Number = 8; Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
+    @{ Number = 9; Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
+    @{ Number = 10; Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
+    @{ Number = 11; Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
+)
+$script:totalSteps = $progressSteps.Count
+$script:currentStep = 0
+Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
-# Initialize tracking variables
-$script:startTime = Get-Date
-$script:errorCount = 0
-$script:warningCount = 0
-$script:successCount = 0
+Write-Host "`n  Beginning New User Request..." -ForegroundColor Cyan
 
 try {
+
+    # Initialize tracking variables
+    $script:startTime = Get-Date
+    $script:errorCount = 0
+    $script:warningCount = 0
+    $script:successCount = 0
+
+    # Step: Initialization
+    Write-ProgressStep -StepName 'Initialization'
+
     # Load configuration
     $config = Get-ScriptConfig
     if (-not $config) {
@@ -3871,7 +3886,7 @@ try {
         $templateUserManager = $templateAttributes.Manager
 
         if ($userInput.domain) {
-            $domain = $userInput.domain
+            $domain = '@' + $($userInput.domain)
         } else {
             $domain = $templateUser.UserPrincipalName -replace '.+?(?=@)'
         }
@@ -3902,7 +3917,7 @@ try {
 
     # Conditionally add Email if it exists
     if ($userInput.userPrincipalName) {
-        $newUserParams.Email = $userInput.userPrincipalName
+        $newUserParams.userPrincipalName = $userInput.userPrincipalName
     }
 
     # Call the New-UserProperties function with the constructed parameters
@@ -4195,10 +4210,6 @@ try {
     # Clear the progress bar
     Write-Progress -Activity "New User Creation" -Completed
 
-    # Clean up and exit
-    Stop-Job $loadingJob | Out-Null
-    Remove-Job $loadingJob | Out-Null
-
     Exit-Script -Message "$($MgUser.displayName) has been successfully created." -ExitCode Success
 
 } catch {
@@ -4206,11 +4217,7 @@ try {
     Write-StatusMessage -Message "Stack Trace: $($_.ScriptStackTrace)" -Type ERROR
 
     # Clear the progress bar
-    Write-Progress -Activity "New User Creation" -Completed
-
-    # Clean up and exit
-    Stop-Job $loadingJob | Out-Null
-    Remove-Job $loadingJob | Out-Null
+    Write-Progress -Activity "New User Creation" -Status "Failed" -PercentComplete 100
 
     Exit-Script -Message "Script failed during execution" -ExitCode GeneralError
 }

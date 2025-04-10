@@ -88,8 +88,6 @@
     ------------------------------------------------------------------------------
 #>
 
-$script:TestMode = $false  # Default to false
-
 # Disable console quick edit
 function Set-ConsoleProperties {
     [CmdletBinding()]
@@ -160,45 +158,50 @@ function Set-ConsoleProperties {
 
 Set-ConsoleProperties -QuickEditMode Disable -InsertMode Disable
 
-# Initialize loading animation
-Clear-Host
-$loadingChars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-$i = 0
-$loadingJob = Start-Job -ScriptBlock { while ($true) { Start-Sleep -Milliseconds 100 } }
+$script:TestMode = $false  # Default to false
 
-Write-Host "`n  Initializing User Termination Script..." -ForegroundColor Cyan
-
-Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Loading core components..." -NoNewline -ForegroundColor Yellow
 $ErrorActionPreference = 'Stop'
 # Only show verbose output if -Verbose is specified
 if (-not $PSBoundParameters['Verbose']) {
     $VerbosePreference = 'SilentlyContinue'
 }
+
+# Initialize loading animation
+Clear-Host
+
+Write-Host "`n  Initializing User Termination Script v4.0.0..." -ForegroundColor Cyan
 $startTime = Get-Date
-Write-Host "`r  [✓] Core components loaded" -ForegroundColor Green
+Write-Host "  Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
 
-Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
-$progressSteps = @(
-    @{ Number = 0; Name = "Initialization"; Description = "Loading configuration and connecting services" }
-    @{ Number = 1; Name = "User Input"; Description = "Gathering termination details" }
-    @{ Number = 2; Name = "AD Tasks"; Description = "Disabling user in Active Directory" }
-    @{ Number = 3; Name = "Session Cleanup"; Description = "Removing user sessions and devices" }
-    @{ Number = 4; Name = "Exchange Tasks"; Description = "Convert to SharedMailbox and setting forwarding/grant acces" }
-    @{ Number = 5; Name = "Directory Roles"; Description = "Removing from directory roles" }
-    @{ Number = 6; Name = "Group Removal"; Description = "Removing and exporting Entra/Exchange groups" }
-    @{ Number = 7; Name = "License Removal"; Description = "Removing and exporting Entra licenses" }
-    @{ Number = 8; Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
-    @{ Number = 9; Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
-    @{ Number = 10; Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
-    @{ Number = 11; Name = "AD Sync and Summary"; Description = "Running AD sync and Summary" }
-)
-Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
+Write-Host "  [ ] Loading functions..." -NoNewline -ForegroundColor Yellow
 
-Write-Host "  [$($loadingChars[$i % $loadingChars.Length])] Loading functions..." -NoNewline -ForegroundColor Yellow
-$script:totalSteps = $progressSteps.Count
+function Write-ProgressStep {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$StepName
+    )
 
-for ($i = 0; $i -lt $progressSteps.Count; $i++) {
-    $progressSteps[$i].Number = $i + 1
+    # Find the step object by name
+    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
+
+    if (-not $step) {
+        Write-Warning "Progress step '$StepName' not found."
+        return
+    }
+
+    $stepNumber = $script:currentStep
+    $status = $step.Description
+
+    # Guard against division by zero or missing values
+    if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
+        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
+        Write-Progress -Activity "User Termination" -Status $status
+    } else {
+        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
+        Write-Progress -Activity "User Termination" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
+    }
+    $script:currentStep += 1
 }
 function Write-ProgressStep {
     [CmdletBinding()]
@@ -1192,8 +1195,8 @@ function Get-UserTermination {
     # Function to get form data
     function Get-FormData {
         return [PSCustomObject]@{
-            InputUser                = $txtUserToTerminate.Text
-            InputUserFullControl     = $txtMailboxControl.Text
+            InputUser               = $txtUserToTerminate.Text
+            InputUserFullControl    = $txtMailboxControl.Text
             InputUserFWD            = $txtForwardMailbox.Text
             InputUserOneDriveAccess = $txtOneDriveAccess.Text
             SetOneDriveReadOnly     = $chkOneDriveReadOnly.IsChecked
@@ -1205,46 +1208,46 @@ function Get-UserTermination {
     $emailTextBoxes = @($txtUserToTerminate, $txtMailboxControl, $txtForwardMailbox, $txtOneDriveAccess)
     foreach ($textBox in $emailTextBoxes) {
         $textBox.Add_TextChanged({
-            if ($this.Text -and -not (Test-EmailAddress -Email $this.Text)) {
-            $this.BorderBrush = 'Red'
-            $this.BorderThickness = 2
-        } else {
-            $this.BorderBrush = $null
-            $this.BorderThickness = 1
-        }
-        })
+                if ($this.Text -and -not (Test-EmailAddress -Email $this.Text)) {
+                    $this.BorderBrush = 'Red'
+                    $this.BorderThickness = 2
+                } else {
+                    $this.BorderBrush = $null
+                    $this.BorderThickness = 1
+                }
+            })
     }
 
     # Add button click handlers
     $btnSubmit.Add_Click({
-        # Validate required user email
-        if (-not $txtUserToTerminate.Text -or -not (Test-EmailAddress -Email $txtUserToTerminate.Text)) {
-            Show-ValidationError -Message "Please enter a valid email address for the user to terminate."
-            return
-        }
-
-        # Validate optional email fields if they're not empty
-        $optionalEmails = @{
-            'Mailbox Control' = $txtMailboxControl
-            'Forward Mailbox' = $txtForwardMailbox
-            'OneDrive Access' = $txtOneDriveAccess
-        }
-
-        foreach ($field in $optionalEmails.GetEnumerator()) {
-            if ($field.Value.Text -and -not (Test-EmailAddress -Email $field.Value.Text)) {
-                Show-ValidationError -Message "Please enter a valid email address for $($field.Key)."
+            # Validate required user email
+            if (-not $txtUserToTerminate.Text -or -not (Test-EmailAddress -Email $txtUserToTerminate.Text)) {
+                Show-ValidationError -Message "Please enter a valid email address for the user to terminate."
                 return
             }
-        }
 
-        $Window.DialogResult = $true
-        $Window.Close()
-    })
+            # Validate optional email fields if they're not empty
+            $optionalEmails = @{
+                'Mailbox Control' = $txtMailboxControl
+                'Forward Mailbox' = $txtForwardMailbox
+                'OneDrive Access' = $txtOneDriveAccess
+            }
+
+            foreach ($field in $optionalEmails.GetEnumerator()) {
+                if ($field.Value.Text -and -not (Test-EmailAddress -Email $field.Value.Text)) {
+                    Show-ValidationError -Message "Please enter a valid email address for $($field.Key)."
+                    return
+                }
+            }
+
+            $Window.DialogResult = $true
+            $Window.Close()
+        })
 
     $btnCancel.Add_Click({
-        $Window.DialogResult = $false
-        $Window.Close()
-    })
+            $Window.DialogResult = $false
+            $Window.Close()
+        })
 
     $btnReset.Add_Click({ Reset-Form })
 
@@ -2063,167 +2066,195 @@ function Start-ADSyncAndFinalize {
     # Give user time to read/copy the summary
     Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
     Read-Host | Out-Null
+}
+
+Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
+
+#Region Main Execution
+
+rite-Host "`r  [✓] Functions loaded" -ForegroundColor Green
+
+Write-Host "  [ ] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
+$progressSteps = @(
+    @{ Name = "Initialization"; Description = "Loading configuration and connecting services" }
+    @{ Name = "User Input"; Description = "Gathering termination details" }
+    @{ Name = "AD Tasks"; Description = "Disabling user in Active Directory" }
+    @{ Name = "Session Cleanup"; Description = "Removing user sessions and devices" }
+    @{ Name = "Exchange Tasks"; Description = "Convert to SharedMailbox and setting forwarding/grant acces" }
+    @{ Name = "Directory Roles"; Description = "Removing from directory roles" }
+    @{ Name = "Group Removal"; Description = "Removing and exporting Entra/Exchange groups" }
+    @{ Name = "License Removal"; Description = "Removing and exporting Entra licenses" }
+    @{ Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
+    @{ Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
+    @{ Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
+    @{ Name = "AD Sync and Summary"; Description = "Running AD sync and Summary" }
+)
+$script:totalSteps = $progressSteps.Count
+$script:currentStep = 0
+Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
+
+#Region Main Execution
+Write-Host "`n  Beginning User Termination..." -ForegroundColor Cyan
+try {
+
+    # Load configuration
+    $config = Get-ScriptConfig
+
+    $script:TestEmailAddress = $config.TestMode.Email
+
+    # Get connection parameters from config
+    $Organization = $config.ExchangeOnline.Organization
+    $ExOAppId = $config.ExchangeOnline.AppId
+    $ExOCertSubject = $Config.ExchangeOnline.CertificateSubject
+    $GraphAppId = $config.Graph.AppId
+    $tenantID = $config.Graph.TenantId
+    $GraphCertSubject = $Config.Graph.CertificateSubject
+    $PnPAppId = $config.PnPSharePoint.AppId
+    $PnPUrl = $config.PnPSharePoint.Url
+    $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
+
+    Connect-ServiceEndpoints -ExchangeOnline -Graph
+
+    # Call the custom input window function
+
+    $result = Get-UserTermination
+    if (-not $result) {
+        Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
+    }
+
+    if ($result.TestModeEnabled -eq 'True') { $script:TestMode = $true }
+    # Optional fields - use $null for unset values
+    $GrantUserFullControl = if ($result.InputUserFullControl) { $result.InputUserFullControl.Trim() } else { $null }
+    $SetUserMailFWD = if ($result.InputUserFWD) { $result.InputUserFWD.Trim() } else { $null }
+    $GrantUserOneDriveAccess = if ($result.InputUserOneDriveAccess) { $result.InputUserOneDriveAccess.Trim() } else { $null }
+    $SetOneDriveReadOnly = $result.SetOneDriveReadOnly
+    Write-StatusMessage -Message "Termination input collected successfully" -Type OK
+
+    # Validate OneDrive access user if specified
+    $oneDriveUser = $null
+    if ($GrantUserOneDriveAccess) {
+        # Will be $null if not provided
+        try {
+            Write-StatusMessage -Message "Validating OneDrive access user..." -Type 'INFO'
+            $oneDriveUser = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop
+            Write-StatusMessage -Message "OneDrive access user validated" -Type 'OK'
+        } catch {
+            Write-StatusMessage -Message "Invalid OneDrive access user specified: $_" -Type 'ERROR'
+            Write-StatusMessage -Message "OneDrive access user validation failed. Skipping OneDrive access grant." -Type 'ERROR'
+            $GrantUserOneDriveAccess = $null  # Reset to null if validation fails
+        }
+    }
+
+    # Step: User Input
+    Write-ProgressStep -StepName 'User Input'
+    # Should this be a function in the New User Script?
+    $userPropertiesPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Properties.csv"
+    $adGroupsPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_ADGroups.csv"
+    $UserInfo = Get-TerminationPrerequisites `
+        -User $result.InputUser `
+        -UserPropertiesPath $userPropertiesPath `
+        -ADGroupsPath $adGroupsPath
+
+    # Extract variables for use in the rest of the script
+
+    # Step: AD Tasks
+    Write-ProgressStep -StepName 'AD Tasks'
+    Disable-ADUser -UserFromAD $userInfo.selectUserFromAD -DestinationOU $userInfo.selectDestinationOU
+
+    # Step: Azure/Entra Tasks
+    Write-ProgressStep -StepName 'Session Cleanup'
+    Remove-UserSessions -User $UserInfo.selectMgUser
+
+    # Step: Convert to SharedMailbox, Set forwarding/grant access
+    Write-ProgressStep -StepName 'Exchange Tasks'
+
+    $mailboxParams = @{
+        Mailbox = $userInfo.selectMailbox
+    }
+
+    # Only add these parameters if they exist and have values
+    if ($SetUserMailFWD) {
+        $mailboxParams['ForwardingAddress'] = $SetUserMailFWD
+    }
+
+    if ($GrantUserFullControl) {
+        $mailboxParams['GrantAccessTo'] = $GrantUserFullControl
+    }
+
+    Set-TerminatedMailbox @mailboxParams
+
+    # Step: Remove Directory Roles
+    Write-ProgressStep -StepName 'Directory Roles'
+    Remove-UserFromEntraDirectoryRoles -User $userInfo.selectMgUser
+
+    # Step: Remove Groups
+    Write-ProgressStep -StepName 'Group Removal'
+    $groupExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Groups_Id.csv"
+    Remove-UserFromEntraGroups -User $userInfo.selectMgUser -ExportPath $groupExportPath
+
+    # Step: Remove Licenses
+    Write-ProgressStep -StepName 'License Removal'
+    $licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
+    Remove-UserLicenses -User $userInfo.selectMgUser -ExportPath $licensePath
+
+    #Step: Send Email Notification - SecurePath
+    Write-ProgressStep -StepName 'Notifications'
+    $emailSubject = "KB4 – Remove User"
+    $emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
+    $MsgFrom = $config.Email.NotificationFrom
+    $ToAddress = $config.Email.NotificationTo
+    Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+
+    # Step : Disconnect from Exchange Online and Graph
+    Write-ProgressStep -StepName 'Disconnecting from Exchange and Graph'
+    Connect-ServiceEndpoints -Disconnect -ExchangeOnline -Graph
+
+    # Step: Configure OneDrive
+    Write-ProgressStep -StepName 'OneDrive Setup'
+
+    # Only create and run OneDrive params if needed
+    if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
+
+        $oneDriveParams = @{
+            TermUser = $UserFromAD.UserPrincipalName
+        }
+
+        if ($SetOneDriveReadOnly) {
+            $oneDriveParams['SetReadOnly'] = $true
+        }
+
+        if ($GrantUserOneDriveAccess) {
+            $oneDriveParams['OneDriveUser'] = $oneDriveUser
+        }
+
+        Set-TerminatedOneDrive @oneDriveParams
+
+    }
+
+    # Step: Disable Entra User
+    Write-ProgressStep -StepName 'Disable Entra User'
+    Disable-GraphUser -User $UserInfo.selectMgUser
+
+    # Step: Final Sync and Summary
+    Write-ProgressStep -StepName 'Summary'
+
+    Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
+        -GrantUserFullControl $GrantUserFullControl `
+        -SetUserMailFWD $SetUserMailFWD `
+        -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
+        -ExportPath $config.Paths.TermExportPath
 
     # Clear the progress bar
     Write-Progress -Activity "User Termination" -Completed
 
-    # Clean up and exit
-    Stop-Job $loadingJob | Out-Null
-    Remove-Job $loadingJob | Out-Null
-
-
     Exit-Script -Message "$User has been successfully disabled." -ExitCode Success
+} catch {
+
+    Write-StatusMessage -Message "Script failed: $($_.Exception.Message)" -Type ERROR
+    Write-StatusMessage -Message "Stack Trace: $($_.ScriptStackTrace)" -Type ERROR
+
+    # Clear the progress bar
+    Write-Progress -Activity "User Termination" -Status "Failed" -PercentComplete 100
+
+    Exit-Script -Message "Script failed during execution" -ExitCode GeneralError
 }
-
-Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
-Write-Host "`n  Ready to create new user account..." -ForegroundColor Cyan
-
-#Region Main Execution
-
-
-# Step: Initialization
-Write-ProgressStep -StepName 'Initialization'
-
-# Load configuration
-$config = Get-ScriptConfig
-
-$script:TestEmailAddress = $config.TestMode.Email
-
-# Get connection parameters from config
-$Organization = $config.ExchangeOnline.Organization
-$ExOAppId = $config.ExchangeOnline.AppId
-$ExOCertSubject = $Config.ExchangeOnline.CertificateSubject
-$GraphAppId = $config.Graph.AppId
-$tenantID = $config.Graph.TenantId
-$GraphCertSubject = $Config.Graph.CertificateSubject
-$PnPAppId = $config.PnPSharePoint.AppId
-$PnPUrl = $config.PnPSharePoint.Url
-$PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
-
-Connect-ServiceEndpoints -ExchangeOnline -Graph
-
-# Call the custom input window function
-
-$result = Get-UserTermination
-if (-not $result) {
-    Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
-}
-
-if ($result.TestModeEnabled -eq 'True') { $script:TestMode = $true }
-# Optional fields - use $null for unset values
-$GrantUserFullControl = if ($result.InputUserFullControl) { $result.InputUserFullControl.Trim() } else { $null }
-$SetUserMailFWD = if ($result.InputUserFWD) { $result.InputUserFWD.Trim() } else { $null }
-$GrantUserOneDriveAccess = if ($result.InputUserOneDriveAccess) { $result.InputUserOneDriveAccess.Trim() } else { $null }
-$SetOneDriveReadOnly = $result.SetOneDriveReadOnly
-Write-StatusMessage -Message "Termination input collected successfully" -Type OK
-
-# Validate OneDrive access user if specified
-$oneDriveUser = $null
-if ($GrantUserOneDriveAccess) {
-    # Will be $null if not provided
-    try {
-        Write-StatusMessage -Message "Validating OneDrive access user..." -Type 'INFO'
-        $oneDriveUser = Get-Mailbox $GrantUserOneDriveAccess -ErrorAction Stop
-        Write-StatusMessage -Message "OneDrive access user validated" -Type 'OK'
-    } catch {
-        Write-StatusMessage -Message "Invalid OneDrive access user specified: $_" -Type 'ERROR'
-        Write-StatusMessage -Message "OneDrive access user validation failed. Skipping OneDrive access grant." -Type 'ERROR'
-        $GrantUserOneDriveAccess = $null  # Reset to null if validation fails
-    }
-}
-
-# Step: User Input
-Write-ProgressStep -StepName 'User Input'
-# Should this be a function in the New User Script?
-$userPropertiesPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Properties.csv"
-$adGroupsPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_ADGroups.csv"
-$UserInfo = Get-TerminationPrerequisites `
-    -User $result.InputUser `
-    -UserPropertiesPath $userPropertiesPath `
-    -ADGroupsPath $adGroupsPath
-
-# Extract variables for use in the rest of the script
-
-# Step: AD Tasks
-Write-ProgressStep -StepName 'AD Tasks'
-Disable-ADUser -UserFromAD $userInfo.selectUserFromAD -DestinationOU $userInfo.selectDestinationOU
-
-# Step: Azure/Entra Tasks
-Write-ProgressStep -StepName 'Session Cleanup'
-Remove-UserSessions -User $UserInfo.selectMgUser
-
-# Step: Convert to SharedMailbox, Set forwarding/grant access
-Write-ProgressStep -StepName 'Exchange Tasks'
-
-$mailboxParams = @{
-    Mailbox = $userInfo.selectMailbox
-}
-
-# Only add these parameters if they exist and have values
-if ($SetUserMailFWD) {
-    $mailboxParams['ForwardingAddress'] = $SetUserMailFWD
-}
-
-if ($GrantUserFullControl) {
-    $mailboxParams['GrantAccessTo'] = $GrantUserFullControl
-}
-
-Set-TerminatedMailbox @mailboxParams
-
-# Step: Remove Directory Roles
-Write-ProgressStep -StepName 'Directory Roles'
-Remove-UserFromEntraDirectoryRoles -User $userInfo.selectMgUser
-
-# Step: Remove Groups
-Write-ProgressStep -StepName 'Group Removal'
-$groupExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Groups_Id.csv"
-Remove-UserFromEntraGroups -User $userInfo.selectMgUser -ExportPath $groupExportPath
-
-# Step: Remove Licenses
-Write-ProgressStep -StepName 'License Removal'
-$licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
-Remove-UserLicenses -User $userInfo.selectMgUser -ExportPath $licensePath
-
-#Step: Send Email Notification - SecurePath
-Write-ProgressStep -StepName 'Notifications'
-$emailSubject = "KB4 – Remove User"
-$emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
-$MsgFrom = $config.Email.NotificationFrom
-$ToAddress = $config.Email.NotificationTo
-Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
-
-# Step : Disconnect from Exchange Online and Graph
-Write-ProgressStep -StepName 'Disconnecting from Exchange and Graph'
-Connect-ServiceEndpoints -Disconnect -ExchangeOnline -Graph
-
-# Step: Configure OneDrive
-Write-ProgressStep -StepName 'OneDrive Setup'
-
-# Only create and run OneDrive params if needed
-if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
-
-    $oneDriveParams = @{
-        TermUser = $UserFromAD.UserPrincipalName
-    }
-
-    if ($SetOneDriveReadOnly) {
-        $oneDriveParams['SetReadOnly'] = $true
-    }
-
-    if ($GrantUserOneDriveAccess) {
-        $oneDriveParams['OneDriveUser'] = $oneDriveUser
-    }
-
-    Set-TerminatedOneDrive @oneDriveParams
-
-}
-
-# Step: Final Sync and Summary
-Write-ProgressStep -StepName 'AD Sync and Summary'
-
-Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
-    -DestinationOU $userInfo.selectDestinationOU `
-    -GrantUserFullControl $GrantUserFullControl `
-    -SetUserMailFWD $SetUserMailFWD `
-    -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
-    -ExportPath $config.Paths.TermExportPath
