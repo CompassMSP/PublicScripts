@@ -1771,7 +1771,7 @@ function Get-NewUserRequest {
             mobilePhone            = Get-ValueOrNull $txtMobilePhone.Text
             timeZone               = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
             usageLocation          = if ($cboUsageLocation.SelectedItem) { $cboUsageLocation.SelectedItem.ToString() } else { "" }
-            copyUserOperations     = if ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
+            copyUserOperations     = if ($cboCopyUserOperations.SelectedItem -eq 'None') { $null } elseif ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
             userToCopy             = Get-ValueOrNull $txtUserToCopy.Text
             ancillaryLicense       = @()
             givenName              = Get-ValueOrNull $txtGivenName.Text
@@ -2129,10 +2129,11 @@ function Get-NewUserRequest {
     Initialize-UsageLocation -ComboBox $cboUsageLocation
 
     # Initialize department groups
-    # Initialize-DepartmentGroups
+      # Initialize-DepartmentGroups
 
     # Define copy user operations options
     $copyUserOperationsOptions = @(
+        "None",
         "Copy Attributes",
         "Copy Groups",
         "Copy Attributes and Groups"
