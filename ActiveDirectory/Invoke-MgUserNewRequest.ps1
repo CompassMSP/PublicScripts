@@ -212,39 +212,10 @@ function Write-ProgressStep {
 
     # Guard against division by zero or missing values
     if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
-        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
+        Write-StatusMessage -Message "Step $StepName - $status" -Type SUMMARY
         Write-Progress -Activity "New User Creation" -Status $status
     } else {
-        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
-        Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
-    }
-    $script:currentStep += 1
-}
-
-function Write-ProgressStep {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$StepName
-    )
-
-    # Find the step object by name
-    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
-
-    if (-not $step) {
-        Write-Warning "Progress step '$StepName' not found."
-        return
-    }
-
-    $stepNumber = $script:currentStep
-    $status = $step.Description
-
-    # Guard against division by zero or missing values
-    if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
-        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
-        Write-Progress -Activity "New User Creation" -Status $status
-    } else {
-        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
+        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type SUMMARY
         Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
     }
     $script:currentStep += 1
@@ -269,6 +240,7 @@ function Write-StatusMessage {
         'ERROR'   = @{ Status = 'ERROR'; Color = 'Red' }
         'WARN'    = @{ Status = 'WARN'; Color = 'Yellow' }
         'SUMMARY' = @{ Status = ''; Color = 'Cyan' }
+        'STEP' = @{ Status = ''; Color = 'Blue' }
     }
 
     try {
@@ -3796,18 +3768,20 @@ Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
 
 Write-Host "  [ ] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
 $progressSteps = @(
-    @{ Number = 0; Name = "Initialization"; Description = "Loading configuration and connecting services" }
-    @{ Number = 1; Name = "User Input"; Description = "Gathering new user details" }
-    @{ Number = 2; Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
-    @{ Number = 3; Name = "New User Creation"; Description = "Creating user in Entra" }
-    @{ Number = 4; Name = "License Setup"; Description = "Assigning licenses" }
-    @{ Number = 5; Name = "Set Timezone"; Description = "Setting Timezone for new user" }
-    @{ Number = 6; Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
-    @{ Number = 7; Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
-    @{ Number = 8; Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
-    @{ Number = 9; Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
-    @{ Number = 10; Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
-    @{ Number = 11; Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
+    @{ Name = "Initialization"; Description = "Loading configuration and connecting services" }
+    @{ Name = "User Input"; Description = "Gathering new user details" }
+    @{ Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
+    @{ Name = "New User AD Creation"; Description = "Creating user in Active Directory" }
+    @{ Name = "AD Group Copy"; Description = "Copying AD user groups" }
+    @{ Name = "Entra Connect Sync"; Description = "Waiting for Entra Connect sync" }
+    @{ Name = "License Assignment"; Description = "Assigning licenses" }
+    @{ Name = "Set Timezone"; Description = "Setting Timezone for new user" }
+    @{ Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
+    @{ Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
+    @{ Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
+    @{ Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
+    @{ Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
+    @{ Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
 )
 $script:totalSteps = $progressSteps.Count
 $script:currentStep = 0
@@ -3982,11 +3956,11 @@ try {
         Write-StatusMessage -Message 'No group copy operation selected. Skipping...' -Type INFO
     }
 
-    # Azure Sync
-    Write-ProgressStep -StepName 'Azure Sync'
+    # Entra Connect Sync
+    Write-ProgressStep -StepName 'Entra Connect Sync'
     $MgUser = Wait-ForADUserSync -UserEmail $newUserProperties.Email
     if (-not $MgUser) {
-        throw "Failed to sync user to Azure AD"
+        throw "Failed to sync user to Entra ID"
     }
 
     # License Assignment
