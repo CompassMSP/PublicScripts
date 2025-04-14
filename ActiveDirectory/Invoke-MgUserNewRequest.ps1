@@ -212,10 +212,39 @@ function Write-ProgressStep {
 
     # Guard against division by zero or missing values
     if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
-        Write-StatusMessage -Message "Step $StepName - $status" -Type SUMMARY
+        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
         Write-Progress -Activity "New User Creation" -Status $status
     } else {
-        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type SUMMARY
+        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
+        Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
+    }
+    $script:currentStep += 1
+}
+
+function Write-ProgressStep {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$StepName
+    )
+
+    # Find the step object by name
+    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
+
+    if (-not $step) {
+        Write-Warning "Progress step '$StepName' not found."
+        return
+    }
+
+    $stepNumber = $script:currentStep
+    $status = $step.Description
+
+    # Guard against division by zero or missing values
+    if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
+        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
+        Write-Progress -Activity "New User Creation" -Status $status
+    } else {
+        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
         Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
     }
     $script:currentStep += 1
@@ -240,7 +269,6 @@ function Write-StatusMessage {
         'ERROR'   = @{ Status = 'ERROR'; Color = 'Red' }
         'WARN'    = @{ Status = 'WARN'; Color = 'Yellow' }
         'SUMMARY' = @{ Status = ''; Color = 'Cyan' }
-        'STEP' = @{ Status = ''; Color = 'Blue' }
     }
 
     try {
@@ -1155,7 +1183,7 @@ function Get-NewUserRequest {
 
                             <!-- Left Column -->
                             <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                <Label Content="Given Name"/>
+                                <Label Content="First Name"/>
                                 <Grid Margin="0,0,0,15">
                                     <TextBox x:Name="txtGivenName" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
                                     <TextBlock IsHitTestVisible="False"
@@ -1245,7 +1273,7 @@ function Get-NewUserRequest {
 
                             <!-- Right Column -->
                             <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                                <Label Content="Surname"/>
+                                <Label Content="Last Name"/>
                                 <Grid Margin="0,0,0,15">
                                     <TextBox x:Name="txtSurname" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
                                     <TextBlock IsHitTestVisible="False"
@@ -2914,7 +2942,7 @@ function Wait-ForADUserSync {
         [int]$SyncTimeout = 300  # 5 minutes default
     )
 
-    Write-StatusMessage -Message "Starting AD sync process for $UserEmail" -Type INFO
+    Write-StatusMessage -Message "Starting Entra Connect sync process for $UserEmail" -Type INFO
     $syncStartTime = Get-Date
 
     try {
@@ -2922,21 +2950,21 @@ function Wait-ForADUserSync {
         Write-StatusMessage -Message "Waiting $InitialWaitSeconds seconds before starting sync..." -Type INFO
         Start-Sleep -Seconds $InitialWaitSeconds
 
-        # Start AD sync with retry logic
+        # Start Entra Connect sync with retry logic
         $syncStarted = $false
         for ($i = 1; $i -le 3; $i++) {
             try {
-                Write-StatusMessage -Message "Attempting to start AD sync (Attempt $i of 3)" -Type INFO
+                Write-StatusMessage -Message "Attempting to start Entra Connect  sync (Attempt $i of 3)" -Type INFO
                 Import-Module -Name ADSync -UseWindowsPowerShell -WarningAction:SilentlyContinue -ErrorAction Stop
                 $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
                 $syncStarted = $true
-                Write-StatusMessage -Message "AD sync started successfully" -Type OK
+                Write-StatusMessage -Message "Entra Connect  sync started successfully" -Type OK
                 break
             } catch {
                 Write-StatusMessage -Message "Sync attempt $i failed: $_" -Type WARN
                 if ($i -eq 3) {
-                    Write-StatusMessage -Message "Failed to start AD sync after 3 attempts" -Type ERROR
-                    Exit-Script -Message "AD sync failed to start" -ExitCode GeneralError
+                    Write-StatusMessage -Message "Failed to start Entra Connect sync after 3 attempts" -Type ERROR
+                    Exit-Script -Message "Entra Connect sync failed to start" -ExitCode GeneralError
                 }
                 Start-Sleep -Seconds 5
             }
@@ -2962,7 +2990,7 @@ function Wait-ForADUserSync {
                 }
 
                 # Try to get user
-                Write-StatusMessage -Message "Checking for user in Azure AD..." -Type INFO
+                Write-StatusMessage -Message "Checking for user in Entra ID..." -Type INFO
                 $properties = @(
                     'Id',
                     'Mail',
@@ -2976,7 +3004,7 @@ function Wait-ForADUserSync {
                 try {
                     $user = Get-MgUser -UserId $UserEmail -Property $properties -ErrorAction Stop | Select-Object $properties
                     if ($user) {
-                        Write-StatusMessage -Message "User $UserEmail successfully synced to Azure AD" -Type OK
+                        Write-StatusMessage -Message "User $UserEmail successfully synced to Entra ID" -Type OK
                         return $user
                     }
                 } catch [Microsoft.Graph.PowerShell.Runtime.RestException] {
@@ -2987,7 +3015,7 @@ function Wait-ForADUserSync {
                             Write-StatusMessage -Message "Max retry attempts ($MaxRetries) reached" -Type ERROR
                             Exit-Script -Message "Failed to verify user sync after maximum retries" -ExitCode UserNotFound
                         }
-                        Write-StatusMessage -Message "Retry $($retryCount) of $($MaxRetries): User not found in Azure AD yet" -Type WARN
+                        Write-StatusMessage -Message "Retry $($retryCount) of $($MaxRetries): User not found in Entra ID yet" -Type WARN
                         Start-Sleep -Seconds $RetryIntervalSeconds
                     } else {
                         # Unexpected error, rethrow
@@ -3001,14 +3029,14 @@ function Wait-ForADUserSync {
                     Write-StatusMessage -Message "Max retry attempts ($MaxRetries) reached" -Type ERROR
                     Exit-Script -Message "Failed to verify user sync after maximum retries" -ExitCode UserNotFound
                 }
-                Write-StatusMessage -Message "Retry $($retryCount) of $($MaxRetries): User not found in Azure AD yet" -Type WARN
+                Write-StatusMessage -Message "Retry $($retryCount) of $($MaxRetries): User not found in Entra ID yet" -Type WARN
                 Start-Sleep -Seconds $RetryIntervalSeconds
             }
         } while ($true)
 
     } catch {
-        Write-StatusMessage -Message "Critical error during AD sync process: $_" -Type ERROR
-        Exit-Script -Message "AD sync process failed" -ExitCode GeneralError
+        Write-StatusMessage -Message "Critical error during Entra Connect sync process: $_" -Type ERROR
+        Exit-Script -Message "Entra Connect sync process failed" -ExitCode GeneralError
     }
 }
 
@@ -3126,7 +3154,7 @@ function Wait-ForMailbox {
         [Parameter(Mandatory = $true)]
         [string]$Email,
 
-        [int]$MaxWaitTime = 180, # Max wait time in seconds (3 minutes)
+        [int]$MaxWaitTime = 300, # Max wait time in seconds (3 minutes)
         [int]$Interval = 30 # Interval between checks in seconds (30 seconds)
     )
 
