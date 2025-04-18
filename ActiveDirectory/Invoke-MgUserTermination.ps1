@@ -1439,6 +1439,7 @@ Continue? (Y/N)
     }
 }
 
+
 function Disable-ADUser {
     [CmdletBinding()]
     param(
@@ -1497,18 +1498,6 @@ function Disable-ADUser {
             throw
         }
 
-        # Remove user from all AD groups
-        foreach ($group in $UserFromAD.MemberOf) {
-            Write-StatusMessage -Message "Removing user from group: $($group)" -Type INFO
-            try {
-                Remove-ADGroupMember -Identity $group -Members $UserFromAD.SamAccountName -Confirm:$false -ErrorAction Stop
-                Write-StatusMessage -Message "Successfully removed from group: $($group)" -Type OK
-            } catch {
-                Write-StatusMessage -Message "Failed to remove from AD group: $group" -Type ERROR
-            }
-        }
-        Write-StatusMessage -Message "User removed from all AD groups" -Type OK
-
         # Move user to disabled OU
         Write-StatusMessage -Message "Moving user to Disabled OU" -Type INFO
         try {
@@ -1520,6 +1509,50 @@ function Disable-ADUser {
         }
     } catch {
         Write-StatusMessage -Message "Critical error in Disable-ADUser" -Type ERROR
+        throw
+    }
+}
+
+function Remove-ADUserGroups {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [Microsoft.ActiveDirectory.Management.ADUser]
+        $ADUser,
+
+        [Parameter()]
+        [string]$ExportPath
+    )
+
+    try {
+        Write-StatusMessage -Message "Starting AD group removal process" -Type INFO
+
+        # Get and export group details if path provided
+        $groupDetails = $ADUser.MemberOf | ForEach-Object {
+            Get-ADGroup $_ -Properties Name, DistinguishedName
+        } | Select-Object Name, DistinguishedName
+
+        if ($ExportPath) {
+            try {
+                $groupDetails | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
+                Write-StatusMessage -Message "Exported user groups to: $ExportPath" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to export user groups" -Type ERROR
+            }
+        }
+
+        # Remove from all groups
+        foreach ($group in $groupDetails) {
+            try {
+                Remove-ADGroupMember -Identity $group.DistinguishedName -Members $ADUser.DistinguishedName -Confirm:$false -ErrorAction Stop
+                Write-StatusMessage -Message "Removed from group: $($group.Name)" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to remove from group $($group.Name)" -Type ERROR
+            }
+        }
+
+    } catch {
+        Write-StatusMessage -Message "Error in Remove-UserGroups: $($_.Exception.Message)" -Type ERROR
         throw
     }
 }
@@ -2247,6 +2280,7 @@ try {
     # Step: AD Tasks
     Write-ProgressStep -StepName 'AD Tasks'
     Disable-ADUser -UserFromAD $userInfo.selectUserFromAD -DestinationOU $userInfo.selectDestinationOU
+    Remove-ADUserGroups -ADUser $userInfo.selectUserFromAD
 
     # Step: Azure/Entra Tasks
     Write-ProgressStep -StepName 'Session Cleanup'
