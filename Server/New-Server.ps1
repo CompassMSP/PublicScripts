@@ -296,6 +296,11 @@ function Install-CompassAutomate {
     }
 }
 
+## Set Windows License
+Set-WindowsLicense
+
+Install-CompassAutomate -Name VMEarth
+
 $Params = @{
     ComputerName   = "vmearth-vprx3"
     IPAddress      = "10.21.19.142"
@@ -310,8 +315,3 @@ $Params = @{
 }
 
 Initialize-NewServer @Params
-
-## Set Windows License
-Set-WindowsLicense
-
-Install-CompassAutomate -Name VMEarth
