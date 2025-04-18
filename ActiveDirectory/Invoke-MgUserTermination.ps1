@@ -1854,7 +1854,13 @@ function Remove-UserLicenses {
         $User,
 
         [Parameter()]
-        [string]$ExportPath
+        [string]$ExportPath,
+
+        [Parameter()]
+        [int]$MaxRetries = 3,
+
+        [Parameter()]
+        [int]$RetryDelaySeconds = 5
     )
 
     try {
@@ -1882,25 +1888,106 @@ function Remove-UserLicenses {
                 "EXCHANGESTANDARD"
             )
 
+            # Track failed removals for retry
+            $failedLicenses = [System.Collections.ArrayList]::new()
+
             # Step 1: Remove Ancillary Licenses
             foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -notin $primaryLicenses })) {
                 try {
-                    $null = Set-MgUserLicense -UserId $User.Id -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+
+                    # Assign the license
+                    $licenseBody = @{
+                        addLicenses    = @()
+                        removeLicenses = @(@{ skuId = $license.SkuId })
+                    } | ConvertTo-Json -Depth 3
+
+                    $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
+                    $response = Invoke-MgGraphRequest -Method POST -Uri $uri -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+
                     Write-StatusMessage -Message "Removed Ancillary License: $($license.SkuPartNumber)" -Type OK
+                    Start-Sleep -Seconds 2  # Brief pause after successful removal
                 } catch {
-                    Write-StatusMessage -Message "Failed to remove Ancillary License $($license.SkuPartNumber)" -Type ERROR
+                    Write-StatusMessage -Message "Failed to remove Ancillary License $($license.SkuPartNumber) - will retry later" -Type WARN
+                    $null = $failedLicenses.Add($license)
                 }
             }
 
             # Step 2: Remove Primary Licenses
             foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -in $primaryLicenses })) {
                 try {
-                    $null = Set-MgUserLicense -UserId $User.Id -AddLicenses @() -RemoveLicenses @($license.SkuId) -ErrorAction Stop
+
+                    # Assign the license
+                    $licenseBody = @{
+                        addLicenses    = @()
+                        removeLicenses = @(@{ skuId = $license.SkuId })
+                    } | ConvertTo-Json -Depth 3
+
+                    $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
+                    $response = Invoke-MgGraphRequest -Method POST -Uri $uri -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+
                     Write-StatusMessage -Message "Removed Primary License: $($license.SkuPartNumber)" -Type OK
+                    Start-Sleep -Seconds 2  # Brief pause after successful removal
                 } catch {
-                    Write-StatusMessage -Message "Failed to remove Primary License $($license.SkuPartNumber)" -Type ERROR
+                    Write-StatusMessage -Message "Failed to remove Primary License $($license.SkuPartNumber) - will retry later" -Type WARN
+                    $null = $failedLicenses.Add($license)
                 }
             }
+
+            # Step 3: Retry failed removals
+            if ($failedLicenses.Count -gt 0) {
+                Write-StatusMessage -Message "Waiting 10 seconds before retrying failed removals..." -Type INFO
+                Start-Sleep -Seconds 10
+
+                $remainingRetries = $MaxRetries - 1  # Already tried once above
+                $stillFailed = [System.Collections.ArrayList]::new()
+
+                while ($failedLicenses.Count -gt 0 -and $remainingRetries -gt 0) {
+                    Write-StatusMessage -Message "Retrying failed removals (attempt $($MaxRetries - $remainingRetries) of $MaxRetries)" -Type INFO
+
+                    foreach ($license in $failedLicenses) {
+                        try {
+
+                            # Assign the license
+                            $licenseBody = @{
+                                addLicenses    = @()
+                                removeLicenses = @(@{ skuId = $license.SkuId })
+                            } | ConvertTo-Json -Depth 3
+
+                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
+                            $response = Invoke-MgGraphRequest -Method POST -Uri $uri -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+
+                            Write-StatusMessage -Message "Successfully removed license on retry: $($license.SkuPartNumber)" -Type OK
+                            Start-Sleep -Seconds 2
+                        } catch {
+                            $null = $stillFailed.Add($license)
+                            Write-StatusMessage -Message "Failed to remove license $($license.SkuPartNumber) on retry" -Type WARN
+                        }
+                    }
+
+                    $failedLicenses.Clear()
+                    if ($stillFailed.Count -gt 0) {
+                        $null = $failedLicenses.AddRange($stillFailed)
+                        $stillFailed.Clear()
+                        $remainingRetries--
+
+                        if ($remainingRetries -gt 0) {
+                            Write-StatusMessage -Message "Waiting $RetryDelaySeconds seconds before next retry..." -Type INFO
+                            Start-Sleep -Seconds $RetryDelaySeconds
+                        }
+                    } else {
+                        break  # All retries successful
+                    }
+                }
+
+                # Report any licenses that couldn't be removed
+                if ($failedLicenses.Count -gt 0) {
+                    Write-StatusMessage -Message "The following licenses could not be removed after $MaxRetries attempts:" -Type ERROR
+                    foreach ($license in $failedLicenses) {
+                        Write-StatusMessage -Message "- $($license.SkuPartNumber)" -Type ERROR
+                    }
+                }
+            }
+
         } catch {
             Write-StatusMessage -Message "Failed to get user licenses" -Type ERROR
             throw
@@ -2087,15 +2174,15 @@ $progressSteps = @(
     @{ Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
     @{ Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
     @{ Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
-    @{ Name = "AD Sync and Summary"; Description = "Running AD sync and Summary" }
+    @{ Name = "Summary"; Description = "Running AD sync and Summary" }
 )
 $script:totalSteps = $progressSteps.Count
 $script:currentStep = 0
 Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
-#Region Main Execution
-Write-Host "`n  Beginning User Termination..." -ForegroundColor Cyan
 try {
+
+    Write-Host "`n  Beginning User Termination..." -ForegroundColor Cyan
 
     # Load configuration
     $config = Get-ScriptConfig
@@ -2230,10 +2317,6 @@ try {
         Set-TerminatedOneDrive @oneDriveParams
 
     }
-
-    # Step: Disable Entra User
-    Write-ProgressStep -StepName 'Disable Entra User'
-    Disable-GraphUser -User $UserInfo.selectMgUser
 
     # Step: Final Sync and Summary
     Write-ProgressStep -StepName 'Summary'
