@@ -2072,7 +2072,7 @@ Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
 
 #Region Main Execution
 
-rite-Host "`r  [✓] Functions loaded" -ForegroundColor Green
+Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
 
 Write-Host "  [ ] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
 $progressSteps = @(
