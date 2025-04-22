@@ -32,7 +32,7 @@ You will need to run this on all domain controllers.
 Then you can run the following command to start the setup process. 
 
 ````powershell
-Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -StoreFilesInDBFormatLink '<zipFileURL>' -NotificationEmail '<email>' -SMTPRelay '<smtpServer>' -FromEmail '<fromEmail>'
+Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection'); Install-ADPasswordProtection -NotificationEmail 'alerts@example.com' -SMTPRelay 'example.mail.protection.outlook.com' -FromEmail 'ADPasswordNotifications@example.com'
 ````
 
 # Parameters
