@@ -15,7 +15,7 @@ Here’s an overview of what it does when run on a DC:
 2. Install the password protection application
 3. Create the password protection GPO
 4. Send out a notification if any errors occur during execution
-5. Creates scheduled task on the PDC to check password hashes against the database and if any are found to email the address provided daily at 4 AM. 
+5. Creates scheduled task on the PDC to check password hashes against the database and if any are found to email the address provided daily at 4 AM.
 
 Once the script runs the server will need to be rebooted (the script will not reboot the server) for the changes to take effect. These restrictions will be enforced the next time a user tries to change their password, existing passwords will not be affected.
 
@@ -29,10 +29,10 @@ First you MUST put the AV/EDR into a monitor/read only mode. If you do not do th
 
 You will need to run this on all domain controllers.
 
-Then you can run the following command to start the setup process. 
+Then you can run the following command to start the setup process.
 
 ````powershell
-Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection'); Install-ADPasswordProtection -NotificationEmail 'alerts@example.com' -SMTPRelay 'example.mail.protection.outlook.com' -FromEmail 'ADPasswordNotifications@example.com'
+Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/CompassMSP/PublicScripts/master/ActiveDirectory/ADPasswordProtection/Install-ADPasswordProtection.ps1'); Install-ADPasswordProtection -NotificationEmail 'alerts@example.com' -SMTPRelay 'example.mail.protection.outlook.com' -FromEmail 'ADPasswordNotifications@example.com'
 ````
 
 # Parameters
@@ -45,7 +45,7 @@ Invoke-Expression (New-Object Net.WebClient).DownloadString('https://raw.githubu
 
     -SMTPRelay 'compassmsp-com.mail.protection.outlook.com'
 
-  FromEmail is is the email you will want to send as for the error logs as well as the password audit notification. 
+  FromEmail is is the email you will want to send as for the error logs as well as the password audit notification.
 
     -FromEmail 'cwilliams@compassmsp.com'
 
