@@ -1544,7 +1544,7 @@ function Remove-ADUserGroups {
         # Remove from all groups
         foreach ($group in $groupDetails) {
             try {
-                Remove-ADGroupMember -Identity $group.DistinguishedName -Members $ADUser.DistinguishedName -Confirm:$false -ErrorAction Stop
+                Remove-ADGroupMember -Identity $group.DistinguishedName -Members $ADUser.SamAccountName -Confirm:$false -ErrorAction Stop
                 Write-StatusMessage -Message "Removed from group: $($group.Name)" -Type OK
             } catch {
                 Write-StatusMessage -Message "Failed to remove from group $($group.Name)" -Type ERROR
@@ -1931,7 +1931,7 @@ function Remove-UserLicenses {
                     # Assign the license
                     $licenseBody = @{
                         addLicenses    = @()
-                        removeLicenses = @(@{ skuId = $license.SkuId })
+                        removeLicenses = @($license.SkuId)
                     } | ConvertTo-Json -Depth 3
 
                     $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
@@ -1952,7 +1952,7 @@ function Remove-UserLicenses {
                     # Assign the license
                     $licenseBody = @{
                         addLicenses    = @()
-                        removeLicenses = @(@{ skuId = $license.SkuId })
+                        removeLicenses = @($license.SkuId)
                     } | ConvertTo-Json -Depth 3
 
                     $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
