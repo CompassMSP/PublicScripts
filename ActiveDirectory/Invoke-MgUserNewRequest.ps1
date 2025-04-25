@@ -744,15 +744,15 @@ function Send-GraphMailMessage {
 
         # Add CC recipients if specified
         if ($CcAddress) {
-            $messageParams.message['ccRecipients'] = @(
-                $CcAddress | ForEach-Object {
-                    @{
-                        emailAddress = @{
-                            address = $_
-                        }
+            # Convert CC addresses to simple string array and create recipient objects
+            $ccRecipients = @($CcAddress) | ForEach-Object {
+                @{
+                    emailAddress = @{
+                        address = $_.ToString().Trim()
                     }
                 }
-            )
+            }
+            $messageParams.message['ccRecipients'] = $ccRecipients
         }
 
         # Add attachment if specified
@@ -770,9 +770,12 @@ function Send-GraphMailMessage {
             )
         }
 
+        # Convert message parameters to JSON explicitly
+        $jsonBody = $messageParams | ConvertTo-Json -Depth 10 -Compress
+
         # Use Graph API directly
         $graphUri = "https://graph.microsoft.com/v1.0/users/$FromAddress/sendMail"
-        Invoke-MgGraphRequest -Method POST -Uri $graphUri -Body $messageParams -ContentType "application/json"
+        Invoke-MgGraphRequest -Method POST -Uri $graphUri -Body $jsonBody -ContentType "application/json"
         Write-StatusMessage -Message "Email notification sent successfully" -Type OK
     } catch {
         Write-StatusMessage -Message "Failed to send email notification: $_" -Type ERROR
