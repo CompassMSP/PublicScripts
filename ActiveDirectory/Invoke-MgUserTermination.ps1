@@ -698,6 +698,14 @@ function Send-GraphMailMessage {
     )
 
     try {
+        # Validate required email addresses
+        if ([string]::IsNullOrWhiteSpace($FromAddress)) {
+            throw "FromAddress cannot be empty"
+        }
+        if ([string]::IsNullOrWhiteSpace($ToAddress)) {
+            throw "ToAddress cannot be empty"
+        }
+
         # If in test mode, override the ToAddress
         if ($script:TestMode) {
             Write-StatusMessage -Message "TEST MODE: Redirecting email to $script:TestEmailAddress" -Type WARN
@@ -715,7 +723,7 @@ function Send-GraphMailMessage {
                 toRecipients = @(
                     @{
                         emailAddress = @{
-                            address = $ToAddress
+                            address = $ToAddress.Trim()
                         }
                     }
                 )
@@ -725,14 +733,23 @@ function Send-GraphMailMessage {
 
         # Add CC recipients if specified
         if ($CcAddress) {
-            # Convert CC addresses to simple string array and create recipient objects
-            $ccRecipients = @($CcAddress) | ForEach-Object {
-                @{
-                    emailAddress = @{
-                        address = $_.ToString().Trim()
+            # Convert input to array if it's not already one
+            $ccArray = if ($CcAddress -is [array]) {
+                $CcAddress
+            } else {
+                @($CcAddress)
+            }
+
+            # Ensure CcAddress is an array and create recipient objects
+            $ccRecipients = @(
+                foreach ($cc in $ccArray) {
+                    @{
+                        emailAddress = @{
+                            address = $cc.ToString().Trim()
+                        }
                     }
                 }
-            }
+            )
             $messageParams.message['ccRecipients'] = $ccRecipients
         }
 
