@@ -2350,6 +2350,7 @@ try {
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
     $MsgFrom = $config.Email.NotificationFrom
+    $CcAddress  = $config.Email.NotificationCcAddress
 
     # Email to SOC for KnowBe4
     try {
@@ -2359,7 +2360,7 @@ try {
 The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
 "@
 
-        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
     } catch {
         Write-StatusMessage -Message "Failed to send KnowBe4 notification email: $($_.Exception.Message)" -Type ERROR
     }
@@ -2372,7 +2373,7 @@ The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($
 The following user need to be removed from 8x8. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
 "@
 
-        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
     } catch {
         Write-StatusMessage -Message "Failed to send 8x8 notification email: $($_.Exception.Message)" -Type ERROR
     }

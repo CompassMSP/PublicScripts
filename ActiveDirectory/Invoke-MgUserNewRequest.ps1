@@ -4172,6 +4172,7 @@ try {
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
     $MsgFrom = $config.Email.NotificationFrom
+    $CcAddress  = $config.Email.NotificationCcAddress
 
     # Email to SOC for KnowBe4
     try {
@@ -4182,7 +4183,7 @@ try {
 The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)
 "@
 
-        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
     } catch {
         Write-StatusMessage -Message "Failed to send KnowBe4 notification email: $($_.Exception.Message)" -Type ERROR
     }
@@ -4202,13 +4203,14 @@ Job Title: $($MgUser.jobTitle)<br>
 Department: $($MgUser.department)<br>
 OfficeLocation:  $($MgUser.officeLocation)<br>
 Call Center: $callCenter<br>
-User to Copy: $($userInput.userToCopy)
-<br>
+User to Copy: $($userInput.userToCopy)<br>
+<p>
 Please do not send the welcome email with the account setup.<br>
-The user start date is $($userInput.employeeHireDate), so please send the welcome email the day prior to their start.
+<p>
+The user start date is $($userInput.employeeHireDate), so please send the welcome email the day prior to their start.<br>
 "@
 
-        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
 
     } catch {
         Write-StatusMessage -Message "Failed to send 8x8 request email: $($_.Exception.Message)" -Type ERROR
