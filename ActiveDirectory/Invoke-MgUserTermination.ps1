@@ -2377,7 +2377,7 @@ try {
         $ToAddress = $config.Email.NotificationToKnowBe4
         $emailSubject = "KB4 – Remove User"
         $emailContent = @"
-The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
+The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)
 "@
 
         Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
@@ -2390,7 +2390,7 @@ The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($
         $ToAddress = $config.Email.NotificationTo8x8
         $emailSubject = "8x8 – Remove User"
         $emailContent = @"
-The following user need to be removed from 8x8. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
+The following user need to be removed from 8x8. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)
 "@
 
         Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
