@@ -898,7 +898,7 @@ function Get-UserTermination {
 <Window
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="User Termination Request" Height="650" Width="600"
+    Title="User Termination Request" Height="780" Width="600"
     WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
@@ -1109,6 +1109,22 @@ function Get-UserTermination {
                         </StackPanel>
                     </Grid>
                 </GroupBox>
+
+                <!-- Out of Office Section -->
+                <GroupBox Header="Out of Office Settings"
+                         Margin="0,0,0,15"
+                         BorderBrush="{DynamicResource TextControlBorderBrush}"
+                         Background="{DynamicResource TextControlBackgroundPointerOver}">
+                    <StackPanel Margin="15">
+                        <Label Content="Out of Office Message"/>
+                        <TextBox x:Name="txtOutOfOffice"
+                               Height="80"
+                               TextWrapping="Wrap"
+                               AcceptsReturn="True"
+                               VerticalScrollBarVisibility="Auto"
+                               Padding="8,5,8,5"/>
+                    </StackPanel>
+                </GroupBox>
             </StackPanel>
         </ScrollViewer>
 
@@ -1194,6 +1210,7 @@ function Get-UserTermination {
 
     # Function to get form data
     function Get-FormData {
+        $outOfOfficeMessage = $txtOutOfOffice.Text.Trim()
         return [PSCustomObject]@{
             InputUser               = $txtUserToTerminate.Text
             InputUserFullControl    = $txtMailboxControl.Text
@@ -1201,6 +1218,8 @@ function Get-UserTermination {
             InputUserOneDriveAccess = $txtOneDriveAccess.Text
             SetOneDriveReadOnly     = $chkOneDriveReadOnly.IsChecked
             TestModeEnabled         = $chkTestMode.IsChecked
+            OutOfOfficeMessage      = $txtOutOfOffice.Text.Trim()
+            SetOOO                  = [bool]$outOfOfficeMessage
         }
     }
 
@@ -2285,6 +2304,16 @@ try {
     # Step: Azure/Entra Tasks
     Write-ProgressStep -StepName 'Session Cleanup'
     Remove-UserSessions -User $UserInfo.selectMgUser
+
+    # Set Out of Office Message
+    if ($result.setOOO) {
+        Set-MailboxAutoReplyConfiguration `
+            -Identity $result.InputUser `
+            -AutoReplyState Enabled `
+            -ExternalMessage $result.OutOfOfficeMessage `
+            -InternalMessage $null `
+            -ExternalAudience All
+    }
 
     # Step: Convert to SharedMailbox, Set forwarding/grant access
     Write-ProgressStep -StepName 'Exchange Tasks'
