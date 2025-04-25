@@ -4203,7 +4203,9 @@ Department: $($MgUser.department)<br>
 OfficeLocation:  $($MgUser.officeLocation)<br>
 Call Center: $callCenter<br>
 User to Copy: $($userInput.userToCopy)
-Start Date: $($userInput.employeeHireDate)
+<br>
+Please do not send the welcome email with the account setup.<br>
+The user start date is $($userInput.employeeHireDate), so please send the welcome email the day prior to their start.
 "@
 
         Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
