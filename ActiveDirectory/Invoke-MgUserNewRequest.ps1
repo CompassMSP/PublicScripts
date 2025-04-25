@@ -725,23 +725,26 @@ function Send-GraphMailMessage {
         }
 
         $messageParams = @{
-            subject      = $Subject
-            body         = @{
-                contentType = $ContentType
-                content     = $Content
-            }
-            toRecipients = @(
-                @{
-                    emailAddress = @{
-                        address = $ToAddress
-                    }
+            message         = @{
+                subject      = $Subject
+                body         = @{
+                    contentType = $ContentType
+                    content     = $Content
                 }
-            )
+                toRecipients = @(
+                    @{
+                        emailAddress = @{
+                            address = $ToAddress
+                        }
+                    }
+                )
+            }
+            saveToSentItems = $false
         }
 
         # Add CC recipients if specified
         if ($CcAddress) {
-            $messageParams['ccRecipients'] = @(
+            $messageParams.message['ccRecipients'] = @(
                 $CcAddress | ForEach-Object {
                     @{
                         emailAddress = @{
@@ -757,7 +760,7 @@ function Send-GraphMailMessage {
             $attachmentContent = Get-Content -Path $AttachmentPath -Raw -Encoding Byte
             $attachmentBase64 = [System.Convert]::ToBase64String($attachmentContent)
 
-            $messageParams['attachments'] = @(
+            $messageParams.message['attachments'] = @(
                 @{
                     '@odata.type' = '#microsoft.graph.fileAttachment'
                     name          = $AttachmentName ?? (Split-Path $AttachmentPath -Leaf)
@@ -767,12 +770,9 @@ function Send-GraphMailMessage {
             )
         }
 
-        $params = @{
-            message         = $messageParams
-            saveToSentItems = "false"
-        }
-
-        Send-MgUserMail -UserId $FromAddress -BodyParameter $params -ErrorAction Stop
+        # Use Graph API directly
+        $graphUri = "https://graph.microsoft.com/v1.0/users/$FromAddress/sendMail"
+        Invoke-MgGraphRequest -Method POST -Uri $graphUri -Body $messageParams -ContentType "application/json"
         Write-StatusMessage -Message "Email notification sent successfully" -Type OK
     } catch {
         Write-StatusMessage -Message "Failed to send email notification: $_" -Type ERROR
@@ -2129,7 +2129,7 @@ function Get-NewUserRequest {
     Initialize-UsageLocation -ComboBox $cboUsageLocation
 
     # Initialize department groups
-      # Initialize-DepartmentGroups
+    # Initialize-DepartmentGroups
 
     # Define copy user operations options
     $copyUserOperationsOptions = @(
@@ -2997,6 +2997,7 @@ function Wait-ForADUserSync {
                     'DisplayName',
                     'GivenName',
                     'Surname',
+                    'jobTitle',
                     'Department',
                     'officeLocation',
                     'City'
@@ -3806,7 +3807,7 @@ $progressSteps = @(
     @{ Name = "Set Timezone"; Description = "Setting Timezone for new user" }
     @{ Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
     @{ Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
-    @{ Name = "Email to SOC for KnowBe4"; Description = "Sending SOC notification email for KnowBe4 setup" }
+    @{ Name = "Notifications"; Description = "Sending email notifications" }
     @{ Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
     @{ Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
     @{ Name = "Cleanup and Summary"; Description = "Running cleanup and summary" }
@@ -4168,16 +4169,47 @@ try {
         }
     }
 
-    # Step: Email to SOC for KnowBe4
-    Write-ProgressStep -StepName 'Email to SOC for KnowBe4'
+    # Step: Send notifications
+    Write-ProgressStep -StepName 'Notifications'
+    $MsgFrom = $config.Email.NotificationFrom
+
+    # Email to SOC for KnowBe4
     try {
+        $ToAddress = $config.Email.NotificationToKnowBe4
+
         $emailSubject = "KB4 – New User"
-        $emailContent = "The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)"
-        $MsgFrom = $config.Email.NotificationFrom
-        $ToAddress = $config.Email.NotificationTo
+        $emailContent = @"
+The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)
+"@
+
         Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
     } catch {
         Write-StatusMessage -Message "Failed to send KnowBe4 notification email: $($_.Exception.Message)" -Type ERROR
+    }
+
+    # Email Compass West for 8x8
+    try {
+
+        $ToAddress = $config.Email.NotificationTo8x8
+
+        $emailSubject = "8x8 – New User"
+        $callCenter = if ($MgUser.department -eq 'Reactive') { 'Yes' } else { 'No' }
+        $emailContent = @"
+Please set up the following user with an 8x8 account.<br><br>
+Display Name: $($MgUser.displayName)<br>
+Mail: $($MgUser.Mail)<br>
+Job Title: $($MgUser.jobTitle)<br>
+Department: $($MgUser.department)<br>
+OfficeLocation:  $($MgUser.officeLocation)<br>
+Call Center: $callCenter<br>
+User to Copy: $($userInput.userToCopy)
+Start Date: $($userInput.employeeHireDate)
+"@
+
+        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+
+    } catch {
+        Write-StatusMessage -Message "Failed to send 8x8 request email: $($_.Exception.Message)" -Type ERROR
     }
 
     # Step: OneDrive Provisioning

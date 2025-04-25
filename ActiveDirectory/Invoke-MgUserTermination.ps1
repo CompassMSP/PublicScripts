@@ -706,23 +706,26 @@ function Send-GraphMailMessage {
         }
 
         $messageParams = @{
-            subject      = $Subject
-            body         = @{
-                contentType = $ContentType
-                content     = $Content
-            }
-            toRecipients = @(
-                @{
-                    emailAddress = @{
-                        address = $ToAddress
-                    }
+            message         = @{
+                subject      = $Subject
+                body         = @{
+                    contentType = $ContentType
+                    content     = $Content
                 }
-            )
+                toRecipients = @(
+                    @{
+                        emailAddress = @{
+                            address = $ToAddress
+                        }
+                    }
+                )
+            }
+            saveToSentItems = $false
         }
 
         # Add CC recipients if specified
         if ($CcAddress) {
-            $messageParams['ccRecipients'] = @(
+            $messageParams.message['ccRecipients'] = @(
                 $CcAddress | ForEach-Object {
                     @{
                         emailAddress = @{
@@ -738,7 +741,7 @@ function Send-GraphMailMessage {
             $attachmentContent = Get-Content -Path $AttachmentPath -Raw -Encoding Byte
             $attachmentBase64 = [System.Convert]::ToBase64String($attachmentContent)
 
-            $messageParams['attachments'] = @(
+            $messageParams.message['attachments'] = @(
                 @{
                     '@odata.type' = '#microsoft.graph.fileAttachment'
                     name          = $AttachmentName ?? (Split-Path $AttachmentPath -Leaf)
@@ -748,12 +751,9 @@ function Send-GraphMailMessage {
             )
         }
 
-        $params = @{
-            message         = $messageParams
-            saveToSentItems = "false"
-        }
-
-        Send-MgUserMail -UserId $FromAddress -BodyParameter $params -ErrorAction Stop
+        # Use Graph API directly
+        $graphUri = "https://graph.microsoft.com/v1.0/users/$FromAddress/sendMail"
+        Invoke-MgGraphRequest -Method POST -Uri $graphUri -Body $messageParams -ContentType "application/json"
         Write-StatusMessage -Message "Email notification sent successfully" -Type OK
     } catch {
         Write-StatusMessage -Message "Failed to send email notification: $_" -Type ERROR
@@ -2204,7 +2204,7 @@ $progressSteps = @(
     @{ Name = "Directory Roles"; Description = "Removing from directory roles" }
     @{ Name = "Group Removal"; Description = "Removing and exporting Entra/Exchange groups" }
     @{ Name = "License Removal"; Description = "Removing and exporting Entra licenses" }
-    @{ Name = "Notifications"; Description = "Sending SecurePath Offboarding notifications" }
+    @{ Name = "Notifications"; Description = "Sending email notifications" }
     @{ Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
     @{ Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
     @{ Name = "Summary"; Description = "Running AD sync and Summary" }
@@ -2318,13 +2318,35 @@ try {
     $licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
     Remove-UserLicenses -User $userInfo.selectMgUser -ExportPath $licensePath
 
-    #Step: Send Email Notification - SecurePath
+    # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
-    $emailSubject = "KB4 – Remove User"
-    $emailContent = "The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
     $MsgFrom = $config.Email.NotificationFrom
-    $ToAddress = $config.Email.NotificationTo
-    Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+
+    # Email to SOC for KnowBe4
+    try {
+        $ToAddress = $config.Email.NotificationToKnowBe4
+        $emailSubject = "KB4 – Remove User"
+        $emailContent = @"
+The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
+"@
+
+        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+    } catch {
+        Write-StatusMessage -Message "Failed to send KnowBe4 notification email: $($_.Exception.Message)" -Type ERROR
+    }
+
+    # Email Compass West for 8x8
+    try {
+        $ToAddress = $config.Email.NotificationTo8x8
+        $emailSubject = "8x8 – Remove User"
+        $emailContent = @"
+The following user need to be removed from 8x8. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)"
+"@
+
+        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -Subject $emailSubject -Content $emailContent
+    } catch {
+        Write-StatusMessage -Message "Failed to send 8x8 notification email: $($_.Exception.Message)" -Type ERROR
+    }
 
     # Step : Disconnect from Exchange Online and Graph
     Write-ProgressStep -StepName 'Disconnecting from Exchange and Graph'
