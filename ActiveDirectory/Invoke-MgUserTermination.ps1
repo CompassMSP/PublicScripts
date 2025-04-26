@@ -2153,9 +2153,6 @@ function Start-ADSyncAndFinalize {
         [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
         $User,
 
-        [Parameter(Mandatory)]
-        [string]$DestinationOU,
-
         [Parameter()]
         [string]$GrantUserFullControl,
 
@@ -2195,8 +2192,7 @@ function Start-ADSyncAndFinalize {
         "User Termination Status:",
         "- EntraID: $($User.Id)",
         "- Display Name: $($User.displayName)",
-        "- Email Address: $($User.mail)",
-        "- Moved to OU: $DestinationOU"
+        "- Email Address: $($User.mail)"
     )
 
     if ($GrantUserFullControl) {
