@@ -221,35 +221,6 @@ function Write-ProgressStep {
     $script:currentStep += 1
 }
 
-function Write-ProgressStep {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$StepName
-    )
-
-    # Find the step object by name
-    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
-
-    if (-not $step) {
-        Write-Warning "Progress step '$StepName' not found."
-        return
-    }
-
-    $stepNumber = $script:currentStep
-    $status = $step.Description
-
-    # Guard against division by zero or missing values
-    if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
-        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
-        Write-Progress -Activity "New User Creation" -Status $status
-    } else {
-        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
-        Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
-    }
-    $script:currentStep += 1
-}
-
 #Region Standard Functions
 
 function Write-StatusMessage {
@@ -2153,10 +2124,10 @@ function Get-NewUserRequest {
 
     # Define copy user operations options
     $copyUserOperationsOptions = @(
-        "None",
-        "Copy Attributes",
-        "Copy Groups",
-        "Copy Attributes and Groups"
+        'None',
+        'Copy Attributes',
+        'Copy Groups',
+        'Copy Attributes and Groups'
     )
 
     # Populate the copy user operations dropdown
@@ -2653,6 +2624,7 @@ function Set-ADUserOptionalFields {
             }
         }
 
+        # Format phone numbers
         if ($mergedInput.mobilePhone) {
             $mergedInput.mobilePhone = Format-PhoneNumber -PhoneNumber $mergedInput.mobilePhone
         }
@@ -3852,7 +3824,7 @@ try {
     # Load configuration
     $config = Get-ScriptConfig
     if (-not $config) {
-        throw "Failed to load configuration"
+        Exit-Script -Message "Failed to load configuration" -ExitCode ConfigError
     }
 
     # Get connection parameters from config
@@ -3872,7 +3844,7 @@ try {
     Write-ProgressStep -StepName 'User Input'
     $userInput = Get-NewUserRequest
     if (-not $userInput) {
-        throw "Failed to get user input"
+        Exit-Script -Message "Failed to get user input" -ExitCode ConfigError
     }
 
     # Set variables after input
@@ -3897,14 +3869,14 @@ try {
 
     $passwordResult = New-ReadablePassword -GitHubToken $config.GitHub.Token
     if (-not $passwordResult) {
-        throw "Failed to generate password"
+        Exit-Script -Message "Failed to generate password" -ExitCode ConfigError
     }
 
     # Get template user (if copying)
     if ($userInput.userToCopy) {
         $templateUser = Get-TemplateUser -UserToCopy $userInput.userToCopy
         if (-not $templateUser) {
-            throw "Failed to get template user: $($userInput.userToCopy)"
+            Exit-Script -Message "Failed to get template user: $($userInput.userToCopy)" -ExitCode ConfigError
         }
         $templateAttributes = Get-ADUserCopiedAttributes -TemplateUser $templateUser
         $templateUserManager = $templateAttributes.Manager
@@ -3947,7 +3919,7 @@ try {
     # Call the New-UserProperties function with the constructed parameters
     $newUserProperties = New-UserProperties @newUserParams
     if (-not $newUserProperties) {
-        throw "Failed to create user properties"
+        Exit-Script -Message "Failed to create user properties" -ExitCode UserNotFound
     }
 
     # Show summary and get confirmation before creating
@@ -4009,7 +3981,7 @@ try {
     Write-ProgressStep -StepName 'Entra Connect Sync'
     $MgUser = Wait-ForADUserSync -UserEmail $newUserProperties.Email
     if (-not $MgUser) {
-        throw "Failed to sync user to Entra ID"
+        Exit-Script -Message 'Cannot get new user from graph' -ExitCode UserNotFound
     }
 
     # License Assignment
@@ -4039,7 +4011,7 @@ try {
     }
 
     # Step: TimeZone Assignment
-    # Set Timezone after license
+    Write-ProgressStep -StepName 'Set Timezone'
     Write-StatusMessage -Message "Setting Timezone for new user" -Type INFO
     if ($userInput.timeZone) {
         if ($userInput.timeZone -eq 'US Mountain Standard Time (Arizona)') {
@@ -4053,23 +4025,24 @@ try {
     # Step: Entra Group Assignment
     Write-ProgressStep -StepName 'Entra Group Assignment'
 
-    $allFilteredGroups = [System.Collections.Generic.List[object]]::new()
-    $groupOperationSummary = @{
-        CopyUserGroups   = @{
-            Count  = 0
-            Groups = @()
-            Failed = @()
-        }
-        DepartmentGroups = @{
-            Count  = 0
-            Groups = @()
-            Failed = @()
-        }
-        TotalFailed      = 0
-    }
-
     # Start Group Add Operations
     try {
+
+        $allFilteredGroups = [System.Collections.Generic.List[object]]::new()
+        $groupOperationSummary = @{
+            CopyUserGroups   = @{
+                Count  = 0
+                Groups = @()
+                Failed = @()
+            }
+            DepartmentGroups = @{
+                Count  = 0
+                Groups = @()
+                Failed = @()
+            }
+            TotalFailed      = 0
+        }
+
         # Process copy user groups if selected
         if ($userInput.userToCopy -and $copyUserGroups) {
             Write-StatusMessage -Message 'Copy template user groups selected...' -Type INFO
@@ -4191,7 +4164,7 @@ try {
 
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
-    $MsgFrom = $config.Email.NotificationFrom
+    $MsgFrom    = $config.Email.NotificationFrom
     $CcAddress  = $config.Email.NotificationCcAddress
 
     # Email to SOC for KnowBe4
@@ -4267,7 +4240,7 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
     Read-Host | Out-Null
 
     # Clear the progress bar
-    Write-Progress -Activity "New User Creation" -Completed
+    Write-Progress -Activity "New User Creation" -Status "Done" -PercentComplete 100
 
     Exit-Script -Message "$($MgUser.displayName) has been successfully created." -ExitCode Success
 
