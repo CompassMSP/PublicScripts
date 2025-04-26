@@ -2312,7 +2312,7 @@ function New-DuplicatePromptForm {
 
 # Main Exection Functions
 
-function Get-TemplateUser {
+function Get-ADTemplateUser {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -2387,7 +2387,7 @@ function Get-ADUserCopiedAttributes {
     }
 }
 
-function New-UserProperties {
+function New-ADUserProperties {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -2495,7 +2495,7 @@ function New-UserProperties {
         }
 
     } catch {
-        Write-StatusMessage -Message "Critical error in New-UserProperties: $_" -Type ERROR
+        Write-StatusMessage -Message "Critical error in New-ADUserProperties: $_" -Type ERROR
         Exit-Script -Message "Critical error generating user properties" -ExitCode GeneralError
     }
 }
@@ -3648,6 +3648,8 @@ function Start-NewUserFinalize {
         [ValidateRange(0, [int]::MaxValue)]
         [int]$AssignedGroupCount,
 
+        [bool]$TemplateUserCheck,
+
         [Parameter()]
         [hashtable]$GroupOperationSummary = @{
             CopyUserGroups   = @{
@@ -3684,7 +3686,7 @@ function Start-NewUserFinalize {
         "- Display Name: $($User.displayName)",
         "- Email Address: $($User.mail)",
         "- Password: $Password",
-        "- Template User: $(if ($TemplateUser) {$userInput.userToCopy} else {'No template user selected.'})",
+        "- Template User: $(if ($TemplateUserCheck) {$userInput.userToCopy} else {'No template user selected.'})",
         "",
         "Group Assignment Status:",
         "----------------------------------------",
@@ -3872,12 +3874,15 @@ try {
         Exit-Script -Message "Failed to generate password" -ExitCode ConfigError
     }
 
+    $TemplateUserCheck = $false
+
     # Get template user (if copying)
     if ($userInput.userToCopy) {
-        $templateUser = Get-TemplateUser -UserToCopy $userInput.userToCopy
+        $templateUser = Get-ADTemplateUser -UserToCopy $userInput.userToCopy
         if (-not $templateUser) {
             Exit-Script -Message "Failed to get template user: $($userInput.userToCopy)" -ExitCode ConfigError
         }
+        $TemplateUserCheck = $true
         $templateAttributes = Get-ADUserCopiedAttributes -TemplateUser $templateUser
         $templateUserManager = $templateAttributes.Manager
 
@@ -3899,7 +3904,7 @@ try {
         Write-StatusMessage -Message "Default destination OU selected. Move to correct OU after account creation." -Type WARN
     }
 
-    # Initialize the parameters for New-UserProperties and check for duplicate SamAccountName/Mail
+    # Initialize the parameters for New-ADUserProperties and check for duplicate SamAccountName/Mail
     $newUserParams = @{
         DisplayName = $userInput.displayName
         Domain      = $domain
@@ -3916,8 +3921,8 @@ try {
         $newUserParams.userPrincipalName = $userInput.userPrincipalName
     }
 
-    # Call the New-UserProperties function with the constructed parameters
-    $newUserProperties = New-UserProperties @newUserParams
+    # Call the New-ADUserProperties function with the constructed parameters
+    $newUserProperties = New-ADUserProperties @newUserParams
     if (-not $newUserProperties) {
         Exit-Script -Message "Failed to create user properties" -ExitCode UserNotFound
     }
@@ -4010,7 +4015,7 @@ try {
         Write-StatusMessage -Message "Mailbox not yet provisioned. Some group operations may fail. Please verify group assignments script completes." -Type WARN
     }
 
-    # Step: TimeZone Assignment
+    # Step: Timezone Assignment
     Write-ProgressStep -StepName 'Set Timezone'
     Write-StatusMessage -Message "Setting Timezone for new user" -Type INFO
     if ($userInput.timeZone) {
@@ -4226,6 +4231,7 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
     Write-StatusMessage -Message "Building final summary..." -Type INFO
 
     Start-NewUserFinalize -User $MgUser `
+        -TemplateUserCheck $TemplateUserCheck `
         -Password $passwordResult.PlainPassword `
         -AssignedGroupCount $groupAddResults.SuccessCount `
         -GroupOperationSummary $groupOperationSummary
