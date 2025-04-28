@@ -1119,8 +1119,8 @@ function Get-NewUserRequest {
                                 <Label Content="Time Zone"/>
                                 <ComboBox x:Name="cboTimeZone" Height="32" Margin="0,0,0,15"/>
 
-                                <Label Content="365 Usage Location"/>
-                                <ComboBox x:Name="cboUsageLocation" Height="32" Margin="0,0,0,15"/>
+                                <Label Content="Employee Hire Date"/>
+                                <DatePicker x:Name="dateEmployeeHireDate" Height="32" Margin="0,0,0,15"/>
                             </StackPanel>
 
                             <!-- Right Column -->
@@ -1237,9 +1237,6 @@ function Get-NewUserRequest {
                                     </TextBlock>
                                 </Grid>
 
-                                <Label Content="Employee Hire Date"/>
-                                <DatePicker x:Name="dateEmployeeHireDate" Height="32" Margin="0,0,0,15"/>
-
                                 <Label Content="Business Phone"/>
                                 <Grid Margin="0,0,0,15">
                                     <TextBox x:Name="txtBusinessPhone" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
@@ -1260,6 +1257,9 @@ function Get-NewUserRequest {
                                         </TextBlock.Style>
                                     </TextBlock>
                                 </Grid>
+
+                                <Label Content="365 Usage Location"/>
+                                <ComboBox x:Name="cboUsageLocation" Height="32" Margin="0,0,0,15"/>
                             </StackPanel>
 
                             <!-- Right Column -->
