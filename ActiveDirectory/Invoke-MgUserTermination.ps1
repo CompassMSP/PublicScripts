@@ -28,12 +28,15 @@
 .NOTES
     Author: Chris Williams
     Created: 2021-12-20
-    Last Modified: 2025-07-04
+    Last Modified: 2025-04-29
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
+    4.1.0      2025-04-29   Feature Updates:
+                                - Added Cloud Only Switch
+
     4.0.0      2025-07-04   UI Refactor:
                                 - Refactored the UI to use winui 3 styles for easier management and better visuals
 

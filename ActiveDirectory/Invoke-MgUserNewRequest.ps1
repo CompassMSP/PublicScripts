@@ -1,8 +1,7 @@
 #requires -Version 7.0
 #requires -RunAsAdministrator
-<#
 #requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync
-
+<#
 TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .SYNOPSIS
     Creates a new user based on a template user in Active Directory and Microsoft 365.
@@ -31,12 +30,15 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2025-04-07
+    Last Modified: 2025-04-29
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
+    4.1.0      2025-04-29   Feature Updates:
+                                - Added Cloud Only Switch
+
     4.0.0      2025-04-07   Major UI and functions refactor:
                                 - Changed UI to use winui 3 styles for easier management and better visuals
                                 - Refactor user creation functions in preparation for Forms/Power Automate Flow execution
