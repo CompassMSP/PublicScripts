@@ -2596,9 +2596,9 @@ function New-UserProperties {
                 FirstName         = $FirstName
                 LastName          = $LastName
                 DisplayName       = $DisplayName
-                mailNickname      = $accountName
-                Email             = $userPrincipalName
                 userPrincipalName = $userPrincipalName
+                Email             = $userPrincipalName
+                mailNickname      = $accountName
             }
 
         } else {
@@ -2864,7 +2864,7 @@ function New-UserStandard {
             $newUserParams = @{
                 Name              = "$($NewUser.FirstName) $($NewUser.LastName)"
                 SamAccountName    = $NewUser.SamAccountName
-                UserPrincipalName = $NewUser.Email
+                UserPrincipalName = $NewUser.UserPrincipalName
                 EmailAddress      = $NewUser.Email
                 DisplayName       = $NewUser.DisplayName
                 GivenName         = $NewUser.FirstName
