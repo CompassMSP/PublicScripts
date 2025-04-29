@@ -2472,7 +2472,7 @@ function Get-TemplateUser {
                     Exit-Script -Message "Template user not found: $UserToCopy" -ExitCode UserNotFound
                 }
 
-                $templateData.TemplateUser = $entraUser.mail
+                $templateData.TemplateUser = $entraUser.templateUserUPN
                 $templateData.TemplateAttributes = $entraUser
                 $templateData.TemplateUserManager = $entraUser.templateManager
                 $templateData.Domain = $entraUser.templateUserUPN -replace '.+?(?=@)'
@@ -2597,6 +2597,7 @@ function New-UserProperties {
                 LastName          = $LastName
                 DisplayName       = $DisplayName
                 mailNickname      = $accountName
+                Email             = $userPrincipalName
                 userPrincipalName = $userPrincipalName
             }
 
@@ -2830,7 +2831,7 @@ function New-UserStandard {
     param (
         [Parameter(Mandatory)][hashtable]$NewUser,
         [Parameter()][string]$DestinationOU,
-        [Parameter()][string]$PlanPassword,
+        [Parameter()][string]$Password,
         [Parameter()][System.Security.SecureString]$SecureStringPassword,
         [Parameter(Mandatory)][bool]$CloudOnly
     )
@@ -2849,7 +2850,7 @@ function New-UserStandard {
                 mail              = $NewUser.mail
                 passwordProfile   = @{
                     forceChangePasswordNextSignIn = $true
-                    password                      = $PlanPassword
+                    password                      = $Password
                 }
             }
 
@@ -2961,12 +2962,9 @@ function Set-UserOptionalFields {
             'city',
             'state',
             'postalCode',
-            'country'
+            'country',
+            'employeeHireDate'
         )
-        if (-not $CloudOnly) {
-            # Add employeeHireDate only for AD mode
-            $allowedUserProps += 'employeeHireDate'
-        }
 
         # Add allowed UserInput values first
         foreach ($prop in $allowedUserProps) {
@@ -4248,7 +4246,7 @@ try {
         $NewUserParams.SecureStringPassword = $passwordResult.SecurePassword
         $NewUserParams.DestinationOU = $destinationOU
     } else {
-        $NewUserParams.PlainPassword = $passwordResult.PlainPassword
+        $NewUserParams.Password = $passwordResult.PlainPassword
     }
 
     New-UserStandard @NewUserParams
@@ -4307,8 +4305,6 @@ try {
         Write-StatusMessage -Message 'Cloud only selected. Skipping...'
     }
 
-
-
     if ($userInput.cloudOnly -eq $false) {
         # Entra Connect Sync
         Write-ProgressStep -StepName 'Entra Connect Sync'
@@ -4326,7 +4322,7 @@ try {
             'City'
         )
 
-        $MgUser = Get-MgUser -UserId $UserEmail -Property $properties -ErrorAction Stop | Select-Object $properties
+        $MgUser = Get-MgUser -UserId $newUserProperties.Email -Property $properties -ErrorAction Stop | Select-Object $properties
     }
 
     if (-not $MgUser) {

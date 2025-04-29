@@ -1315,14 +1315,14 @@ function Get-TerminationPrerequisites {
     )
 
     try {
-        # Always get MgUser first
+
         try {
             $mgUser = Get-MgUser -UserId $User -Property Id, Mail, DisplayName, Department, OnPremisesSyncEnabled | Select-Object Id, Mail, DisplayName, Department, OnPremisesSyncEnabled -ErrorAction Stop
+            $SkipADTasks = $false
         } catch {
             Exit-Script -Message "Could not find user in EntraID/Azure: $_" -ExitCode UserNotFound
         }
 
-        $SkipADTasks = $false
         if ($mgUser.OnPremisesSyncEnabled -ne $true) {
             $SkipADTasks = $true
             $checkUserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
