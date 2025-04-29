@@ -1,7 +1,8 @@
 #requires -Version 7.0
 #requires -RunAsAdministrator
-#requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync
 <#
+#requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync
+
 TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .SYNOPSIS
     Creates a new user based on a template user in Active Directory and Microsoft 365.
