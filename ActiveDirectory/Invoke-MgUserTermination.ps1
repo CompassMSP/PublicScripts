@@ -1315,86 +1315,109 @@ function Get-TerminationPrerequisites {
     )
 
     try {
-        # Find user in AD with more flexible search
-        Write-StatusMessage -Message "Attempting to find $User in Active Directory" -Type 'INFO'
-
-        # Try exact UPN match first
-        $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
-
-        # If no exact UPN match, try email match
-        if (-not $UserFromAD) {
-            $UserFromAD = Get-ADUser -Filter "mail -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
+        # Always get MgUser first
+        try {
+            $mgUser = Get-MgUser -UserId $User -Property Id, Mail, DisplayName, Department, OnPremisesSyncEnabled | Select-Object Id, Mail, DisplayName, Department, OnPremisesSyncEnabled -ErrorAction Stop
+        } catch {
+            Exit-Script -Message "Could not find user in EntraID/Azure: $_" -ExitCode UserNotFound
         }
 
-        # If still no match, try partial matches
-        if (-not $UserFromAD) {
-            $partialMatches = Get-ADUser -Filter "userPrincipalName -like '*$User*' -or mail -like '*$User*' -or displayName -like '*$User*'" `
-                -Properties MemberOf, UserPrincipalName, Mail, DisplayName
-
-            if ($partialMatches) {
-                if ($partialMatches.Count -gt 1) {
-                    Write-StatusMessage -Message "Multiple matching users found:" -Type 'WARN'
-                    $index = 0
-                    $partialMatches | ForEach-Object {
-                        Write-Host "`n[$index] DisplayName: $($_.DisplayName)"
-                        Write-Host "    UPN: $($_.UserPrincipalName)"
-                        Write-Host "    Email: $($_.Mail)"
-                        $index++
-                    }
-
-                    do {
-                        $selection = Read-Host "`nEnter the number of the correct user or 'exit' to cancel"
-                        if ($selection -eq 'exit') {
-                            Exit-Script -Message "User cancelled the operation" -ExitCode Cancelled
-                        }
-                    } while ($selection -notmatch '^\d+$' -or [int]$selection -ge $partialMatches.Count)
-
-                    $UserFromAD = Get-ADUser -Identity $partialMatches[$selection].DistinguishedName -Properties MemberOf
-                } else {
-                    $UserFromAD = Get-ADUser -Identity $partialMatches[0].DistinguishedName -Properties MemberOf
-                }
+        $SkipADTasks = $false
+        if ($mgUser.OnPremisesSyncEnabled -ne $true) {
+            $SkipADTasks = $true
+            $checkUserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
+            if ($checkUserFromAD) {
+                $SkipADTasks = $false
+                $AccountNotLinked = $true
             }
         }
 
-        if (-not $UserFromAD) {
-            Exit-Script -Message "Could not find user $User in Active Directory" -ExitCode UserNotFound
-        }
+        if (-not $SkipADTasks) {
+            # Find user in AD with more flexible search
+            Write-StatusMessage -Message "Attempting to find $User in Active Directory" -Type 'INFO'
 
-        # Find Disabled Users OU
-        Write-StatusMessage -Message "Attempting to find Disabled users OU" -Type 'INFO'
-        $DisabledOUs = @(Get-ADOrganizationalUnit -Filter 'Name -like "*disabled*"')
+            # Try exact UPN match first
+            $UserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
 
-        if ($DisabledOUs.count -gt 0) {
-            # Set the destination OU to the first one found
-            $DestinationOU = $DisabledOUs[0].DistinguishedName
+            # If no exact UPN match, try email match
+            if (-not $UserFromAD) {
+                $UserFromAD = Get-ADUser -Filter "mail -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
+            }
 
-            # Try to find user specific OU
-            foreach ($OU in $DisabledOUs) {
-                if ($OU.DistinguishedName -like '*user*') {
-                    $DestinationOU = $OU.DistinguishedName
+            # If still no match, try partial matches
+            if (-not $UserFromAD) {
+                $partialMatches = Get-ADUser -Filter "userPrincipalName -like '*$User*' -or mail -like '*$User*' -or displayName -like '*$User*'" `
+                    -Properties MemberOf, UserPrincipalName, Mail, DisplayName
+
+                if ($partialMatches) {
+                    if ($partialMatches.Count -gt 1) {
+                        Write-StatusMessage -Message "Multiple matching users found:" -Type 'WARN'
+                        $index = 0
+                        $partialMatches | ForEach-Object {
+                            Write-Host "`n[$index] DisplayName: $($_.DisplayName)"
+                            Write-Host "    UPN: $($_.UserPrincipalName)"
+                            Write-Host "    Email: $($_.Mail)"
+                            $index++
+                        }
+
+                        do {
+                            $selection = Read-Host "`nEnter the number of the correct user or 'exit' to cancel"
+                            if ($selection -eq 'exit') {
+                                Exit-Script -Message "User cancelled the operation" -ExitCode Cancelled
+                            }
+                        } while ($selection -notmatch '^\d+$' -or [int]$selection -ge $partialMatches.Count)
+
+                        $UserFromAD = Get-ADUser -Identity $partialMatches[$selection].DistinguishedName -Properties MemberOf
+                    } else {
+                        $UserFromAD = Get-ADUser -Identity $partialMatches[0].DistinguishedName -Properties MemberOf
+                    }
                 }
+            }
+
+            if (-not $UserFromAD) {
+                Exit-Script -Message "Could not find user $User in Active Directory" -ExitCode UserNotFound
+            }
+
+            # Find Disabled Users OU
+            Write-StatusMessage -Message "Attempting to find Disabled users OU" -Type 'INFO'
+            $DisabledOUs = @(Get-ADOrganizationalUnit -Filter 'Name -like "*disabled*"')
+
+            if ($DisabledOUs.count -gt 0) {
+                # Set the destination OU to the first one found
+                $DestinationOU = $DisabledOUs[0].DistinguishedName
+
+                # Try to find user specific OU
+                foreach ($OU in $DisabledOUs) {
+                    if ($OU.DistinguishedName -like '*user*') {
+                        $DestinationOU = $OU.DistinguishedName
+                    }
+                }
+            } else {
+                Exit-Script -Message "Could not find disabled OU in Active Directory" -ExitCode GeneralError
             }
         } else {
-            Exit-Script -Message "Could not find disabled OU in Active Directory" -ExitCode GeneralError
+            $UserFromAD = $null
+            $DestinationOU = $null
         }
 
-        # Find user in Azure/Exchange
-        Write-StatusMessage -Message "Attempting to find $($UserFromAD.UserPrincipalName) in Azure" -Type 'INFO'
+        # Find user in Exchange (always run)
+        $MailboxIdentity = if ($UserFromAD) { $UserFromAD.UserPrincipalName } else { $mgUser.Mail }
+        Write-StatusMessage -Message "Attempting to find $MailboxIdentity in Exchange" -Type 'INFO'
         try {
-            $365Mailbox = Get-Mailbox -Identity $UserFromAD.UserPrincipalName -ErrorAction Stop
-            $MgUser = Get-MgUser -UserId $UserFromAD.UserPrincipalName -Property Id, Mail, DisplayName, Department | Select-Object Id, Mail, DisplayName, Department -ErrorAction Stop
+            $365Mailbox = Get-Mailbox -Identity $MailboxIdentity -ErrorAction Stop
         } catch {
-            Exit-Script -Message "Could not find user in Exchange/Azure: $_" -ExitCode UserNotFound
+            Exit-Script -Message "Could not find user in Exchange: $_" -ExitCode UserNotFound
         }
 
         # Get user confirmation
         $confirmMessage = @"
 The user below will be disabled:
-Display Name = $($UserFromAD.Name)
-UserPrincipalName = $($UserFromAD.UserPrincipalName)
+Display Name = $($mgUser.DisplayName)
+UserPrincipalName = $($mgUser.Mail)
 Mailbox name =  $($365Mailbox.DisplayName)
-Azure name = $($MgUser.DisplayName)
+Azure name = $($mgUser.DisplayName)
 Destination OU = $($DestinationOU)
+OnPremisesSyncEnabled = $($mgUser.OnPremisesSyncEnabled)
 
 Continue? (Y/N)
 "@
@@ -1404,8 +1427,8 @@ Continue? (Y/N)
             Exit-Script -Message "User termination cancelled by user. Did not enter 'Y'" -ExitCode Cancelled
         }
 
-        # After confirmation, export properties and groups if paths provided
-        if ($UserPropertiesPath -or $ADGroupsPath) {
+        # After confirmation, export properties and groups if paths provided and not skipping AD
+        if ((-not $SkipADTasks) -and ($UserPropertiesPath -or $ADGroupsPath)) {
             try {
                 # Export user properties
                 if ($UserPropertiesPath) {
@@ -1465,19 +1488,20 @@ Continue? (Y/N)
 
         # Return all the collected information
         return @{
-            selectUserFromAD    = $UserFromAD
-            selectDestinationOU = $DestinationOU
-            selectMailbox       = $365Mailbox
-            selectMgUser        = $MgUser
-            UserPropertiesPath  = $UserPropertiesPath
-            ADGroupsPath        = $ADGroupsPath
+            selectUserFromAD      = $UserFromAD
+            selectDestinationOU   = $DestinationOU
+            selectMailbox         = $365Mailbox
+            selectMgUser          = $mgUser
+            UserPropertiesPath    = $UserPropertiesPath
+            ADGroupsPath          = $ADGroupsPath
+            OnPremisesSyncEnabled = $($mgUser.OnPremisesSyncEnabled)
+            AccountNotLinked      = $AccountNotLinked
         }
 
     } catch {
         Exit-Script -Message "Failed to validate termination prerequisites: $_" -ExitCode UserNotFound
     }
 }
-
 
 function Disable-ADUser {
     [CmdletBinding()]
@@ -1592,6 +1616,60 @@ function Remove-ADUserGroups {
 
     } catch {
         Write-StatusMessage -Message "Error in Remove-UserGroups: $($_.Exception.Message)" -Type ERROR
+        throw
+    }
+}
+
+function Disable-GraphUser {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        $User
+    )
+
+    try {
+        Write-StatusMessage -Message "Performing Microsoft Graph Steps" -Type INFO
+
+        # Disable the user account
+        try {
+            $updateUserParams = @{
+                AccountEnabled = $false
+                BusinessPhones = @()
+                MobilePhone    = $null
+                OfficeLocation = $null
+                Department     = $null
+                JobTitle       = $null
+                CompanyName    = $null
+                Manager        = $null
+                FaxNumber      = $null
+                StreetAddress  = $null
+                City           = $null
+                State          = $null
+                PostalCode     = $null
+                Country        = $null
+                EmployeeType   = "Disabled on $(Get-Date -Format 'FileDate')"
+            }
+
+            Update-MgUser -UserId $User.Id -BodyParameter $updateUserParams -ErrorAction Stop
+            Write-StatusMessage -Message "User account disabled and attributes cleared" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to disable user account: $_" -Type ERROR
+            throw
+        }
+
+        # Hide user from address lists using Exchange PowerShell
+        try {
+            Set-Mailbox -Identity $User.Mail -HiddenFromAddressListsEnabled $true -ErrorAction Stop
+            Write-StatusMessage -Message "User hidden from address lists" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to hide user from address lists: $_" -Type ERROR
+            throw
+        }
+
+    } catch {
+        Write-StatusMessage -Message "Critical error in Disable-GraphUser: $_" -Type ERROR
         throw
     }
 }
@@ -2313,9 +2391,16 @@ try {
     # Extract variables for use in the rest of the script
 
     # Step: AD Tasks
-    Write-ProgressStep -StepName 'AD Tasks'
-    Disable-ADUser -UserFromAD $userInfo.selectUserFromAD -DestinationOU $userInfo.selectDestinationOU
-    Remove-ADUserGroups -ADUser $userInfo.selectUserFromAD
+    if ($UserInfo.OnPremisesSyncEnabled -eq $true) {
+        Write-ProgressStep -StepName 'AD Tasks'
+        Disable-ADUser -UserFromAD $userInfo.selectUserFromAD -DestinationOU $userInfo.selectDestinationOU
+        Remove-ADUserGroups -ADUser $userInfo.selectUserFromAD
+    }
+
+    if ($UserInfo.OnPremisesSyncEnabled -ne $true -or $UserInfo.AccountNotLinked -eq $true) {
+        Write-ProgressStep -StepName 'Disable Entra User'
+        Disable-GraphUser -User $UserInfo.selectMgUser
+    }
 
     # Step: Azure/Entra Tasks
     Write-ProgressStep -StepName 'Session Cleanup'
@@ -2366,7 +2451,7 @@ try {
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
     $MsgFrom = $config.Email.NotificationFrom
-    $CcAddress  = $config.Email.NotificationCcAddress
+    $CcAddress = $config.Email.NotificationCcAddress
 
     # Email to SOC for KnowBe4
     try {
