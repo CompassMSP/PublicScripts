@@ -838,8 +838,6 @@ function Get-FormattedLicenseInfo {
             "Microsoft Teams Rooms Standard",
             "Power Apps Premium",
             "Power Automate Premium",
-            "Power BI Pro",
-            "Power BI Standard",
             "Power Virtual Agents Viral Trial",
             "Project Plan 3 (for Department)",
             "Rights Management Adhoc",
