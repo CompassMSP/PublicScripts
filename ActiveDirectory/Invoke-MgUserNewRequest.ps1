@@ -1860,7 +1860,7 @@ function Get-NewUserRequest {
                         $comboItem = New-Object System.Windows.Controls.ComboBoxItem
                         $comboItem.Content = $license.DisplayName
                         $comboItem.Tag = $license.SkuId  # Store the SkuId for use later
-                        $cboRequiredLicense.Items.Add($comboItem)
+                        [void]$cboRequiredLicense.Items.Add($comboItem)
                     }
                 }
             }
@@ -1879,7 +1879,7 @@ function Get-NewUserRequest {
                     $listItem = New-Object System.Windows.Controls.ListBoxItem
                     $listItem.Content = $license.DisplayName
                     $listItem.Tag = $license.SkuId
-                    $lstAncillaryLicenses.Items.Add($listItem)
+                    [void]$lstAncillaryLicenses.Items.Add($listItem)
                 }
             }
 
@@ -1966,7 +1966,7 @@ function Get-NewUserRequest {
             # Add verified domains and find default domain
             $defaultDomain = $null
             foreach ($domain in $domains) {
-                $cboDomain.Items.Add($domain.Id)
+                [void]$cboDomain.Items.Add($domain.Id)
                 if ($domain.IsDefault) {
                     $defaultDomain = $domain.Id
                 }
@@ -2141,7 +2141,7 @@ function Get-NewUserRequest {
 
     # Populate the copy user operations dropdown
     foreach ($option in $copyUserOperationsOptions) {
-        $cboCopyUserOperations.Items.Add($option)
+        [void]$cboCopyUserOperations.Items.Add($option)
     }
 
     # Define timezone options
@@ -2155,7 +2155,7 @@ function Get-NewUserRequest {
 
     # Populate the timezone dropdown
     foreach ($timeZone in $timeZoneOptions) {
-        $cboTimeZone.Items.Add($timeZone)
+        [void]$cboTimeZone.Items.Add($timeZone)
     }
 
     # Add validation for DisplayName
@@ -2596,9 +2596,9 @@ function New-UserProperties {
                 FirstName         = $FirstName
                 LastName          = $LastName
                 DisplayName       = $DisplayName
-                userPrincipalName = $userPrincipalName
-                Email             = $userPrincipalName
                 mailNickname      = $accountName
+                Email             = $userPrincipalName
+                userPrincipalName = $userPrincipalName
             }
 
         } else {
