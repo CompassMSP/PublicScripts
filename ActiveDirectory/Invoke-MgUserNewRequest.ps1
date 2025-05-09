@@ -4508,6 +4508,7 @@ try {
     }
 
     # Step: Send notifications
+    $MgUserManager = (Get-MgUserManager -UserId $newUserProperties.Email | Select-Object @{n = 'Manager'; e = { $_.AdditionalProperties.userPrincipalName } }).Manager
     Write-ProgressStep -StepName 'Notifications'
     $MsgFrom = $config.Email.NotificationFrom
     $CcAddress = $config.Email.NotificationCcAddress
@@ -4542,6 +4543,7 @@ Department: $($MgUser.department)<br>
 OfficeLocation:  $($MgUser.officeLocation)<br>
 Call Center: $callCenter<br>
 User to Copy: $($userInput.userToCopy)<br>
+Manager: $($MgUserManager)
 <p>
 Please do not send the welcome email with the account setup.<br>
 <p>
