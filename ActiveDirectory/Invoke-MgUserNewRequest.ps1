@@ -2804,6 +2804,7 @@ New User Details:
 - First Name      = $($NewUserProperties.FirstName)
 - Last Name       = $($NewUserProperties.LastName)
 - SamAccountName  = $($NewUserProperties.SamAccountName)
+- $(if ($NewUserProperties.SamAccountName) { "SamAccountName = $($NewUserProperties.SamAccountName)" } elseif ($NewUserProperties.mailNickname) { "MailNickname  = $($NewUserProperties.mailNickname)" } else { "SamAccountName/MailNickname = Not specified" })
 - Destination OU  = $(if ($DestinationOU) {$DestinationOU} else {"Cloud Only"})
 - Template User   = $(if ($TemplateUser) {$TemplateUser} else {"No template user selected"})
 "@
@@ -4351,7 +4352,7 @@ try {
     Write-ProgressStep -StepName 'Mailbox Provisioning'
     Write-StatusMessage -Message "Waiting for the mailbox to provision in 365..." -Type INFO
     # Wait for mailbox to be created
-    if (-not (Wait-ForMailbox -Email $MgUser.Mail)) {
+    if (-not (Wait-ForMailbox -Email $newUserProperties.Email)) {
         Write-StatusMessage -Message "Mailbox not yet provisioned. Some group operations may fail. Please verify group assignments script completes." -Type WARN
     }
 
