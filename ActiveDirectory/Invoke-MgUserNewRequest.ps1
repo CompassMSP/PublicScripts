@@ -1529,6 +1529,8 @@ function Get-NewUserRequest {
         $Variable = New-Variable -Name $Name -Value $Window.FindName($Name) -Force
     }
 
+    $chkCloudOnly.IsChecked = $true
+
     # Function to load JSON data
     function Invoke-LoadJsonFile {
         $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -1820,7 +1822,7 @@ function Get-NewUserRequest {
         if ($chkCloudOnly.IsChecked -eq $true) {
             $formData.cloudOnly = $true
         } else {
-            $formData.cloudOnly = $false
+            $formData.cloudOnly = $true
         }
 
         return $formData
