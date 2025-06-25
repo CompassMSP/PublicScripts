@@ -1736,6 +1736,16 @@ function Remove-UserSessions {
         # Remove authentication methods
         Write-StatusMessage -Message "Removing user authentication methods" -Type INFO
 
+        # Define mapping of auth types to URI segments and log messages
+        $authMethodMap = @{
+            "#microsoft.graph.phoneAuthenticationMethod"                   = @{ Path = "phoneMethods"; Message = "Removed Phone Authentication Method" }
+            "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod" = @{ Path = "windowsHelloForBusinessMethods"; Message = "Removed Windows Hello for Business Method" }
+            "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod"  = @{ Path = "microsoftAuthenticatorMethods"; Message = "Removed Microsoft Authenticator Method" }
+            "#microsoft.graph.fido2AuthenticationMethod"                   = @{ Path = "fido2Methods"; Message = "Removed FIDO2 Authenticator Method" }
+            "#microsoft.graph.softwareOathAuthenticationMethod"            = @{ Path = "softwareOathMethods"; Message = "Removed Software Oath Method" }
+            "#microsoft.graph.temporaryAccessPassAuthenticationMethod"     = @{ Path = "temporaryAccessPassMethods"; Message = "Removed Temporary Access Pass Method" }
+        }
+
         try {
             # Get authentication methods
             $authMethods = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/methods" -ErrorAction Stop
@@ -1744,45 +1754,23 @@ function Remove-UserSessions {
                 $authType = $authMethod.'@odata.type'
                 $methodId = $authMethod.id
 
+                # Skip non-removable or unknown methods
+                if ($authType -eq "#microsoft.graph.passwordAuthenticationMethod") {
+                    Write-StatusMessage -Message "Skipping password authentication method (cannot be removed)" -Type INFO
+                    continue
+                }
+
+                if (-not $authMethodMap.ContainsKey($authType)) {
+                    Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type WARNING
+                    continue
+                }
+
+                $methodInfo = $authMethodMap[$authType]
+                $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/$($methodInfo.Path)/$methodId"
+
                 try {
-                    switch ($authType) {
-                        "#microsoft.graph.passwordAuthenticationMethod" {
-                            continue  # Can't remove password
-                        }
-                        "#microsoft.graph.phoneAuthenticationMethod" {
-                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/phoneMethods/$methodId"
-                            $msg = "Removed Phone Authentication Method"
-                        }
-                        "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod" {
-                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/windowsHelloForBusinessMethods/$methodId"
-                            $msg = "Removed Windows Hello for Business Method"
-                        }
-                        "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod" {
-                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/microsoftAuthenticatorMethods/$methodId"
-                            $msg = "Removed Microsoft Authenticator Method"
-                        }
-                        "#microsoft.graph.fido2AuthenticationMethod" {
-                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/fido2Methods/$methodId"
-                            $msg = "Removed FIDO2 Authenticator Method"
-                        }
-                        "#microsoft.graph.softwareOathAuthenticationMethod" {
-                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/softwareOathMethods/$methodId"
-                            $msg = "Removed Software Oath Method"
-                        }
-                        "#microsoft.graph.temporaryAccessPassAuthenticationMethod" {
-                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/temporaryAccessPassMethods/$methodId"
-                            $msg = "Removed Temporary Access Pass Method"
-                        }
-                        default {
-                            Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type ERROR
-                            continue
-                        }
-                    }
-
-                    # Perform the DELETE
                     Invoke-MgGraphRequest -Method DELETE -Uri $uri -ErrorAction Stop
-                    Write-StatusMessage -Message "$($msg): $methodId" -Type OK
-
+                    Write-StatusMessage -Message "$($methodInfo.Message): $methodId" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove authentication method $methodId of type $authType" -Type ERROR
                 }
@@ -1791,7 +1779,6 @@ function Remove-UserSessions {
         } catch {
             Write-StatusMessage -Message "Failed to get user authentication methods" -Type ERROR
         }
-
 
         # Remove Mobile Devices
         Write-StatusMessage -Message "Removing all mobile devices" -Type INFO
@@ -2122,7 +2109,7 @@ function Remove-UserLicenses {
                 try {
                     $licenseBody = @{
                         addLicenses    = @()
-                        removeLicenses = @(@{ skuId = $license.skuId })
+                        removeLicenses = @($license.skuId)
                     } | ConvertTo-Json -Depth 3
 
                     Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
@@ -2149,7 +2136,7 @@ function Remove-UserLicenses {
                         try {
                             $licenseBody = @{
                                 addLicenses    = @()
-                                removeLicenses = @(@{ skuId = $license.skuId })
+                                removeLicenses = @($license.skuId)
                             } | ConvertTo-Json -Depth 3
 
                             Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
@@ -2276,7 +2263,7 @@ function Start-Finalize {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User,
 
         [Parameter()]
@@ -2361,6 +2348,7 @@ $progressSteps = @(
     @{ Name = "Initialization"; Description = "Loading configuration and connecting services" }
     @{ Name = "User Input"; Description = "Gathering termination details" }
     @{ Name = "AD Tasks"; Description = "Disabling user in Active Directory" }
+    @{ Name = "Disable Entra User"; Description = "Disabling user in Entra" }
     @{ Name = "Session Cleanup"; Description = "Removing user sessions and devices" }
     @{ Name = "Exchange Tasks"; Description = "Convert to SharedMailbox and setting forwarding/grant acces" }
     @{ Name = "Directory Roles"; Description = "Removing from directory roles" }
