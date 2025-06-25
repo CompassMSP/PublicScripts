@@ -1,4 +1,6 @@
-#requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync -RunAsAdministrator
+#requires -Version 7.0
+#requires -RunAsAdministrator
+#requires -Modules ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups
 
 <#
 .SYNOPSIS
@@ -15,7 +17,7 @@
     - OneDrive access delegation
     - OneDrive read-only setting
 
-    IMPORTANT: This script must be run from the Primary Domain Controller with AD Connect installed.
+    IMPORTANT: This script must be run from the Primary Domain Controller.
 
     NOTE: Sensitive information (app IDs, certificates, etc.) is stored in a secure configuration file managed by Get-ScriptConfig.
     The config file should be placed at: C:\ProgramData\CompassScripts\config.json
@@ -28,12 +30,15 @@
 .NOTES
     Author: Chris Williams
     Created: 2021-12-20
-    Last Modified: 2025-04-29
+    Last Modified: 2025-06-25
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
+    4.2.0      2025-06-25   Minor Error Fix:
+                                - Fixed errors when running Entra only offboarding.
+
     4.1.0      2025-04-29   Feature Updates:
                                 - Added Cloud Only Switch
 
@@ -1328,10 +1333,15 @@ function Get-TerminationPrerequisites {
 
         if ($mgUser.OnPremisesSyncEnabled -ne $true) {
             $SkipADTasks = $true
-            $checkUserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
-            if ($checkUserFromAD) {
-                $SkipADTasks = $false
-                $AccountNotLinked = $true
+
+            if (Get-Command Get-ADUser -ErrorAction SilentlyContinue) {
+                $checkUserFromAD = Get-ADUser -Filter "userPrincipalName -eq '$User'" -Properties MemberOf -ErrorAction SilentlyContinue
+                if ($checkUserFromAD) {
+                    $SkipADTasks = $false
+                    $AccountNotLinked = $true
+                }
+            } else {
+                Write-Verbose "Get-ADUser is not available. Skipping AD check."
             }
         }
 
@@ -2226,7 +2236,7 @@ function Set-TerminatedOneDrive {
     }
 }
 
-function Start-ADSyncAndFinalize {
+function Start-Finalize {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -2247,7 +2257,7 @@ function Start-ADSyncAndFinalize {
         [string]$ExportPath
     )
 
-    # Start AD Sync
+    <# Start AD Sync
     Write-StatusMessage -Message "Starting AD sync cycle" -Type INFO
     try {
         Import-Module -Name ADSync -UseWindowsPowerShell -WarningAction:SilentlyContinue -ErrorAction Stop
@@ -2263,6 +2273,7 @@ function Start-ADSyncAndFinalize {
             throw
         }
     }
+    #>
 
     # Build summary parts
     $summaryParts = @(
@@ -2511,7 +2522,7 @@ The following user need to be removed from 8x8. <p> $($userInfo.selectMgUser.Dis
     # Step: Final Sync and Summary
     Write-ProgressStep -StepName 'Summary'
 
-    Start-ADSyncAndFinalize -User $userInfo.selectMgUser `
+    Start-Finalize -User $userInfo.selectMgUser `
         -GrantUserFullControl $GrantUserFullControl `
         -SetUserMailFWD $SetUserMailFWD `
         -GrantUserOneDriveAccess $GrantUserOneDriveAccess `

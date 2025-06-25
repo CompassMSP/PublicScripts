@@ -1,6 +1,6 @@
 #requires -Version 7.0
 #requires -RunAsAdministrator
-#requires -Modules activeDirectory,ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups,ADSync
+#requires -Modules ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups
 <#
 TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .SYNOPSIS
@@ -8,7 +8,7 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 
 .DESCRIPTION
     This script creates a new user account by copying attributes and group memberships
-    from an existing template user. It handles both on-premises AD and Microsoft 365 setup.
+    from an existing template user. It handles ONLY Microsoft Entra/365 setup.
 
     The script will display a GUI window to collect:
     - New user's full name
@@ -17,7 +17,7 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
     - Required license selection
     - Optional ancillary licenses
 
-    IMPORTANT: This script must be run from the Primary Domain Controller with AD Connect installed.
+    IMPORTANT: This script must be run from the Primary Domain Controller.
 
     NOTE: Sensitive information (app IDs, certificates, etc.) is stored in a secure configuration file managed by Get-ScriptConfig.
     The config file should be placed at: C:\ProgramData\CompassScripts\config.json
@@ -30,12 +30,16 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2025-04-29
+    Last Modified: 2025-06-25
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  ---------------------------------------------------
+    4.2.0      2025-06-25   Feature Updates:
+                                - Removed AD Tasks as Compass is now Entra Only
+                                - NOTE: Script will not longer create AD Users
+
     4.1.0      2025-04-29   Feature Updates:
                                 - Added Cloud Only Switch
 
@@ -1019,7 +1023,7 @@ function Get-NewUserRequest {
                 <Button x:Name="btnLoadJson" Content="Load JSON" Style="{DynamicResource AccentButtonStyle}" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnSaveJson" Content="Save JSON" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnRefreshLicenses" Content="Refresh Licenses" Width="120" Height="32" Margin="0,0,10,0"/>
-                <CheckBox x:Name="chkCloudOnly" Content="Cloud-Only Mode (Skip AD)" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                <CheckBox x:Name="cbTestMode" Content="Test Mode" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </WrapPanel>
         </StackPanel>
 
@@ -1502,7 +1506,6 @@ function Get-NewUserRequest {
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <CheckBox x:Name="cbTestMode" Content="Test Mode" Grid.Column="0"/>
                 <TextBlock x:Name="tbStatus" Grid.Column="1" VerticalAlignment="Center" Margin="20,0"/>
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button x:Name="btnSubmit" Content="Submit" Style="{DynamicResource AccentButtonStyle}" Padding="20,5" Height="32" Margin="0,0,10,0"/>
@@ -1528,8 +1531,6 @@ function Get-NewUserRequest {
         $Name = $_.Name
         $Variable = New-Variable -Name $Name -Value $Window.FindName($Name) -Force
     }
-
-    $chkCloudOnly.IsChecked = $true
 
     # Function to load JSON data
     function Invoke-LoadJsonFile {
@@ -1786,7 +1787,7 @@ function Get-NewUserRequest {
             country                = Get-ValueOrNull $txtCountry.Text
             departmentGroupOptions = @()
             testModeEnabled        = $false
-            cloudOnly              = $false
+            cloudOnly              = $true
         }
 
         # Store required licenses in an array of objects with DisplayName and SkuId
@@ -1817,12 +1818,6 @@ function Get-NewUserRequest {
             $formData.testModeEnabled = $true
         } else {
             $formData.testModeEnabled = $false
-        }
-
-        if ($chkCloudOnly.IsChecked -eq $true) {
-            $formData.cloudOnly = $true
-        } else {
-            $formData.cloudOnly = $true
         }
 
         return $formData
@@ -2323,73 +2318,6 @@ function New-DuplicatePromptForm {
 
 # Main Exection Functions
 
-function Get-ADUserCopiedAttributes {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [string]$UserToCopy
-    )
-
-    try {
-        Write-StatusMessage -Message "Getting template user details for: $UserToCopy" -Type INFO
-
-        $adUserParams = @{
-            Filter      = "DisplayName -eq '$UserToCopy' -or UserPrincipalName -eq '$UserToCopy'"
-            Properties  = @(
-                'Company',
-                'physicalDeliveryOfficeName', # ldapDisplayName for Office
-                'Title',
-                'Department',
-                'facsimileTelephoneNumber',
-                'streetAddress'
-                'l', # ldapDisplayName for City
-                'st', # ldapDisplayName for State
-                'postalCode',
-                'c', # ldapDisplayName for Country
-                'Manager',
-                'DistinguishedName'
-            )
-            ErrorAction = 'Stop'
-        }
-
-        $templateUser = Get-ADUser @adUserParams
-
-        # Check for null or multiple users
-        if ($null -eq $templateUser) {
-            Write-StatusMessage -Message "Could not find user $UserToCopy in AD to copy from" -Type ERROR
-            Exit-Script -Message "Template user not found: $UserToCopy" -ExitCode UserNotFound
-        }
-
-        if ($templateUser.Count -gt 1) {
-            Write-StatusMessage -Message "Found multiple users with DisplayName: $UserToCopy" -Type ERROR
-            Exit-Script -Message "Multiple template users found - please check AD for duplicate DisplayName attributes" -ExitCode DuplicateUser
-        }
-
-        Write-StatusMessage -Message "Successfully retrieved template user details" -Type OK
-
-        Write-StatusMessage -Message "Copying attributes from template user: $($TemplateUser.SamAccountName)" -Type INFO
-        return [pscustomobject]@{
-            templateUserUPN = $templateUser.UserPrincipalName
-            templateOU      = $templateUser.DistinguishedName.split(",", 2)[1]
-            companyName     = $templateUser.Company
-            officeLocation  = $templateUser.physicalDeliveryOfficeName
-            jobTitle        = $templateUser.Title
-            department      = $templateUser.Department
-            faxNumber       = $templateUser.facsimileTelephoneNumber
-            streetAddress   = $templateUser.streetAddress
-            city            = $templateUser.l
-            state           = $templateUser.st
-            postalCode      = $templateUser.postalCode
-            country         = $templateUser.c
-            templateManager = $templateUser.manager
-        }
-
-    } catch {
-        Write-StatusMessage -Message "Failed to get template user: $_" -Type ERROR
-        Exit-Script -Message "Critical error getting template user" -ExitCode GeneralError
-    }
-}
-
 function Get-EntraUserCopiedAttributes {
     [CmdletBinding()]
     param (
@@ -2448,14 +2376,11 @@ function Get-TemplateUser {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
-        [string]$UserToCopy,
-
-        [Parameter()]
-        [bool]$CloudOnly
+        [string]$UserToCopy
     )
 
     try {
-        Write-StatusMessage -Message "Getting template user details for: $UserToCopy (Mode: $(if ($CloudOnly) { 'Cloud-Only' } else { 'AD + Cloud' }))" -Type INFO
+        Write-StatusMessage -Message "Getting template user details for: $UserToCopy" -Type INFO
 
         $templateData = @{
             TemplateUser        = $null
@@ -2465,44 +2390,24 @@ function Get-TemplateUser {
             DestinationOU       = $null
         }
 
-        if ($CloudOnly) {
-            # Cloud-Only Mode: Get Microsoft 365 attributes
-            try {
-                $entraUser = Get-EntraUserCopiedAttributes -UserToCopy $UserToCopy
-                if (-not $entraUser) {
-                    Write-StatusMessage -Message "Could not find user $UserToCopy in Microsoft 365" -Type ERROR
-                    Exit-Script -Message "Template user not found: $UserToCopy" -ExitCode UserNotFound
-                }
-
-                $templateData.TemplateUser = $entraUser.templateUserUPN
-                $templateData.TemplateAttributes = $entraUser
-                $templateData.TemplateUserManager = $entraUser.templateManager
-                $templateData.Domain = $entraUser.templateUserUPN -replace '.+?(?=@)'
-                $templateData.DestinationOU = $null  # Not needed for cloud-only
-
-            } catch {
-                Write-StatusMessage -Message "Error getting Microsoft 365 template user: $_" -Type ERROR
-                Exit-Script -Message "Critical error getting Microsoft 365 template user" -ExitCode GeneralError
+        # Get Microsoft 365 attributes
+        try {
+            $entraUser = Get-EntraUserCopiedAttributes -UserToCopy $UserToCopy
+            if (-not $entraUser) {
+                Write-StatusMessage -Message "Could not find user $UserToCopy in Microsoft 365" -Type ERROR
+                Exit-Script -Message "Template user not found: $UserToCopy" -ExitCode UserNotFound
             }
-        } else {
-            # AD Mode: Get attributes from AD only
-            try {
-                $adUser = Get-ADUserCopiedAttributes -UserToCopy $UserToCopy
-                if (-not $adUser) {
-                    Exit-Script -Message "Failed to get template user: $UserToCopy" -ExitCode ConfigError
-                }
 
-                $templateData.TemplateUser = $adUser.templateUserUPN
-                $templateData.TemplateAttributes = $adUser
-                $templateData.TemplateUserManager = $adUser.templateManager
-                $templateData.Domain = $adUser.templateUserUPN -replace '.+?(?=@)'
-                $templateData.DestinationOU = $adUser.templateOU
+            $templateData.TemplateUser = $entraUser.templateUserUPN
+            $templateData.TemplateAttributes = $entraUser
+            $templateData.TemplateUserManager = $entraUser.templateManager
+            $templateData.Domain = $entraUser.templateUserUPN -replace '.+?(?=@)'
 
-            } catch {
-                Write-StatusMessage -Message "Error getting AD template user: $_" -Type ERROR
-                Exit-Script -Message "Critical error getting AD template user" -ExitCode GeneralError
-            }
+        } catch {
+            Write-StatusMessage -Message "Error getting Microsoft 365 template user: $_" -Type ERROR
+            Exit-Script -Message "Critical error getting Microsoft 365 template user" -ExitCode GeneralError
         }
+
 
         Write-StatusMessage -Message "Successfully retrieved template user details" -Type OK
         return $templateData
@@ -2521,9 +2426,6 @@ function New-UserProperties {
 
         [Parameter(Mandatory)]
         [string]$Domain,
-
-        [Parameter()]
-        [bool]$CloudOnly = $false,
 
         [Parameter()]
         [string]$FirstName,
@@ -2557,117 +2459,49 @@ function New-UserProperties {
             $accountName = ($userPrincipalName -split '@')[0]
         }
 
-        if ($CloudOnly) {
-            # Cloud-Only Mode: Check Microsoft 365 for duplicates
-            try {
-                $graphQuery = "v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
-                $mailbox = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+        # Check Microsoft 365 for duplicates
+        try {
+            $graphQuery = "v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
+            $mailbox = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
 
-                if ($mailbox.value.Count -gt 0) {
-                    Write-StatusMessage -Message "Email address $userPrincipalName (or similar) already exists for mailbox: $($mailbox.value[0].userPrincipalName)" -Type WARN
+            if ($mailbox.value.Count -gt 0) {
+                Write-StatusMessage -Message "Email address $userPrincipalName (or similar) already exists for mailbox: $($mailbox.value[0].userPrincipalName)" -Type WARN
 
-                    $formDuplicateEmail = New-DuplicatePromptForm `
-                        -Title "Duplicate Email Address" `
-                        -ExistingValue $accountName `
-                        -PromptText "Please enter a different emailAddress: '$userPrincipalName' already exists."
-
-                    if ($formDuplicateEmail -ne $accountName) {
-                        $accountName = $formDuplicateEmail
-                        $userPrincipalName = ($accountName + $Domain).ToLower()
-
-                        # Verify the new email is unique
-                        $graphQuery = "v1.0/users?`$filter=mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
-                        $checkMailbox = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
-
-                        if ($checkMailbox.value.Count -gt 0) {
-                            Write-StatusMessage -Message "New email address $userPrincipalName is also in use by: $($checkMailbox.value[0].displayName)" -Type ERROR
-                            Exit-Script -Message "Unable to generate unique email address" -ExitCode DuplicateUser
-                        }
-                        Write-StatusMessage -Message "Using custom email address: $userPrincipalName" -Type OK
-                    } else {
-                        Write-StatusMessage -Message "User cancelled email address selection" -Type WARN
-                        Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
-                    }
-                }
-            } catch {
-                Write-StatusMessage -Message "Graph API validation passed - mailbox does not exist" -Type OK
-            }
-
-            # Return Cloud-Only properties
-            return @{
-                FirstName         = $FirstName
-                LastName          = $LastName
-                DisplayName       = $DisplayName
-                mailNickname      = $accountName
-                Email             = $userPrincipalName
-                userPrincipalName = $userPrincipalName
-            }
-
-        } else {
-            # AD Mode: Check for duplicate samAccountName in AD
-            if (Get-ADUser -Filter "SamAccountName -eq '$accountName'" -ErrorAction SilentlyContinue) {
-                Write-StatusMessage -Message "SamAccountName $accountName already exists" -Type WARN
-
-                $formDuplicateSam = New-DuplicatePromptForm `
-                    -Title "Duplicate SAM Account Name" `
+                $formDuplicateEmail = New-DuplicatePromptForm `
+                    -Title "Duplicate Email Address" `
                     -ExistingValue $accountName `
-                    -PromptText "Please enter a different samAccountName: '$accountName' already exists."
+                    -PromptText "Please enter a different emailAddress: '$userPrincipalName' already exists."
 
-                if ($formDuplicateSam -ne $accountName) {
-                    $accountName = $formDuplicateSam
-                    if (Get-ADUser -Filter "SamAccountName -eq '$accountName'" -ErrorAction SilentlyContinue) {
-                        Write-StatusMessage -Message "New SamAccountName $accountName is also in use" -Type ERROR
-                        Exit-Script -Message "Unable to generate unique SamAccountName" -ExitCode DuplicateUser
-                    }
-                    Write-StatusMessage -Message "Using custom SamAccountName: $accountName" -Type OK
+                if ($formDuplicateEmail -ne $accountName) {
+                    $accountName = $formDuplicateEmail
                     $userPrincipalName = ($accountName + $Domain).ToLower()
+
+                    # Verify the new email is unique
+                    $graphQuery = "v1.0/users?`$filter=mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
+                    $checkMailbox = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+
+                    if ($checkMailbox.value.Count -gt 0) {
+                        Write-StatusMessage -Message "New email address $userPrincipalName is also in use by: $($checkMailbox.value[0].displayName)" -Type ERROR
+                        Exit-Script -Message "Unable to generate unique email address" -ExitCode DuplicateUser
+                    }
+                    Write-StatusMessage -Message "Using custom email address: $userPrincipalName" -Type OK
                 } else {
-                    Write-StatusMessage -Message "User cancelled SAM account name selection" -Type WARN
+                    Write-StatusMessage -Message "User cancelled email address selection" -Type WARN
                     Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
                 }
             }
+        } catch {
+            Write-StatusMessage -Message "Graph API validation passed - mailbox does not exist" -Type OK
+        }
 
-            # Check Exchange mailbox
-            try {
-                $mailbox = Get-Mailbox -Filter "EmailAddresses -like '*$userPrincipalName*'" -ErrorAction Stop
-                if ($mailbox) {
-                    Write-StatusMessage -Message "Email address $userPrincipalName (or similar) already exists for mailbox: $($mailbox.UserPrincipalName)" -Type WARN
-
-                    $formDuplicateEmail = New-DuplicatePromptForm `
-                        -Title "Duplicate Email Address" `
-                        -ExistingValue $accountName `
-                        -PromptText "Please enter a different emailAddress: '$userPrincipalName' already exists."
-
-                    if ($formDuplicateEmail -ne $accountName) {
-                        $accountName = $formDuplicateEmail
-                        $userPrincipalName = ($accountName + $Domain).ToLower()
-                        try {
-                            $checkMailbox = Get-Mailbox -Filter "EmailAddresses -like '*$userPrincipalName*'" -ErrorAction Stop
-                            if ($checkMailbox) {
-                                Write-StatusMessage -Message "New email address $userPrincipalName is also in use by: $($checkMailbox.displayName)" -Type ERROR
-                                Exit-Script -Message "Unable to generate unique email address" -ExitCode DuplicateUser
-                            }
-                        } catch [Microsoft.Exchange.Management.RestApiClient.RestApiException] {
-                            Write-StatusMessage -Message "Using custom email address: $userPrincipalName" -Type OK
-                        }
-                    } else {
-                        Write-StatusMessage -Message "User cancelled email address selection" -Type WARN
-                        Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
-                    }
-                }
-            } catch [Microsoft.Exchange.Management.RestApiClient.RestApiException] {
-                Write-StatusMessage -Message "Exchange validation passed - mailbox does not exist" -Type OK
-            }
-
-            # Return AD properties
-            return @{
-                FirstName         = $FirstName
-                LastName          = $LastName
-                DisplayName       = $DisplayName
-                userPrincipalName = $userPrincipalName
-                Email             = $userPrincipalName
-                SamAccountName    = $accountName
-            }
+        # Return Cloud-Only properties
+        return @{
+            FirstName         = $FirstName
+            LastName          = $LastName
+            DisplayName       = $DisplayName
+            mailNickname      = $accountName
+            Email             = $userPrincipalName
+            userPrincipalName = $userPrincipalName
         }
 
     } catch {
@@ -2784,9 +2618,6 @@ function Confirm-UserCreation {
         [hashtable]$NewUserProperties,
 
         [Parameter()]
-        [string]$DestinationOU,
-
-        [Parameter()]
         [string]$TemplateUser,
 
         [Parameter(Mandatory)]
@@ -2805,9 +2636,6 @@ New User Details:
 - Password        = $Password
 - First Name      = $($NewUserProperties.FirstName)
 - Last Name       = $($NewUserProperties.LastName)
-- SamAccountName  = $($NewUserProperties.SamAccountName)
-- $(if ($NewUserProperties.SamAccountName) { "SamAccountName = $($NewUserProperties.SamAccountName)" } elseif ($NewUserProperties.mailNickname) { "MailNickname  = $($NewUserProperties.mailNickname)" } else { "SamAccountName/MailNickname = Not specified" })
-- Destination OU  = $(if ($DestinationOU) {$DestinationOU} else {"Cloud Only"})
 - Template User   = $(if ($TemplateUser) {$TemplateUser} else {"No template user selected"})
 "@
 
@@ -2833,57 +2661,33 @@ function New-UserStandard {
     [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory)][hashtable]$NewUser,
-        [Parameter()][string]$DestinationOU,
-        [Parameter()][string]$Password,
-        [Parameter()][System.Security.SecureString]$SecureStringPassword,
-        [Parameter(Mandatory)][bool]$CloudOnly
+        [Parameter()][string]$Password
     )
 
     try {
-        if ($CloudOnly) {
-            Write-StatusMessage -Message "Creating new user in Microsoft Graph: $($NewUser.DisplayName)" -Type INFO
 
-            $newUserBody = @{
-                accountEnabled    = $true
-                displayName       = $NewUser.DisplayName
-                givenName         = $NewUser.FirstName
-                surname           = $NewUser.LastName
-                userPrincipalName = $NewUser.UserPrincipalName
-                mailNickname      = $NewUser.mailNickname
-                mail              = $NewUser.mail
-                passwordProfile   = @{
-                    forceChangePasswordNextSignIn = $true
-                    password                      = $Password
-                }
-            }
+        Write-StatusMessage -Message "Creating new user in Microsoft Graph: $($NewUser.DisplayName)" -Type INFO
 
-            if ($PSCmdlet.ShouldProcess($NewUser.DisplayName, "Create user in Microsoft Graph")) {
-                $newUser = Invoke-MgGraphRequest -Method POST -Uri "v1.0/users" -Body ($newUserBody | ConvertTo-Json -Depth 10)
-                Write-StatusMessage -Message "Successfully created user in Microsoft Graph: $($NewUser.DisplayName)" -Type OK
-                return $newUser
-            }
-        } else {
-            Write-StatusMessage -Message "Creating new AD user: $($NewUser.DisplayName)" -Type INFO
-            $newUserParams = @{
-                Name              = "$($NewUser.FirstName) $($NewUser.LastName)"
-                SamAccountName    = $NewUser.SamAccountName
-                UserPrincipalName = $NewUser.UserPrincipalName
-                EmailAddress      = $NewUser.Email
-                DisplayName       = $NewUser.DisplayName
-                GivenName         = $NewUser.FirstName
-                Surname           = $NewUser.LastName
-                AccountPassword   = $SecureStringPassword
-                Path              = $DestinationOU
-                OtherAttributes   = @{ proxyAddresses = "SMTP:$($NewUser.Email)" }
-                Enabled           = $true
-                ErrorAction       = 'Stop'
-            }
-
-            if ($PSCmdlet.ShouldProcess($NewUser.DisplayName, "Create AD user")) {
-                New-ADUser @newUserParams
-                Write-StatusMessage -Message "Successfully created AD user: $($NewUser.DisplayName)" -Type OK
+        $newUserBody = @{
+            accountEnabled    = $true
+            displayName       = $NewUser.DisplayName
+            givenName         = $NewUser.FirstName
+            surname           = $NewUser.LastName
+            userPrincipalName = $NewUser.UserPrincipalName
+            mailNickname      = $NewUser.mailNickname
+            mail              = $NewUser.mail
+            passwordProfile   = @{
+                forceChangePasswordNextSignIn = $true
+                password                      = $Password
             }
         }
+
+        if ($PSCmdlet.ShouldProcess($NewUser.DisplayName, "Create user in Microsoft Graph")) {
+            $newUser = Invoke-MgGraphRequest -Method POST -Uri "v1.0/users" -Body ($newUserBody | ConvertTo-Json -Depth 10)
+            Write-StatusMessage -Message "Successfully created user in Microsoft Graph: $($NewUser.DisplayName)" -Type OK
+            return $newUser
+        }
+
     } catch {
         $target = if ($CloudOnly) { "user in Microsoft Graph" } else { "AD user" }
         Write-StatusMessage -Message "Failed to create $($target): $_" -Type ERROR
@@ -2901,10 +2705,7 @@ function Set-UserOptionalFields {
         [pscustomobject]$UserInput,
 
         [Parameter()]
-        [pscustomobject]$TemplateAttributes,
-
-        [Parameter()]
-        [bool]$CloudOnly = $false
+        [pscustomobject]$TemplateAttributes
     )
 
     function Format-PhoneNumber {
@@ -2998,61 +2799,36 @@ function Set-UserOptionalFields {
             $mergedInput.faxNumber = Format-PhoneNumber -PhoneNumber $mergedInput.faxNumber
         }
 
-        if ($CloudOnly) {
-            # Microsoft 365 Update
-            $updateBody = @{}
-            if ($mergedInput.companyName) { $updateBody.companyName = $mergedInput.companyName }
-            if ($mergedInput.employeeHireDate) { $updateBody.employeeHireDate = $mergedInput.employeeHireDate }
-            if ($mergedInput.officeLocation) { $updateBody.officeLocation = $mergedInput.officeLocation }
-            if ($mergedInput.department) { $updateBody.department = $mergedInput.department }
-            if ($mergedInput.jobTitle) { $updateBody.jobTitle = $mergedInput.jobTitle }
-            if ($mergedInput.mobilePhone) { $updateBody.mobilePhone = $mergedInput.mobilePhone }
-            if ($mergedInput.businessPhone) { $updateBody.businessPhones = @($mergedInput.businessPhone) }
-            if ($mergedInput.faxNumber) { $updateBody.faxNumber = $mergedInput.faxNumber }
-            if ($mergedInput.streetAddress) { $updateBody.streetAddress = $mergedInput.streetAddress }
-            if ($mergedInput.city) { $updateBody.city = $mergedInput.city }
-            if ($mergedInput.state) { $updateBody.state = $mergedInput.state }
-            if ($mergedInput.postalCode) { $updateBody.postalCode = $mergedInput.postalCode }
-            if ($mergedInput.country) { $updateBody.country = $mergedInput.country }
+        # Microsoft 365 Update
+        $updateBody = @{}
+        if ($mergedInput.companyName) { $updateBody.companyName = $mergedInput.companyName }
+        if ($mergedInput.employeeHireDate) { $updateBody.employeeHireDate = $mergedInput.employeeHireDate }
+        if ($mergedInput.officeLocation) { $updateBody.officeLocation = $mergedInput.officeLocation }
+        if ($mergedInput.department) { $updateBody.department = $mergedInput.department }
+        if ($mergedInput.jobTitle) { $updateBody.jobTitle = $mergedInput.jobTitle }
+        if ($mergedInput.mobilePhone) { $updateBody.mobilePhone = $mergedInput.mobilePhone }
+        if ($mergedInput.businessPhone) { $updateBody.businessPhones = @($mergedInput.businessPhone) }
+        if ($mergedInput.faxNumber) { $updateBody.faxNumber = $mergedInput.faxNumber }
+        if ($mergedInput.streetAddress) { $updateBody.streetAddress = $mergedInput.streetAddress }
+        if ($mergedInput.city) { $updateBody.city = $mergedInput.city }
+        if ($mergedInput.state) { $updateBody.state = $mergedInput.state }
+        if ($mergedInput.postalCode) { $updateBody.postalCode = $mergedInput.postalCode }
+        if ($mergedInput.country) { $updateBody.country = $mergedInput.country }
 
-            if ($updateBody.Count -gt 0) {
-                # Get the user ID using the userPrincipalName
-                $userQuery = "v1.0/users?`$filter=userPrincipalName eq '$Identity'"
-                $user = Invoke-MgGraphRequest -Method GET -Uri $userQuery
+        if ($updateBody.Count -gt 0) {
+            # Get the user ID using the userPrincipalName
+            $userQuery = "v1.0/users?`$filter=userPrincipalName eq '$Identity'"
+            $user = Invoke-MgGraphRequest -Method GET -Uri $userQuery
 
-                if ($user.value.Count -eq 0) {
-                    Write-StatusMessage -Message "User not found: $Identity" -Type ERROR
-                    return
-                }
-
-                $userId = $user.value[0].id
-                Invoke-MgGraphRequest -Method PATCH -Uri "v1.0/users/$userId" -Body ($updateBody | ConvertTo-Json -Depth 10)
-            }
-        } else {
-            # AD Update
-            $adUpdate = @{
-                company                    = $mergedInput.companyName
-                physicalDeliveryOfficeName = $mergedInput.officeLocation
-                department                 = $mergedInput.department
-                title                      = $mergedInput.jobTitle
-                description                = $mergedInput.jobTitle
-                mobile                     = $mergedInput.mobilePhone
-                telephoneNumber            = $mergedInput.businessPhone
-                facsimileTelephoneNumber   = $mergedInput.faxNumber
-                streetAddress              = $mergedInput.streetAddress
-                l                          = $mergedInput.city
-                st                         = $mergedInput.state
-                postalCode                 = $mergedInput.postalCode
-                c                          = $mergedInput.country
+            if ($user.value.Count -eq 0) {
+                Write-StatusMessage -Message "User not found: $Identity" -Type ERROR
+                return
             }
 
-            $filtered = $adUpdate.GetEnumerator() | Where-Object { $_.Value }
-            if ($filtered.Count -gt 0) {
-                $update = @{}
-                foreach ($item in $filtered) { $update[$item.Key] = $item.Value }
-                Set-ADUser -Identity $Identity -Replace $update
-            }
+            $userId = $user.value[0].id
+            Invoke-MgGraphRequest -Method PATCH -Uri "v1.0/users/$userId" -Body ($updateBody | ConvertTo-Json -Depth 10)
         }
+
 
         Write-StatusMessage -Message "Successfully set optional fields for user: $Identity" -Type OK
     } catch {
@@ -3076,240 +2852,36 @@ function Set-UserManager {
     try {
         Write-StatusMessage -Message "Setting manager for user: $Identity (Mode: $(if ($CloudOnly) { 'Cloud-Only' } else { 'AD + Cloud' }))" -Type INFO
 
-        if ($CloudOnly) {
-            # Microsoft 365 manager setting
-            $graphQuery = "v1.0/users?`$filter=displayName eq '$ManagerInput' or userPrincipalName eq '$ManagerInput'"
-            $manager = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+        # Microsoft 365 manager setting
+        $graphQuery = "v1.0/users?`$filter=displayName eq '$ManagerInput' or userPrincipalName eq '$ManagerInput'"
+        $manager = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
 
-            if ($manager.value.Count -gt 0) {
-                $managerId = $manager.value[0].id
+        if ($manager.value.Count -gt 0) {
+            $managerId = $manager.value[0].id
 
-                # Get the user's ID
-                $graphQuery = "v1.0/users?`$filter=userPrincipalName eq '$Identity'"
-                $user = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+            # Get the user's ID
+            $graphQuery = "v1.0/users?`$filter=userPrincipalName eq '$Identity'"
+            $user = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
 
-                if ($user.value.Count -gt 0) {
-                    $userId = $user.value[0].id
+            if ($user.value.Count -gt 0) {
+                $userId = $user.value[0].id
 
-                    # Set the manager relationship
-                    $updateBody = @{
-                        "@odata.id" = "https://graph.microsoft.com/v1.0/users/$managerId"
-                    }
-
-                    Invoke-MgGraphRequest -Method PUT -Uri "v1.0/users/$userId/manager/`$ref" -Body ($updateBody | ConvertTo-Json)
-                    Write-StatusMessage -Message "Successfully set manager for user: $Identity" -Type OK
-                } else {
-                    Write-StatusMessage -Message "User '$Identity' not found in Microsoft Graph." -Type WARN
+                # Set the manager relationship
+                $updateBody = @{
+                    "@odata.id" = "https://graph.microsoft.com/v1.0/users/$managerId"
                 }
-            } else {
-                Write-StatusMessage -Message "Manager '$ManagerInput' not found in Microsoft Graph." -Type WARN
-            }
-        } else {
-            # AD manager setting
-            $manager = Get-ADUser -Filter "DisplayName -eq '$ManagerInput' -or UserPrincipalName -eq '$ManagerInput' -or DistinguishedName -eq '$ManagerInput'" -Properties DistinguishedName
-            if ($manager) {
-                Set-ADUser -Identity $Identity -Manager $manager.DistinguishedName
+
+                Invoke-MgGraphRequest -Method PUT -Uri "v1.0/users/$userId/manager/`$ref" -Body ($updateBody | ConvertTo-Json)
                 Write-StatusMessage -Message "Successfully set manager for user: $Identity" -Type OK
             } else {
-                Write-StatusMessage -Message "Manager '$ManagerInput' not found in AD." -Type WARN
+                Write-StatusMessage -Message "User '$Identity' not found in Microsoft Graph." -Type WARN
             }
+        } else {
+            Write-StatusMessage -Message "Manager '$ManagerInput' not found in Microsoft Graph." -Type WARN
         }
+
     } catch {
         Write-StatusMessage -Message "Failed to set manager for user: $Identity - $_" -Type ERROR
-    }
-}
-
-function Copy-UserADGroups {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$SourceUser,
-
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$TargetUser
-    )
-
-    try {
-        Write-StatusMessage -Message "Copying AD group memberships from $SourceUser to $TargetUser" -Type INFO
-
-        # Get source user and their groups
-        try {
-            $sourceGroups = Get-ADUser -Filter "DisplayName -eq '$SourceUser' -or UserPrincipalName -eq '$SourceUser'" -Properties MemberOf -ErrorAction Stop
-            if (-not $sourceGroups) {
-                Write-StatusMessage -Message "Source user not found: $SourceUser" -Type ERROR
-                return
-            }
-            Write-StatusMessage -Message "Found source user with $($sourceGroups.MemberOf.Count) groups" -Type INFO
-        } catch {
-            Write-StatusMessage -Message "Failed to get source user groups: $_" -Type ERROR
-            return
-        }
-
-        # Get target user
-        try {
-            $getTargetUser = Get-ADUser -Filter "DisplayName -eq '$TargetUser' -or UserPrincipalName -eq '$TargetUser'" -Properties MemberOf -ErrorAction Stop
-            if (-not $getTargetUser) {
-                Write-StatusMessage -Message "Target user not found: $TargetUser" -Type ERROR
-                return
-            }
-            Write-StatusMessage -Message "Found target user" -Type INFO
-        } catch {
-            Write-StatusMessage -Message "Failed to get target user: $_" -Type ERROR
-            return
-        }
-
-        # Calculate groups to add (groups source has that target doesn't)
-        $groupsToAdd = $sourceGroups.MemberOf | Where-Object { $getTargetUser.MemberOf -notcontains $_ }
-
-        if (-not $groupsToAdd) {
-            Write-StatusMessage -Message "No new groups to add - target user already has all source groups" -Type OK
-            return
-        }
-
-        Write-StatusMessage -Message "Adding $($groupsToAdd.Count) groups to  $TargetUser" -Type INFO
-
-        # Add groups with individual error handling
-        $successCount = 0
-        foreach ($group in $groupsToAdd) {
-            try {
-                Add-ADGroupMember -Identity $group -Members $getTargetUser -ErrorAction Stop
-                Write-StatusMessage -Message "Added to group: $((Get-ADGroup $group).Name)" -Type OK
-                $successCount++
-            } catch {
-                Write-StatusMessage -Message "Failed to add to group $((Get-ADGroup $group).Name): $_" -Type WARN
-            }
-        }
-
-        # Final status check
-        if ($successCount -eq $groupsToAdd.Count) {
-            Write-StatusMessage -Message "Successfully added all $successCount groups" -Type OK
-        } else {
-            Write-StatusMessage -Message "Added $successCount of $($groupsToAdd.Count) groups - some assignments failed" -Type WARN
-        }
-
-    } catch {
-        Write-StatusMessage -Message "Error in Copy-UserADGroups: $_" -Type ERROR
-    }
-}
-
-function Wait-ForADUserSync {
-    [CmdletBinding()]
-    [OutputType([PSCustomObject])]
-    param(
-        [Parameter(Mandatory)]
-        [string]$UserEmail,
-
-        [Parameter()]
-        [int]$MaxRetries = 5,
-
-        [Parameter()]
-        [int]$RetryIntervalSeconds = 30,
-
-        [Parameter()]
-        [int]$InitialWaitSeconds = 30,
-
-        [Parameter()]
-        [int]$SyncTimeout = 300  # 5 minutes default
-    )
-
-    Write-StatusMessage -Message "Starting Entra Connect sync process for $UserEmail" -Type INFO
-    $syncStartTime = Get-Date
-
-    try {
-        # Initial wait before starting sync
-        Write-StatusMessage -Message "Waiting $InitialWaitSeconds seconds before starting sync..." -Type INFO
-        Start-Sleep -Seconds $InitialWaitSeconds
-
-        # Start Entra Connect sync with retry logic
-        $syncStarted = $false
-        for ($i = 1; $i -le 3; $i++) {
-            try {
-                Write-StatusMessage -Message "Attempting to start Entra Connect  sync (Attempt $i of 3)" -Type INFO
-                Import-Module -Name ADSync -UseWindowsPowerShell -WarningAction:SilentlyContinue -ErrorAction Stop
-                $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
-                $syncStarted = $true
-                Write-StatusMessage -Message "Entra Connect  sync started successfully" -Type OK
-                break
-            } catch {
-                Write-StatusMessage -Message "Sync attempt $i failed: $_" -Type WARN
-                if ($i -eq 3) {
-                    Write-StatusMessage -Message "Failed to start Entra Connect sync after 3 attempts" -Type ERROR
-                    Exit-Script -Message "Entra Connect sync failed to start" -ExitCode GeneralError
-                }
-                Start-Sleep -Seconds 5
-            }
-        }
-
-        # Monitor sync progress
-        $retryCount = 0
-        do {
-            try {
-                # Check timeout
-                $elapsed = ((Get-Date) - $syncStartTime).TotalSeconds
-                if ($elapsed -ge $SyncTimeout) {
-                    Write-StatusMessage -Message "Sync timeout after $($elapsed.ToString('F0')) seconds" -Type ERROR
-                    Exit-Script -Message "AD sync timeout" -ExitCode GeneralError
-                }
-
-                # Check sync status
-                $syncStatus = Get-ADSyncScheduler
-                if ($syncStatus.SyncCycleInProgress) {
-                    Write-StatusMessage -Message "Sync in progress... ($($elapsed.ToString('F0')) seconds elapsed)" -Type INFO
-                    Start-Sleep -Seconds 10
-                    continue
-                }
-
-                # Try to get user
-                Write-StatusMessage -Message "Checking for user in Entra ID..." -Type INFO
-                $properties = @(
-                    'Id',
-                    'Mail',
-                    'DisplayName',
-                    'GivenName',
-                    'Surname',
-                    'jobTitle',
-                    'Department',
-                    'officeLocation',
-                    'City'
-                )
-                try {
-                    $user = Get-MgUser -UserId $UserEmail -Property $properties -ErrorAction Stop | Select-Object $properties
-                    if ($user) {
-                        Write-StatusMessage -Message "User $UserEmail successfully synced to Entra ID" -Type OK
-                        return $user
-                    }
-                } catch [Microsoft.Graph.PowerShell.Runtime.RestException] {
-                    if ($_.Exception.Response.StatusCode -eq 404) {
-                        # User not found yet, this is expected during sync
-                        $retryCount++
-                        if ($retryCount -ge $MaxRetries) {
-                            Write-StatusMessage -Message "Max retry attempts ($MaxRetries) reached" -Type ERROR
-                            Exit-Script -Message "Failed to verify user sync after maximum retries" -ExitCode UserNotFound
-                        }
-                        Write-StatusMessage -Message "Retry $($retryCount) of $($MaxRetries): User not found in Entra ID yet" -Type WARN
-                        Start-Sleep -Seconds $RetryIntervalSeconds
-                    } else {
-                        # Unexpected error, rethrow
-                        throw
-                    }
-                }
-
-            } catch {
-                $retryCount++
-                if ($retryCount -ge $MaxRetries) {
-                    Write-StatusMessage -Message "Max retry attempts ($MaxRetries) reached" -Type ERROR
-                    Exit-Script -Message "Failed to verify user sync after maximum retries" -ExitCode UserNotFound
-                }
-                Write-StatusMessage -Message "Retry $($retryCount) of $($MaxRetries): User not found in Entra ID yet" -Type WARN
-                Start-Sleep -Seconds $RetryIntervalSeconds
-            }
-        } while ($true)
-
-    } catch {
-        Write-StatusMessage -Message "Critical error during Entra Connect sync process: $_" -Type ERROR
-        Exit-Script -Message "Entra Connect sync process failed" -ExitCode GeneralError
     }
 }
 
@@ -3839,9 +3411,6 @@ function Set-UserBookWithMeId {
         $User,
 
         [Parameter()]
-        [string]$SamAccountName,
-
-        [Parameter()]
         [int]$MaxRetries = 6,
 
         [Parameter()]
@@ -3897,27 +3466,16 @@ function Set-UserBookWithMeId {
             return
         }
 
-        if ($CloudOnly -eq $true) {
-            # Set mailbox extension attribute
-            try {
-                Set-Mailbox -Identity $User.Mail -CustomAttribute15 $bookWithMeId -ErrorAction Stop
-                Write-StatusMessage -Message "Successfully set BookWithMeId for $($User.displayName)" -Type OK
-            } catch {
-                Write-StatusMessage -Message "Failed to set CustomAttribute15: $_" -Type WARN
-                Write-StatusMessage -Message "Please set BookWithMeId ($bookWithMeId) manually for $($User.displayName)" -Type WARN
-            }
-
-        } else {
-            # Set AD attribute
-            try {
-                $ADUser = Get-ADUser -Filter "UserPrincipalName -eq '$($User.Mail)'" -ErrorAction Stop
-                Set-ADUser -Identity $($ADUser.SamAccountName) -Add @{extensionAttribute15 = $bookWithMeId } -ErrorAction Stop
-                Write-StatusMessage -Message "Successfully set BookWithMeId for $($User.displayName)" -Type OK
-            } catch {
-                Write-StatusMessage -Message "Failed to set extensionAttribute15: $_" -Type WARN
-                Write-StatusMessage -Message "Please set BookWithMeId ($bookWithMeId) manually for $SamAccountName" -Type WARN
-            }
+        # Set mailbox extension attribute
+        try {
+            Set-Mailbox -Identity $User.Mail -CustomAttribute15 $bookWithMeId -ErrorAction Stop
+            Write-StatusMessage -Message "Successfully set BookWithMeId for $($User.displayName)" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to set CustomAttribute15: $_" -Type WARN
+            Write-StatusMessage -Message "Please set BookWithMeId ($bookWithMeId) manually for $($User.displayName)" -Type WARN
         }
+
+
     } catch {
         Write-StatusMessage -Message "Error in Set-UserBookWithMeId: $_" -Type WARN
     }
@@ -4085,9 +3643,7 @@ $progressSteps = @(
     @{ Name = "Initialization"; Description = "Loading configuration and connecting services" }
     @{ Name = "User Input"; Description = "Gathering new user details" }
     @{ Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
-    @{ Name = "New User AD Creation"; Description = "Creating user in Active Directory" }
-    @{ Name = "AD Group Copy"; Description = "Copying AD user groups" }
-    @{ Name = "Entra Connect Sync"; Description = "Waiting for Entra Connect sync" }
+    @{ Name = "New User Creation"; Description = "Creating user in Entra" }
     @{ Name = "License Assignment"; Description = "Assigning licenses" }
     @{ Name = "Set Timezone"; Description = "Setting Timezone for new user" }
     @{ Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
@@ -4170,7 +3726,7 @@ try {
     # Get template user (if copying)
     if ($userInput.userToCopy) {
         $TemplateUserCheck = $true
-        $templateData = Get-TemplateUser -UserToCopy $userInput.userToCopy -CloudOnly $userInput.cloudOnly
+        $templateData = Get-TemplateUser -UserToCopy $userInput.userToCopy
         $templateUser = $templateData.TemplateUser
         $templateAttributes = $templateData.TemplateAttributes
         $templateUserManager = $templateData.TemplateUserManager
@@ -4181,19 +3737,11 @@ try {
             $domain = $templateData.Domain
         }
 
-        if (-not $userInput.cloudOnly) {
-            $destinationOU = $templateData.DestinationOU
-        }
     } else {
         if ($userInput.domain) {
             $domain = '@' + $userInput.domain
         } else {
             $domain = '@compassmsp.com'
-        }
-
-        if (-not $userInput.cloudOnly) {
-            $destinationOU = 'OU=Offices,OU=CompassMSP,DC=COMPASSMSP,DC=com'
-            Write-StatusMessage -Message "Default destination OU selected. Move to correct OU after account creation." -Type WARN
         }
     }
 
@@ -4201,7 +3749,6 @@ try {
     $newUserParams = @{
         DisplayName = $userInput.displayName
         Domain      = $domain
-        CloudOnly   = $userInput.cloudOnly
     }
 
     # Conditionally add FirstName and LastName if they exist
@@ -4231,25 +3778,15 @@ try {
         $confirmUserParams.TemplateUser = $userInput.userToCopy
     }
 
-    if ($destinationOU) {
-        $confirmUserParams.DestinationOU = $destinationOU
-    }
-
     Confirm-UserCreation @confirmUserParams
 
     # Step: AD User Creation / Set Attributes
-    Write-ProgressStep -StepName 'New User AD Creation'
+    Write-ProgressStep -StepName 'New User Creation'
 
     $NewUserParams = @{
-        NewUser   = $newUserProperties
-        CloudOnly = $userInput.cloudOnly
-    }
-
-    if ($userInput.cloudOnly -eq $false) {
-        $NewUserParams.SecureStringPassword = $passwordResult.SecurePassword
-        $NewUserParams.DestinationOU = $destinationOU
-    } else {
-        $NewUserParams.Password = $passwordResult.PlainPassword
+        NewUser  = $newUserProperties
+        Password = $passwordResult.PlainPassword
+        #SecureStringPassword = $passwordResult.SecurePassword
     }
 
     New-UserStandard @NewUserParams
@@ -4257,32 +3794,20 @@ try {
     # Set optional fields (from template + form)
     $setUserParams = @{
         UserInput = $userInput
-        CloudOnly = $userInput.cloudOnly
+        Identity  = $newUserProperties.userPrincipalName
     }
 
     if ($templateAttributes) {
         $setUserParams.TemplateAttributes = $templateAttributes
     }
 
-    if ($userInput.cloudOnly -eq $false) {
-        $setUserParams.Identity = $newUserProperties.SamAccountName
-        $setUserParams.DestinationOU
-    } else {
-        $setUserParams.Identity = $newUserProperties.userPrincipalName
-    }
 
     Set-UserOptionalFields @setUserParams
 
     # Set manager
     if ($userInput.manager -or $templateUserManager) {
         $setUserManagerParams = @{
-            CloudOnly = $userInput.cloudOnly
-        }
-
-        if ($userInput.cloudOnly -eq $false) {
-            $setUserManagerParams.Identity = $newUserProperties.SamAccountName
-        } else {
-            $setUserManagerParams.Identity = $newUserProperties.userPrincipalName
+            Identity = $newUserProperties.userPrincipalName
         }
 
         if ($userInput.manager) {
@@ -4296,37 +3821,22 @@ try {
         Write-StatusMessage -Message 'No manager user object selected. Skipping...' -Type WARN
     }
 
-    # Step: AD Group Copy
-    Write-ProgressStep -StepName 'AD Group Copy'
-    if ($userInput.cloudOnly -eq $false) {
-        if ($copyUserGroups -eq $true) {
-            Copy-UserADGroups -SourceUser $userInput.userToCopy -TargetUser $newUserProperties.displayName
-        } else {
-            Write-StatusMessage -Message 'No group copy operation selected. Skipping...' -Type INFO
-        }
-    } else {
-        Write-StatusMessage -Message 'Cloud only selected. Skipping...'
-    }
+    # Get Created User
 
-    if ($userInput.cloudOnly -eq $false) {
-        # Entra Connect Sync
-        Write-ProgressStep -StepName 'Entra Connect Sync'
-        $MgUser = Wait-ForADUserSync -UserEmail $newUserProperties.Email
-    } else {
-        $properties = @(
-            'Id',
-            'Mail',
-            'DisplayName',
-            'GivenName',
-            'Surname',
-            'jobTitle',
-            'Department',
-            'officeLocation',
-            'City'
-        )
+    $properties = @(
+        'Id',
+        'Mail',
+        'DisplayName',
+        'GivenName',
+        'Surname',
+        'jobTitle',
+        'Department',
+        'officeLocation',
+        'City'
+    )
 
-        $MgUser = Get-MgUser -UserId $newUserProperties.Email -Property $properties -ErrorAction Stop | Select-Object $properties
-    }
+    $MgUser = Get-MgUser -UserId $newUserProperties.Email -Property $properties -ErrorAction Stop | Select-Object $properties
+
 
     if (-not $MgUser) {
         Exit-Script -Message 'Cannot get new user from graph' -ExitCode UserNotFound
