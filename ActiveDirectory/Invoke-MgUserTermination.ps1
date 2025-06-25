@@ -35,7 +35,10 @@
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
-    -------    ----------  ---------------------------------------------------
+    -------    ----------  -------------------------------------------------------
+    4.3.0      2025-06-25   Feature Updates:
+                                - Started conversion process to move away from Graph Powershell to GraphAPI via Invoke-MgGraphRequest.
+
     4.2.0      2025-06-25   Minor Error Fix:
                                 - Fixed errors when running Entra only offboarding.
 
@@ -1325,8 +1328,27 @@ function Get-TerminationPrerequisites {
     try {
 
         try {
-            $mgUser = Get-MgUser -UserId $User -Property Id, Mail, DisplayName, Department, OnPremisesSyncEnabled | Select-Object Id, Mail, DisplayName, Department, OnPremisesSyncEnabled -ErrorAction Stop
+            $properties = @(
+                'Id',
+                'Mail',
+                'DisplayName',
+                'Department',
+                'OnPremisesSyncEnabled'
+            )
+
+            $selectQuery = [string]::Join(',', $properties)
+
+            $termUserQuery = "https://graph.microsoft.com/v1.0/users/$User`?`$select=$selectQuery"
+            $termUserResponse = Invoke-MgGraphRequest -Method GET -Uri $termUserQuery
+
+            # Build Hashtable from Response
+            $MgUser = @{}
+            foreach ($prop in $properties) {
+                $MgUser[$prop] = $termUserResponse.$prop
+            }
+
             $SkipADTasks = $false
+
         } catch {
             Exit-Script -Message "Could not find user in EntraID/Azure: $_" -ExitCode UserNotFound
         }
@@ -1638,7 +1660,7 @@ function Disable-GraphUser {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User
     )
 
@@ -1647,25 +1669,30 @@ function Disable-GraphUser {
 
         # Disable the user account
         try {
+            # Build the update payload
             $updateUserParams = @{
-                AccountEnabled = $false
-                BusinessPhones = @()
-                MobilePhone    = $null
-                OfficeLocation = $null
-                Department     = $null
-                JobTitle       = $null
-                CompanyName    = $null
-                Manager        = $null
-                FaxNumber      = $null
-                StreetAddress  = $null
-                City           = $null
-                State          = $null
-                PostalCode     = $null
-                Country        = $null
-                EmployeeType   = "Disabled on $(Get-Date -Format 'FileDate')"
+                accountEnabled = $false
+                businessPhones = @()
+                mobilePhone    = $null
+                officeLocation = $null
+                department     = $null
+                jobTitle       = $null
+                companyName    = $null
+                faxNumber      = $null
+                streetAddress  = $null
+                city           = $null
+                state          = $null
+                postalCode     = $null
+                country        = $null
+                employeeType   = "Disabled on $(Get-Date -Format 'FileDate')"
             }
 
-            Update-MgUser -UserId $User.Id -BodyParameter $updateUserParams -ErrorAction Stop
+            # Convert to JSON with nulls included
+            $bodyJson = $updateUserParams | ConvertTo-Json -Depth 3
+
+            # Send the PATCH request using Invoke-MgGraphRequest
+            Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0//users/$($User.Id)" -Method PATCH -Body $bodyJson -ErrorAction Stop
+
             Write-StatusMessage -Message "User account disabled and attributes cleared" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to disable user account: $_" -Type ERROR
@@ -1692,7 +1719,7 @@ function Remove-UserSessions {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User
     )
 
@@ -1700,7 +1727,7 @@ function Remove-UserSessions {
         # Revoke all sessions
         Write-StatusMessage -Message "Revoking all user signed in sessions" -Type INFO
         try {
-            Revoke-MgUserSignInSession -UserId $User.Id -ErrorAction Stop
+            Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/revokeSignInSessions" -Method POST -ErrorAction Stop
             Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to revoke user sessions" -Type ERROR
@@ -1708,52 +1735,63 @@ function Remove-UserSessions {
 
         # Remove authentication methods
         Write-StatusMessage -Message "Removing user authentication methods" -Type INFO
-        try {
-            $authMethods = Get-MgUserAuthenticationMethod -UserId $User.Id -ErrorAction Stop
 
-            foreach ($authMethod in $authMethods) {
-                $authType = $authMethod.AdditionalProperties.'@odata.type'
+        try {
+            # Get authentication methods
+            $authMethods = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/methods" -ErrorAction Stop
+
+            foreach ($authMethod in $authMethods.value) {
+                $authType = $authMethod.'@odata.type'
+                $methodId = $authMethod.id
 
                 try {
                     switch ($authType) {
                         "#microsoft.graph.passwordAuthenticationMethod" {
-                            continue
+                            continue  # Can't remove password
                         }
                         "#microsoft.graph.phoneAuthenticationMethod" {
-                            Remove-MgUserAuthenticationPhoneMethod -UserId $User.Id -PhoneAuthenticationMethodId $authMethod.Id -ErrorAction Stop
-                            Write-StatusMessage -Message "Removed Phone Authentication Method: $($authMethod.Id)" -Type OK
+                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/phoneMethods/$methodId"
+                            $msg = "Removed Phone Authentication Method"
                         }
                         "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod" {
-                            Remove-MgUserAuthenticationWindowsHelloForBusinessMethod -UserId $User.Id -WindowsHelloForBusinessAuthenticationMethodId $authMethod.Id -ErrorAction Stop
-                            Write-StatusMessage -Message "Removed Windows Hello for Business Method: $($authMethod.Id)" -Type OK
+                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/windowsHelloForBusinessMethods/$methodId"
+                            $msg = "Removed Windows Hello for Business Method"
                         }
                         "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod" {
-                            Remove-MgUserAuthenticationMicrosoftAuthenticatorMethod -UserId $User.Id -MicrosoftAuthenticatorAuthenticationMethodId $authMethod.Id -ErrorAction Stop
-                            Write-StatusMessage -Message "Removed Microsoft Authenticator Method: $($authMethod.Id)" -Type OK
+                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/microsoftAuthenticatorMethods/$methodId"
+                            $msg = "Removed Microsoft Authenticator Method"
                         }
                         "#microsoft.graph.fido2AuthenticationMethod" {
-                            Remove-MgUserAuthenticationFido2Method -UserId $User.Id -Fido2AuthenticationMethodId $authMethod.Id -ErrorAction Stop
-                            Write-StatusMessage -Message "Removed FIDO2 Authenticator Method: $($authMethod.Id)" -Type OK
+                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/fido2Methods/$methodId"
+                            $msg = "Removed FIDO2 Authenticator Method"
                         }
                         "#microsoft.graph.softwareOathAuthenticationMethod" {
-                            Remove-MgUserAuthenticationSoftwareOathMethod -UserId $User.Id -SoftwareOathAuthenticationMethodId $authMethod.Id -ErrorAction Stop
-                            Write-StatusMessage -Message "Removed Software Oath Method: $($authMethod.Id)" -Type OK
+                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/softwareOathMethods/$methodId"
+                            $msg = "Removed Software Oath Method"
                         }
                         "#microsoft.graph.temporaryAccessPassAuthenticationMethod" {
-                            Remove-MgUserAuthenticationTemporaryAccessPassMethod -UserId $User.Id -TemporaryAccessPassAuthenticationMethodId $authMethod.Id -ErrorAction Stop
-                            Write-StatusMessage -Message "Removed Temporary Access Pass Method: $($authMethod.Id)" -Type OK
+                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/temporaryAccessPassMethods/$methodId"
+                            $msg = "Removed Temporary Access Pass Method"
                         }
                         default {
                             Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type ERROR
+                            continue
                         }
                     }
+
+                    # Perform the DELETE
+                    Invoke-MgGraphRequest -Method DELETE -Uri $uri -ErrorAction Stop
+                    Write-StatusMessage -Message "$($msg): $methodId" -Type OK
+
                 } catch {
-                    Write-StatusMessage -Message "Failed to remove authentication method $($authMethod.Id) of type $authType" -Type ERROR
+                    Write-StatusMessage -Message "Failed to remove authentication method $methodId of type $authType" -Type ERROR
                 }
             }
+
         } catch {
             Write-StatusMessage -Message "Failed to get user authentication methods" -Type ERROR
         }
+
 
         # Remove Mobile Devices
         Write-StatusMessage -Message "Removing all mobile devices" -Type INFO
@@ -1774,19 +1812,26 @@ function Remove-UserSessions {
 
         # Disable Azure AD devices
         try {
-            $termUserDevices = Get-MgUserRegisteredDevice -UserId $User.Id -ErrorAction Stop
-            foreach ($termUserDevice in $termUserDevices) {
-                Write-StatusMessage -Message "Disabling registered device: $($termUserDevice.Id)" -Type INFO
+            $termUserDevices = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/registeredDevices" -ErrorAction Stop
+
+            foreach ($termUserDevice in $termUserDevices.value) {
+                Write-StatusMessage -Message "Disabling registered device: $($termUserDevice.id)" -Type INFO
+
                 try {
-                    Update-MgDevice -DeviceId $termUserDevice.Id -BodyParameter @{ AccountEnabled = $false } -ErrorAction Stop
-                    Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.Id)" -Type OK
+                    $uri = "https://graph.microsoft.com/v1.0/devices/$($termUserDevice.id)"
+                    $body = @{ accountEnabled = $false } | ConvertTo-Json
+
+                    Invoke-MgGraphRequest -Method PATCH -Uri $uri -Body $body -ErrorAction Stop
+
+                    Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.id)" -Type OK
                 } catch {
-                    Write-StatusMessage -Message "Failed to disable device $($termUserDevice.Id)" -Type ERROR
+                    Write-StatusMessage -Message "Failed to disable device $($termUserDevice.id)" -Type ERROR
                 }
             }
         } catch {
             Write-StatusMessage -Message "Failed to get registered devices" -Type ERROR
         }
+
 
     } catch {
         Write-StatusMessage -Message "Critical error in Remove-UserSessions" -Type ERROR
@@ -1878,7 +1923,7 @@ function Remove-UserFromEntraDirectoryRoles {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User
     )
 
@@ -1886,9 +1931,13 @@ function Remove-UserFromEntraDirectoryRoles {
         Write-StatusMessage -Message "Checking for directory role memberships..." -Type INFO
 
         try {
-            # Get all directory roles the user is a member of
-            $directoryRoles = Get-MgUserMemberOf -UserId $User.Id -ErrorAction Stop |
-            Where-Object { $_.AdditionalProperties.'@odata.type' -eq '#microsoft.graph.directoryRole' }
+            # Get all objects the user is a member of
+            $memberOf = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf" -ErrorAction Stop
+
+            # Filter for directoryRole memberships
+            $directoryRoles = $memberOf.value | Where-Object {
+                $_.'@odata.type' -eq '#microsoft.graph.directoryRole'
+            }
 
             if (-not $directoryRoles) {
                 Write-StatusMessage -Message "User is not a member of any directory roles" -Type INFO
@@ -1899,11 +1948,14 @@ function Remove-UserFromEntraDirectoryRoles {
 
             foreach ($role in $directoryRoles) {
                 try {
-                    $roleId = $role.Id
-                    $roleName = $role.AdditionalProperties.displayName
+                    $roleId = $role.id
+                    $roleName = $role.displayName
 
                     Write-StatusMessage -Message "Removing from role: $roleName" -Type INFO
-                    Remove-MgDirectoryRoleMemberByRef -DirectoryRoleId $roleId -DirectoryObjectId $User.Id -ErrorAction Stop
+
+                    $removeUri = "https://graph.microsoft.com/v1.0/directoryRoles/$roleId/members/$($User.Id)/`$ref"
+                    Invoke-MgGraphRequest -Method DELETE -Uri $removeUri -ErrorAction Stop
+
                     Write-StatusMessage -Message "Successfully removed from role: $roleName" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove from role $roleName" -Type ERROR
@@ -1924,7 +1976,7 @@ function Remove-UserFromEntraGroups {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User,
 
         [Parameter()]
@@ -1932,48 +1984,40 @@ function Remove-UserFromEntraGroups {
     )
 
     try {
-        # Define filter parameters
-        $filterParams = @{
-            FilterScript = {
-                # Not a directory role
-                $_.AdditionalProperties['@odata.type'] -ne '#microsoft.graph.directoryRole' -and
-                # Not a dynamic group
-                $_.AdditionalProperties.groupTypes -notcontains "DynamicMembership" -and
-                # Only sync-enabled groups (not false)
-                $null -eq $_.AdditionalProperties.onPremisesSyncEnabled
-            }
-        }
-
-        # Define select parameters with a custom groupType classification
-        $selectParams = @{
-            Property = @(
-                'Id'
-                @{n = 'DisplayName'; e = { $_.AdditionalProperties.displayName } }
-                @{n = 'Mail'; e = { $_.AdditionalProperties.mail } }
-                @{n = 'groupType'; e = {
-                        if ($_.AdditionalProperties.securityEnabled -eq $true) {
-                            return "Security"
-                        } elseif ($_.AdditionalProperties.groupTypes -contains "Unified") {
-                            return "Unified"
-                        } else {
-                            return "Distribution"
-                        }
-                    }
-                }
-                @{n = 'securityEnabled'; e = { $_.AdditionalProperties.securityEnabled } }
-            )
-        }
-
         Write-StatusMessage -Message "Finding Azure groups" -Type INFO
 
         try {
-            $All365Groups = Get-MgUserMemberOf -UserId $User.Id -ErrorAction Stop |
-            Where-Object @filterParams |
-            Select-Object @selectParams
+            # Get group memberships for the user
+            $response = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf" -ErrorAction Stop
+            $groupObjects = $response.value
+
+            # Filter out directory roles, dynamic groups, and cloud-only groups
+            $filteredGroups = $groupObjects | Where-Object {
+                $_.'@odata.type' -ne '#microsoft.graph.directoryRole' -and
+                ($_.groupTypes -notcontains 'DynamicMembership') -and
+                (-not $_.onPremisesSyncEnabled)
+            }
+
+            # Format groups for processing
+            $All365Groups = $filteredGroups | ForEach-Object {
+                [PSCustomObject]@{
+                    Id              = $_.id
+                    DisplayName     = $_.displayName
+                    Mail            = $_.mail
+                    groupType       = if ($_.securityEnabled -eq $true) {
+                        'Security'
+                    } elseif ($_.groupTypes -contains 'Unified') {
+                        'Unified'
+                    } else {
+                        'Distribution'
+                    }
+                    securityEnabled = $_.securityEnabled
+                }
+            }
 
             Write-StatusMessage -Message "Found $($All365Groups.Count) groups to process" -Type INFO
 
-            # Export groups if path provided
+            # Export groups if a path was provided
             if ($ExportPath) {
                 try {
                     $All365Groups | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
@@ -1983,19 +2027,21 @@ function Remove-UserFromEntraGroups {
                 }
             }
 
-            foreach ($365Group in $All365Groups) {
-                Write-StatusMessage -Message "Processing group: $($365Group.DisplayName)" -Type INFO
+            foreach ($group in $All365Groups) {
+                Write-StatusMessage -Message "Processing group: $($group.DisplayName)" -Type INFO
 
                 try {
-                    if ($365Group.securityEnabled -eq $true -or $365Group.groupType -eq 'Unified') {
-                        Remove-MgGroupMemberByRef -GroupId $365Group.Id -DirectoryObjectId $User.Id -ErrorAction Stop
-                        Write-StatusMessage -Message "Removed from Security/Unified Group: $($365Group.DisplayName)" -Type OK
+                    if ($group.securityEnabled -or $group.groupType -eq 'Unified') {
+                        $uri = "https://graph.microsoft.com/v1.0/groups/$($group.Id)/members/$($User.Id)/`$ref"
+                        Invoke-MgGraphRequest -Method DELETE -Uri $uri -ErrorAction Stop
+                        Write-StatusMessage -Message "Removed from Security/Unified Group: $($group.DisplayName)" -Type OK
                     } else {
-                        Remove-DistributionGroupMember -Identity $365Group.Id -Member $User.Id -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction Stop
-                        Write-StatusMessage -Message "Removed from Distribution Group: $($365Group.DisplayName)" -Type OK
+                        # Fallback to Exchange Online for Distribution Groups
+                        Remove-DistributionGroupMember -Identity $group.Id -Member $User.Id -BypassSecurityGroupManagerCheck -Confirm:$false -ErrorAction Stop
+                        Write-StatusMessage -Message "Removed from Distribution Group: $($group.DisplayName)" -Type OK
                     }
                 } catch {
-                    Write-StatusMessage -Message "Failed to remove from group $($365Group.DisplayName)" -Type ERROR
+                    Write-StatusMessage -Message "Failed to remove from group $($group.DisplayName)" -Type ERROR
                 }
             }
         } catch {
@@ -2008,12 +2054,13 @@ function Remove-UserFromEntraGroups {
     }
 }
 
+
 function Remove-UserLicenses {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User,
 
         [Parameter()]
@@ -2030,9 +2077,10 @@ function Remove-UserLicenses {
         Write-StatusMessage -Message "Starting license removal process" -Type INFO
 
         try {
-            # Get and export license details if path provided
-            $licenseDetails = Get-MgUserLicenseDetail -UserId $User.Id -ErrorAction Stop |
-            Select-Object SkuPartNumber, SkuId, Id
+            # Get current license assignments from Graph
+            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/licenseDetails"
+            $response = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+            $licenseDetails = $response.value | Select-Object skuPartNumber, skuId, id
 
             if ($ExportPath) {
                 try {
@@ -2043,7 +2091,6 @@ function Remove-UserLicenses {
                 }
             }
 
-            # Define primary licenses that must be removed last
             $primaryLicenses = @(
                 "O365_BUSINESS_ESSENTIALS"
                 "SPE_E3"
@@ -2051,57 +2098,48 @@ function Remove-UserLicenses {
                 "EXCHANGESTANDARD"
             )
 
-            # Track failed removals for retry
             $failedLicenses = [System.Collections.ArrayList]::new()
 
             # Step 1: Remove Ancillary Licenses
-            foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -notin $primaryLicenses })) {
+            foreach ($license in ($licenseDetails | Where-Object { $_.skuPartNumber -notin $primaryLicenses })) {
                 try {
-
-                    # Assign the license
                     $licenseBody = @{
                         addLicenses    = @()
-                        removeLicenses = @($license.SkuId)
+                        removeLicenses = @(@{ skuId = $license.skuId })
                     } | ConvertTo-Json -Depth 3
 
-                    $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
-                    $response = Invoke-MgGraphRequest -Method POST -Uri $uri -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
-
-                    Write-StatusMessage -Message "Removed Ancillary License: $($license.SkuPartNumber)" -Type OK
-                    Start-Sleep -Seconds 2  # Brief pause after successful removal
+                    Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                    Write-StatusMessage -Message "Removed Ancillary License: $($license.skuPartNumber)" -Type OK
+                    Start-Sleep -Seconds 2
                 } catch {
-                    Write-StatusMessage -Message "Failed to remove Ancillary License $($license.SkuPartNumber) - will retry later" -Type WARN
+                    Write-StatusMessage -Message "Failed to remove Ancillary License $($license.skuPartNumber) - will retry later" -Type WARN
                     $null = $failedLicenses.Add($license)
                 }
             }
 
             # Step 2: Remove Primary Licenses
-            foreach ($license in ($licenseDetails | Where-Object { $_.SkuPartNumber -in $primaryLicenses })) {
+            foreach ($license in ($licenseDetails | Where-Object { $_.skuPartNumber -in $primaryLicenses })) {
                 try {
-
-                    # Assign the license
                     $licenseBody = @{
                         addLicenses    = @()
-                        removeLicenses = @($license.SkuId)
+                        removeLicenses = @(@{ skuId = $license.skuId })
                     } | ConvertTo-Json -Depth 3
 
-                    $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
-                    $response = Invoke-MgGraphRequest -Method POST -Uri $uri -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
-
-                    Write-StatusMessage -Message "Removed Primary License: $($license.SkuPartNumber)" -Type OK
-                    Start-Sleep -Seconds 2  # Brief pause after successful removal
+                    Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                    Write-StatusMessage -Message "Removed Primary License: $($license.skuPartNumber)" -Type OK
+                    Start-Sleep -Seconds 2
                 } catch {
-                    Write-StatusMessage -Message "Failed to remove Primary License $($license.SkuPartNumber) - will retry later" -Type WARN
+                    Write-StatusMessage -Message "Failed to remove Primary License $($license.skuPartNumber) - will retry later" -Type WARN
                     $null = $failedLicenses.Add($license)
                 }
             }
 
-            # Step 3: Retry failed removals
+            # Step 3: Retry logic
             if ($failedLicenses.Count -gt 0) {
                 Write-StatusMessage -Message "Waiting 10 seconds before retrying failed removals..." -Type INFO
                 Start-Sleep -Seconds 10
 
-                $remainingRetries = $MaxRetries - 1  # Already tried once above
+                $remainingRetries = $MaxRetries - 1
                 $stillFailed = [System.Collections.ArrayList]::new()
 
                 while ($failedLicenses.Count -gt 0 -and $remainingRetries -gt 0) {
@@ -2109,21 +2147,17 @@ function Remove-UserLicenses {
 
                     foreach ($license in $failedLicenses) {
                         try {
-
-                            # Assign the license
                             $licenseBody = @{
                                 addLicenses    = @()
-                                removeLicenses = @(@{ skuId = $license.SkuId })
+                                removeLicenses = @(@{ skuId = $license.skuId })
                             } | ConvertTo-Json -Depth 3
 
-                            $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
-                            $response = Invoke-MgGraphRequest -Method POST -Uri $uri -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
-
-                            Write-StatusMessage -Message "Successfully removed license on retry: $($license.SkuPartNumber)" -Type OK
+                            Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                            Write-StatusMessage -Message "Successfully removed license on retry: $($license.skuPartNumber)" -Type OK
                             Start-Sleep -Seconds 2
                         } catch {
                             $null = $stillFailed.Add($license)
-                            Write-StatusMessage -Message "Failed to remove license $($license.SkuPartNumber) on retry" -Type WARN
+                            Write-StatusMessage -Message "Failed to remove license $($license.skuPartNumber) on retry" -Type WARN
                         }
                     }
 
@@ -2138,15 +2172,15 @@ function Remove-UserLicenses {
                             Start-Sleep -Seconds $RetryDelaySeconds
                         }
                     } else {
-                        break  # All retries successful
+                        break
                     }
                 }
 
-                # Report any licenses that couldn't be removed
+                # Final failure report
                 if ($failedLicenses.Count -gt 0) {
                     Write-StatusMessage -Message "The following licenses could not be removed after $MaxRetries attempts:" -Type ERROR
                     foreach ($license in $failedLicenses) {
-                        Write-StatusMessage -Message "- $($license.SkuPartNumber)" -Type ERROR
+                        Write-StatusMessage -Message "- $($license.skuPartNumber)" -Type ERROR
                     }
                 }
             }
@@ -2160,6 +2194,7 @@ function Remove-UserLicenses {
         throw
     }
 }
+
 
 function Set-TerminatedOneDrive {
     [CmdletBinding()]
