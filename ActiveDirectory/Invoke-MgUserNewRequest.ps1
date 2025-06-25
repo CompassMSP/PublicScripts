@@ -35,7 +35,10 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
-    -------    ----------  ---------------------------------------------------
+    -------    ----------  -------------------------------------------------------
+    4.3.0      2025-06-25   Feature Updates:
+                                - Started conversion process to move away from Graph Powershell to GraphAPI via Invoke-MgGraphRequest.
+
     4.2.0      2025-06-25   Feature Updates:
                                 - Removed AD Tasks as Compass is now Entra Only
                                 - NOTE: Script will not longer create AD Users
@@ -1834,9 +1837,11 @@ function Get-NewUserRequest {
             $lstAncillaryLicenses.Items.Clear()
 
             # Get license info from Microsoft Graph
-            $skus = Get-MgSubscribedSku | Select-Object SkuId, SkuPartNumber, ConsumedUnits, @{
-                Name = 'PrepaidUnits'; Expression = { $_.PrepaidUnits.Enabled }
-            }
+            $skuQuery = "v1.0/subscribedSkus"
+
+            $skuResponse = Invoke-MgGraphRequest -Method GET -Uri $skuQuery
+
+            $skus = $skuResponse.value | Select-Object skuId, skuPartNumber, consumedUnits, @{ Name = 'PrepaidUnits'; Expression = { $_.prepaidUnits.enabled } }
 
             # Format license info if needed (or assume licenseInfo = $skus)
             $licenseInfo = Get-FormattedLicenseInfo -Skus $skus
@@ -1950,7 +1955,11 @@ function Get-NewUserRequest {
             $btnRefreshDomains.IsEnabled = $false
 
             # Get domains from Graph API
-            $domains = Get-MgDomain -All | Where-Object { $_.IsVerified -eq $true } | Sort-Object Id
+            $domainQuery = "v1.0/domains"
+            $domainResponse = Invoke-MgGraphRequest -Method GET -Uri $domainQuery
+
+            # Filter for verified domains and sort by Id
+            $domains = $domainResponse.value | Where-Object { $_.isVerified -eq $true } | Sort-Object id
 
             if ($null -eq $domains -or $domains.Count -eq 0) {
                 Write-StatusMessage "No verified domains found" -Type WARN
@@ -2890,7 +2899,7 @@ function Set-UserLicenses {
     param (
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User,
 
         [Parameter(Mandatory)]
@@ -3407,7 +3416,7 @@ function Set-UserBookWithMeId {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User,
 
         [Parameter()]
@@ -3486,7 +3495,7 @@ function Start-NewUserFinalize {
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser]
+        [hashtable]
         $User,
 
         [Parameter(Mandatory)]
@@ -3835,7 +3844,18 @@ try {
         'City'
     )
 
-    $MgUser = Get-MgUser -UserId $newUserProperties.Email -Property $properties -ErrorAction Stop | Select-Object $properties
+    $selectQuery = [string]::Join(',', $properties)
+
+    $newUserEmail = $newUserProperties.Email
+
+    $newUserQuery = "https://graph.microsoft.com/v1.0/users/$newUserEmail`?`$select=$selectQuery"
+    $newUserResponse = Invoke-MgGraphRequest -Method GET -Uri $newUserQuery
+
+    # Build Hashtable from Response
+    $MgUser = @{}
+    foreach ($prop in $properties) {
+        $MgUser[$prop] = $newUserResponse.$prop
+    }
 
 
     if (-not $MgUser) {
@@ -3850,7 +3870,12 @@ try {
     } else {
         $setUsageLocation = 'US'
     }
-    Update-MgUser -UserId $MgUser.Id -UsageLocation $setUsageLocation
+
+    $updateUsageLocationBody = @{
+        usageLocation = $setUsageLocation
+    }
+
+    Invoke-MgGraphRequest -Method PATCH -Uri "v1.0/users/$($MgUser.id)" -Body ($updateUsageLocationBody | ConvertTo-Json)
 
     # Required license - will exit on failure
     Set-UserLicenses -User $MgUser -License $userInput.requiredLicense -Required
@@ -4021,7 +4046,8 @@ try {
     }
 
     # Step: Send notifications
-    $MgUserManager = (Get-MgUserManager -UserId $newUserProperties.Email | Select-Object @{n = 'Manager'; e = { $_.AdditionalProperties.userPrincipalName } }).Manager
+    $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
+    $MgUserManager = $managerResponse.userPrincipalName
     Write-ProgressStep -StepName 'Notifications'
     $MsgFrom = $config.Email.NotificationFrom
     $CcAddress = $config.Email.NotificationCcAddress
