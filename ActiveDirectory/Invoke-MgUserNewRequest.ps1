@@ -2471,7 +2471,7 @@ function New-UserProperties {
     )
 
     try {
-        Write-StatusMessage -Message "Generating properties for new user: $DisplayName (Mode: $(if ($CloudOnly) { 'Cloud-Only' } else { 'AD + Cloud' }))" -Type INFO
+        Write-StatusMessage -Message "Generating properties for new user: $DisplayName" -Type INFO
 
         # Common logic: Determine first and last name
         if (-not $FirstName -or -not $LastName) {
@@ -2783,7 +2783,7 @@ function Set-UserOptionalFields {
     }
 
     try {
-        Write-StatusMessage -Message "Setting optional fields for user: $Identity (Mode: $(if ($CloudOnly) { 'Cloud-Only' } else { 'AD + Cloud' }))" -Type INFO
+        Write-StatusMessage -Message "Setting optional fields for user: $Identity" -Type INFO
 
         # Common merged input processing
         $mergedInput = @{}
@@ -3932,7 +3932,7 @@ try {
         if ($userInput.timeZone -eq 'US Mountain Standard Time (Arizona)') {
             $userinput.timeZone = 'US Mountain Standard Time'
         }
-        Set-MailboxRegionalConfiguration -Identity $($MgUser.Mail) -TimeZone $userinput.timeZone
+        Set-MailboxRegionalConfiguration -Identity $($newUserProperties.Email) -TimeZone $userinput.timeZone
     } else {
         Write-StatusMessage -Message "Timezone for new user not selected. Skipping" -Type ERROR
     }
@@ -4090,7 +4090,7 @@ try {
 
         $emailSubject = "KB4 – New User"
         $emailContent = @"
-The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($MgUser.Mail)
+The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($newUserProperties.Email)
 "@
 
         Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
@@ -4108,7 +4108,7 @@ The following user need to be added to the CompassMSP KnowBe4 account. <p> $($Mg
         $emailContent = @"
 Please set up the following user with an 8x8 account.<br><br>
 Display Name: $($MgUser.displayName)<br>
-Mail: $($MgUser.Mail)<br>
+Mail: $($newUserProperties.Email)<br>
 Job Title: $($MgUser.jobTitle)<br>
 Department: $($MgUser.department)<br>
 OfficeLocation:  $($MgUser.officeLocation)<br>
