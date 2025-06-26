@@ -2326,6 +2326,23 @@ function New-DuplicatePromptForm {
 }
 
 # Main Exection Functions
+function Test-EntraUserIsDisabled {
+    param (
+        [Parameter(Mandatory)]
+        [string]$UserToCheck
+    )
+    try {
+        $graphQuery = "v1.0/users?`$filter=displayName eq '$UserToCheck' or userPrincipalName eq '$UserToCheck'&`$select=accountEnabled"
+        $userResult = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+        if ($userResult.value.Count -eq 1) {
+            return -not $userResult.value[0].accountEnabled
+        }
+        return $false
+    } catch {
+        Write-StatusMessage -Message "Error checking if user is disabled: $_" -Type ERROR
+        return $false
+    }
+}
 
 function Get-EntraUserCopiedAttributes {
     [CmdletBinding()]
@@ -2355,8 +2372,15 @@ function Get-EntraUserCopiedAttributes {
 
         # Get manager information
         $userId = $templateUserGraph.value[0].id
-        $managerQuery = "v1.0/users/$userId/manager"
-        $manager = Invoke-MgGraphRequest -Method GET -Uri $managerQuery
+        $managerDisplayName = $null
+        try {
+            $managerQuery = "v1.0/users/$userId/manager"
+            $manager = Invoke-MgGraphRequest -Method GET -Uri $managerQuery
+            $managerDisplayName = $manager.displayName
+        } catch {
+            Write-StatusMessage -Message "Could not retrieve manager for user $($UserToCopy): $_" -Type WARN
+            $managerDisplayName = $null
+        }
 
         Write-StatusMessage -Message "Successfully retrieved template user details" -Type OK
 
@@ -2372,7 +2396,7 @@ function Get-EntraUserCopiedAttributes {
             state           = $templateUserGraph.value[0].state
             postalCode      = $templateUserGraph.value[0].postalCode
             country         = $templateUserGraph.value[0].country
-            templateManager = $manager.displayName
+            templateManager = $managerDisplayName
         }
 
     } catch {
@@ -2396,7 +2420,6 @@ function Get-TemplateUser {
             TemplateAttributes  = $null
             TemplateUserManager = $null
             Domain              = $null
-            DestinationOU       = $null
         }
 
         # Get Microsoft 365 attributes
@@ -3731,6 +3754,14 @@ try {
     }
 
     $TemplateUserCheck = $false
+
+    # Check is Template User is Enabled
+    if ($userInput.userToCopy) {
+        if (Test-EntraUserIsDisabled -UserToCheck $userInput.userToCopy) {
+            Write-StatusMessage -Message "Template user $($userInput.userToCopy) is disabled. Skipping template copy." -Type WARNING
+            $userInput.userToCopy = $null
+        }
+    }
 
     # Get template user (if copying)
     if ($userInput.userToCopy) {
