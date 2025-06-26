@@ -1777,7 +1777,12 @@ function Remove-UserSessions {
             }
 
         } catch {
-            Write-StatusMessage -Message "Failed to get user authentication methods" -Type ERROR
+            Write-StatusMessage -Message "Failed to get user authentication methods for user $($User.Id)" -Type ERROR
+            Write-StatusMessage -Message "Error: $($_.Exception.Message)" -Type ERROR
+            Write-StatusMessage -Message "StackTrace: $($_.ScriptStackTrace)" -Type ERROR
+            if ($_.Exception.Response) {
+                Write-StatusMessage -Message "Response: $($_.Exception.Response)" -Type ERROR
+            }
         }
 
         # Remove Mobile Devices
@@ -1787,7 +1792,7 @@ function Remove-UserSessions {
             foreach ($mobileDevice in $mobileDevices) {
                 Write-StatusMessage -Message "Removing mobile device: $($mobileDevice.Id)" -Type INFO
                 try {
-                    Remove-MobileDevice -Identity $mobileDevice.Id -Confirm:$false -ErrorAction Stop
+                    Remove-MobileDevice -Identity $mobileDevice.Guid -Confirm:$false -ErrorAction Stop
                     Write-StatusMessage -Message "Successfully removed mobile device: $($mobileDevice.Id)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove mobile device $($mobileDevice.Id)" -Type ERROR
