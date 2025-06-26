@@ -2156,7 +2156,8 @@ function Get-NewUserRequest {
         'Central Standard Time',
         'Mountain Standard Time',
         'US Mountain Standard Time (Arizona)',
-        'Pacific Standard Time'
+        'Pacific Standard Time',
+        'Singapore Standard Time'
     )
 
     # Populate the timezone dropdown
