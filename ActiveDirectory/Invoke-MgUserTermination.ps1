@@ -2532,7 +2532,7 @@ The following user need to be removed from 8x8. <p> $($userInfo.selectMgUser.Dis
     if ($SetOneDriveReadOnly -or $GrantUserOneDriveAccess) {
 
         $oneDriveParams = @{
-            TermUser = $UserFromAD.UserPrincipalName
+            TermUser = $userInfo.selectMgUser.Mail
         }
 
         if ($SetOneDriveReadOnly) {
