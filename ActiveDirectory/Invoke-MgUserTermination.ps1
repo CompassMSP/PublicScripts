@@ -1761,7 +1761,7 @@ function Remove-UserSessions {
                 }
 
                 if (-not $authMethodMap.ContainsKey($authType)) {
-                    Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type WARNING
+                    Write-StatusMessage -Message "Skipping unknown authentication method: $authType" -Type WARN
                     continue
                 }
 
