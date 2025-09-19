@@ -1023,7 +1023,8 @@ function Get-NewUserRequest {
                 </TextBlock>
             </Border>
             <WrapPanel Margin="0,0,0,20">
-                <Button x:Name="btnLoadJson" Content="Load JSON" Style="{DynamicResource AccentButtonStyle}" Width="120" Height="32" Margin="0,0,10,0"/>
+                <Button x:Name="btnLocalFromHibob" Content="Load from HiBob" Style="{DynamicResource AccentButtonStyle}" Width="120" Height="32" Margin="0,0,10,0"/>
+                <Button x:Name="btnLoadJson" Content="Load JSON" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnSaveJson" Content="Save JSON" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnRefreshLicenses" Content="Refresh Licenses" Width="120" Height="32" Margin="0,0,10,0"/>
                 <CheckBox x:Name="cbTestMode" Content="Test Mode" VerticalAlignment="Center" Margin="10,0,0,0"/>
@@ -1676,6 +1677,306 @@ function Get-NewUserRequest {
         }
     }
 
+    # Function to convert Input to JSON data
+    function Convert-ToUserJson {
+        param(
+            [string]$InputString
+        )
+
+        # Convert input string into a hashtable
+        $lines = $InputString -split "`n"
+        $data = @{}
+        foreach ($line in $lines) {
+            if ($line -match '^(.*?):\s*(.*)$') {
+                $key = $matches[1].Trim()
+                $value = $matches[2].Trim()
+                $data[$key] = $value
+            }
+        }
+
+        # Fixed domain
+        $domain = "compassmsp.com"
+
+        # Extract samAccountName from Email Address
+        $email = $data['Email Address']
+        if (-not $email) { throw "Email Address is missing in input" }
+        $samAccountName = ($email -split '@')[0].Trim()
+
+        # Manager email comes directly from input
+        $managerEmail = $data['Hiring Manager']
+
+        # Process Start Date safely
+        $startDate = $null
+        if ($data['Start Date']) {
+            try { $startDate = (Get-Date $data['Start Date'].Trim() -Format "yyyy-MM-dd") }
+            catch { $startDate = $null }
+        }
+
+        # Build output object
+        $output = [PSCustomObject]@{
+            requiredLicense        = "Microsoft 365 Business Premium"
+            displayName            = "$($data['First Name']) $($data['Last Name'])"
+            samAccountName         = $samAccountName
+            domain                 = $domain
+            userPrincipalName      = "$samAccountName@$domain"
+            mobilePhone            = $data['Phone Number']
+            timeZone               = $data['Time Zone']
+            usageLocation          = "US"
+            copyUserOperations     = "Copy Attributes and Groups"
+            userToCopy             = $data['Permissions mirrored from']
+            ancillaryLicense       = @()
+            givenName              = $data['First Name']
+            surname                = $data['Last Name']
+            jobTitle               = $data['Job Title']
+            department             = $data['Department']
+            companyName            = "CompassMSP"
+            officeLocation         = $data['Job Location']
+            employeeHireDate       = $startDate
+            manager                = $managerEmail
+            businessPhone          = $null
+            faxNumber              = $null
+            streetAddress          = $null
+            city                   = $null
+            state                  = $null
+            postalCode             = $null
+            country                = $null
+            departmentGroupOptions = @()
+            testModeEnabled        = $false
+            cloudOnly              = $true
+        }
+
+        # Convert to JSON
+        return $output | ConvertTo-Json -Depth 5
+    }
+
+    # Function to show HiBob data input popup
+    function Show-HiBobDataInput {
+        # Create popup window XAML
+        [xml]$PopupXAML = @"
+<Window
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="HiBob Data Input" Height="500" Width="600"
+    WindowStartupLocation="CenterScreen"
+    ResizeMode="CanResize">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="HiBob Data Input" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,10"/>
+            <Border Background="{DynamicResource TextControlBackgroundPointerOver}"
+                    BorderBrush="{DynamicResource TextControlBorderBrush}"
+                    BorderThickness="1"
+                    Padding="10"
+                    Margin="0,0,0,15">
+                <TextBlock TextWrapping="Wrap">
+                    Paste the HiBob employee data below. The format should be "Field Name: Value" on each line.
+                </TextBlock>
+            </Border>
+        </StackPanel>
+
+        <!-- Text Input Area -->
+        <Grid Grid.Row="1">
+            <TextBox x:Name="txtHiBobData"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     FontFamily="Consolas"
+                     FontSize="12"
+                     Padding="10"/>
+            <TextBlock IsHitTestVisible="False"
+                       Text="Paste HiBob data here..."
+                       VerticalAlignment="Top"
+                       HorizontalAlignment="Left"
+                       Margin="15,10,0,0"
+                       Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                <TextBlock.Style>
+                    <Style TargetType="{x:Type TextBlock}">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Text, ElementName=txtHiBobData}" Value="">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource TextControlBorderBrush}"
+                BorderThickness="0,1,0,0"
+                Background="{DynamicResource TextControlBackgroundPointerOver}"
+                Padding="20">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="btnProcessHiBob" Content="Process Data" Style="{DynamicResource AccentButtonStyle}" Padding="20,5" Height="32" Margin="0,0,10,0"/>
+                <Button x:Name="btnCancelHiBob" Content="Cancel" Padding="20,5" Height="32"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
+"@
+
+        # Parse the popup XAML
+        $PopupReader = [System.Xml.XmlNodeReader]::new($PopupXAML)
+        $PopupWindow = [Windows.Markup.XamlReader]::Load($PopupReader)
+
+        # Get controls
+        $txtHiBobData = $PopupWindow.FindName("txtHiBobData")
+        $btnProcessHiBob = $PopupWindow.FindName("btnProcessHiBob")
+        $btnCancelHiBob = $PopupWindow.FindName("btnCancelHiBob")
+
+        # Add event handlers
+        $btnProcessHiBob.Add_Click({
+                try {
+                    $inputData = $txtHiBobData.Text.Trim()
+                    if ([string]::IsNullOrWhiteSpace($inputData)) {
+                        [System.Windows.MessageBox]::Show("Please enter HiBob data before processing.", "No Data", "OK", "Warning")
+                        return
+                    }
+
+                    # Convert HiBob data to JSON format
+                    $jsonData = Convert-ToUserJson -InputString $inputData
+                    $userData = $jsonData | ConvertFrom-Json
+
+                    # Populate the main form with the converted data
+                    Set-FormFromHiBobData -UserData $userData
+
+                    $PopupWindow.DialogResult = $true
+                    $PopupWindow.Close()
+                } catch {
+                    [System.Windows.MessageBox]::Show("Error processing HiBob data: $($_.Exception.Message)", "Processing Error", "OK", "Error")
+                }
+            })
+
+        $btnCancelHiBob.Add_Click({
+                $PopupWindow.DialogResult = $false
+                $PopupWindow.Close()
+            })
+
+        # Show the popup window
+        $result = $PopupWindow.ShowDialog()
+        return $result
+    }
+
+    # Function to populate form from HiBob data
+    function Set-FormFromHiBobData {
+        param($UserData)
+
+        try {
+            # Set the required license
+            if ($UserData.requiredLicense) {
+                foreach ($item in $cboRequiredLicense.Items) {
+                    $itemText = $item.Content.ToString() -replace '\s+\(Available:.*?\)', ''
+                    if ($itemText -eq $UserData.requiredLicense) {
+                        $cboRequiredLicense.SelectedItem = $item
+                        break
+                    }
+                }
+            }
+
+            # Set ancillary licenses (multi-select)
+            if ($UserData.ancillaryLicense -and $UserData.ancillaryLicense.Count -gt 0) {
+                $lstAncillaryLicenses.SelectedItems.Clear()
+                foreach ($license in $UserData.ancillaryLicense) {
+                    for ($i = 0; $i -lt $lstAncillaryLicenses.Items.Count; $i++) {
+                        $itemText = $lstAncillaryLicenses.Items[$i].Content -replace '\s*\(Available:.*\)', ''
+                        if ($itemText -eq $license) {
+                            $lstAncillaryLicenses.SelectedItems.Add($lstAncillaryLicenses.Items[$i])
+                            break
+                        }
+                    }
+                }
+            }
+
+            # Set the employee hire date
+            if ($UserData.employeeHireDate -and $UserData.employeeHireDate -ne "") {
+                try {
+                    $dateEmployeeHireDate.SelectedDate = [DateTime]::Parse($UserData.employeeHireDate)
+                } catch {
+                    Write-StatusMessage "Failed to parse date: $($UserData.employeeHireDate)" -Type ERROR
+                }
+            }
+
+            # Set copy user operations
+            if ($UserData.copyUserOperations) {
+                foreach ($item in $cboCopyUserOperations.Items) {
+                    if ($item -eq $UserData.copyUserOperations) {
+                        $cboCopyUserOperations.SelectedItem = $item
+                        break
+                    }
+                }
+            }
+
+            # Set the domain and username from userPrincipalName
+            if ($UserData.userPrincipalName -and $UserData.userPrincipalName -match '@') {
+                $upnParts = $UserData.userPrincipalName -split '@'
+                $txtSamAccountName.Text = $upnParts[0]
+
+                # Try to set domain from either the domain field or from the UPN
+                $domainToSet = if ($UserData.domain) { $UserData.domain } else { $upnParts[1] }
+                foreach ($item in $cboDomain.Items) {
+                    if ($item.ToString() -eq $domainToSet) {
+                        $cboDomain.SelectedItem = $item
+                        break
+                    }
+                }
+            } elseif ($UserData.domain) {
+                # If no UPN but domain exists, try to set just the domain
+                foreach ($item in $cboDomain.Items) {
+                    if ($item.ToString() -eq $UserData.domain) {
+                        $cboDomain.SelectedItem = $item
+                        break
+                    }
+                }
+            }
+
+            # Populate all form fields
+            $txtDisplayName.Text = $UserData.displayName
+            $txtMobilePhone.Text = $UserData.mobilePhone
+            $cboTimeZone.SelectedItem = $UserData.timeZone
+            $txtUserToCopy.Text = $UserData.userToCopy
+            $txtGivenName.Text = $UserData.givenName
+            $txtSurname.Text = $UserData.surname
+            $txtJobTitle.Text = $UserData.jobTitle
+            $txtDepartment.Text = $UserData.department
+            $txtCompanyName.Text = $UserData.companyName
+            $txtOfficeLocation.Text = $UserData.officeLocation
+            $txtManager.Text = $UserData.manager
+            $txtBusinessPhone.Text = $UserData.businessPhone
+            $txtFaxNumber.Text = $UserData.faxNumber
+            $txtStreetAddress.Text = $UserData.streetAddress
+            $txtCity.Text = $UserData.city
+            $txtState.Text = $UserData.state
+            $txtPostalCode.Text = $UserData.postalCode
+            $txtCountry.Text = $UserData.country
+
+            # Set usage location
+            if ($UserData.usageLocation) {
+                $cboUsageLocation.SelectedItem = $UserData.usageLocation
+            }
+
+            Show-CustomAlert -Message "HiBob data loaded successfully" -AlertType "Success" -Title "Success"
+        } catch {
+            Show-CustomAlert -Message "Error populating form from HiBob data: $_" -AlertType "Error" -Title "Error"
+        }
+    }
+
     # Function to save JSON data
     function Save-JsonData {
         # Get form data using the existing Get-FormData function
@@ -2092,8 +2393,29 @@ function Get-NewUserRequest {
         }
     }
 
+    function Show-CustomAlert {
+        param (
+            [string]$Message,
+            [string]$AlertType = "Info",
+            [string]$Title = "Alert"
+        )
+
+        $icon = switch ($AlertType) {
+            "Success" { "Information" }
+            "Error" { "Error" }
+            "Warning" { "Warning" }
+            default { "Information" }
+        }
+
+        [System.Windows.MessageBox]::Show($Message, $Title, "OK", $icon)
+    }
+
 
     # Add event handlers
+    $btnLocalFromHibob.Add_Click({
+            Reset-Form
+            Show-HiBobDataInput
+        })
     $btnLoadJson.Add_Click({
             Reset-Form
             Invoke-LoadJsonFile
