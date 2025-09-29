@@ -3812,6 +3812,7 @@ function Set-UserBookWithMeId {
         }
 
         # Generate BookWithMeId
+        $PrimarySmtpAddress = $mailbox.PrimarySmtpAddress
         $formattedGuid = $exchangeGuid -replace "-"
         $bookWithMeId = "${formattedGuid}@compassmsp.com?anonymous&ep=plink"
 
@@ -3823,7 +3824,7 @@ function Set-UserBookWithMeId {
 
         # Set mailbox extension attribute
         try {
-            Set-Mailbox -Identity $User.Mail -CustomAttribute15 $bookWithMeId -ErrorAction Stop
+            Set-Mailbox -Identity $PrimarySmtpAddress -CustomAttribute15 $bookWithMeId -ErrorAction Stop
             Write-StatusMessage -Message "Successfully set BookWithMeId for $($User.displayName)" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to set CustomAttribute15: $_" -Type WARN
@@ -4208,9 +4209,8 @@ try {
     # Build Hashtable from Response
     $MgUser = @{}
     foreach ($prop in $properties) {
-        $MgUser[$prop] = $newUserResponse.$prop
+        $MgUser[$prop] = $newUserResponse | Select-Object -ExpandProperty $prop -ErrorAction SilentlyContinue
     }
-
 
     if (-not $MgUser) {
         Exit-Script -Message 'Cannot get new user from graph' -ExitCode UserNotFound
