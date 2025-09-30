@@ -3040,7 +3040,7 @@ function New-UserStandard {
         if ($PSCmdlet.ShouldProcess($NewUser.DisplayName, "Create user in Microsoft Graph")) {
             $newUser = Invoke-MgGraphRequest -Method POST -Uri "v1.0/users" -Body ($newUserBody | ConvertTo-Json -Depth 10)
             Write-StatusMessage -Message "Successfully created user in Microsoft Graph: $($NewUser.DisplayName)" -Type OK
-            return $newUser
+            #return $newUser
         }
 
     } catch {
@@ -3783,9 +3783,7 @@ function Set-UserBookWithMeId {
         do {
             try {
                 # Ensure we resolve to a single user mailbox by exact PrimarySmtpAddress
-                $mailbox = Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox |
-                    Where-Object { $_.PrimarySmtpAddress -ieq $User.Mail } |
-                    Select-Object -First 1
+                $mailbox = Get-Mailbox -Identity $($User.id)
 
                 if ($mailbox) {
                     $success = $true
@@ -3816,7 +3814,6 @@ function Set-UserBookWithMeId {
         }
 
         # Generate BookWithMeId
-        $PrimarySmtpAddress = [string]$mailbox.PrimarySmtpAddress
         $formattedGuid = $exchangeGuid -replace "-"
         $bookWithMeId = "${formattedGuid}@compassmsp.com?anonymous&ep=plink"
 
@@ -3828,7 +3825,7 @@ function Set-UserBookWithMeId {
 
         # Set mailbox extension attribute
         try {
-            Set-Mailbox -Identity $PrimarySmtpAddress -CustomAttribute15 $bookWithMeId -ErrorAction Stop
+            Set-Mailbox -Identity $($User.id) -CustomAttribute15 $bookWithMeId -ErrorAction Stop
             Write-StatusMessage -Message "Successfully set BookWithMeId for $($User.displayName)" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to set CustomAttribute15: $_" -Type WARN
@@ -4214,6 +4211,11 @@ try {
     $MgUser = @{}
     foreach ($prop in $properties) {
         $MgUser[$prop] = $newUserResponse | Select-Object -ExpandProperty $prop -ErrorAction SilentlyContinue
+    }
+
+    # Ensure Mail populated if Graph returned null (before license assignment)
+    if (-not $MgUser['Mail'] -or [string]::IsNullOrWhiteSpace([string]$MgUser['Mail'])) {
+        $MgUser['Mail'] = $newUserEmail
     }
 
     if (-not $MgUser) {
