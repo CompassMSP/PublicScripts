@@ -3782,7 +3782,11 @@ function Set-UserBookWithMeId {
 
         do {
             try {
-                $mailbox = Get-Mailbox -Identity $User.Mail -ErrorAction Stop
+                # Ensure we resolve to a single user mailbox by exact PrimarySmtpAddress
+                $mailbox = Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox |
+                    Where-Object { $_.PrimarySmtpAddress -ieq $User.Mail } |
+                    Select-Object -First 1
+
                 if ($mailbox) {
                     $success = $true
                     Write-StatusMessage -Message "Retrieved mailbox successfully" -Type OK
@@ -3812,7 +3816,7 @@ function Set-UserBookWithMeId {
         }
 
         # Generate BookWithMeId
-        $PrimarySmtpAddress = $mailbox.PrimarySmtpAddress
+        $PrimarySmtpAddress = [string]$mailbox.PrimarySmtpAddress
         $formattedGuid = $exchangeGuid -replace "-"
         $bookWithMeId = "${formattedGuid}@compassmsp.com?anonymous&ep=plink"
 
