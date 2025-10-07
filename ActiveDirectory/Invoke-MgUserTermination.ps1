@@ -2476,6 +2476,53 @@ try {
 
     Set-TerminatedMailbox @mailboxParams
 
+   # Step: Remove Full Access to managedservices@compassmsp.com
+    $properties = @(
+        'Id',
+        'Mail',
+        'DisplayName',
+        'GivenName',
+        'Surname',
+        'jobTitle',
+        'Department',
+        'officeLocation',
+        'City'
+    )
+
+    $selectQuery = [string]::Join(',', $properties)
+
+    $newUserEmail = $newUserProperties.Email
+
+    $newUserQuery = "https://graph.microsoft.com/v1.0/users/$newUserEmail`?`$select=$selectQuery"
+    $newUserResponse = Invoke-MgGraphRequest -Method GET -Uri $newUserQuery
+
+    # Build Hashtable from Response
+    $MgUser = @{}
+    foreach ($prop in $properties) {
+        $MgUser[$prop] = $newUserResponse | Select-Object -ExpandProperty $prop -ErrorAction SilentlyContinue
+    }
+
+    Write-ProgressStep -StepName 'Remove Managed Service Mailbox Assignment'
+
+    if ($MgUser.Department -in @('Professional Services', 'Deployment')) {
+        Write-StatusMessage -Message "Adding full access to the managedservices@compassmsp.com mailbox..." -Type INFO
+
+        try {
+            $mailboxPermissionParams = @{
+                Identity        = 'managedservices@compassmsp.com'
+                User            = $MgUser.mail
+                AccessRights    = 'FullAccess'
+                InheritanceType = 'All'
+                AutoMapping     = $false
+                ErrorAction     = 'Stop'
+            }
+
+            Add-MailboxPermission @mailboxPermissionParams
+        } catch {
+            Write-StatusMessage -Message "Failed to add mailbox permission: $_" -Type ERROR
+        }
+    }
+
     # Step: Remove Directory Roles
     Write-ProgressStep -StepName 'Directory Roles'
     Remove-UserFromEntraDirectoryRoles -User $userInfo.selectMgUser
