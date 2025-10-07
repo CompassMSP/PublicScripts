@@ -4408,6 +4408,7 @@ try {
 
     # Step: Full Access to managedservices@compassmsp.com
     Write-ProgressStep -StepName 'Managed Service Mailbox Assignment'
+
     if ($MgUser.Department -in @('Professional Services', 'Deployment')) {
         Write-StatusMessage -Message "Adding full access to the managedservices@compassmsp.com mailbox..." -Type INFO
 
