@@ -4005,6 +4005,7 @@ $progressSteps = @(
     @{ Name = "Set Timezone"; Description = "Setting Timezone for new user" }
     @{ Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
     @{ Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
+    @{ Name = "Managed Service Mailbox Assignment"; Description = "Assigning access rights for managedservices mailbox" }
     @{ Name = "Notifications"; Description = "Sending email notifications" }
     @{ Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
     @{ Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
@@ -4404,6 +4405,28 @@ try {
             $groupOperationSummary.TotalFailed = $allFilteredGroups.Count
         }
     }
+
+    # Step: Full Access to managedservices@compassmsp.com
+    Write-ProgressStep -StepName 'Managed Service Mailbox Assignment'
+    if ($MgUser.Department -in @('Professional Services', 'Deployment')) {
+        Write-StatusMessage -Message "Adding full access to the managedservices@compassmsp.com mailbox..." -Type INFO
+
+        try {
+            $mailboxPermissionParams = @{
+                Identity        = 'managedservices@compassmsp.com'
+                User            = $newUserProperties.Email
+                AccessRights    = 'FullAccess'
+                InheritanceType = 'All'
+                AutoMapping     = $false
+                ErrorAction     = 'Stop'
+            }
+
+            Add-MailboxPermission @mailboxPermissionParams
+        } catch {
+            Write-StatusMessage -Message "Failed to add mailbox permission: $_" -Type ERROR
+        }
+    }
+
 
     # Step: Send notifications
     $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
