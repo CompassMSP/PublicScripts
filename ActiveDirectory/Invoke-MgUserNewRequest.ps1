@@ -4427,7 +4427,6 @@ try {
         }
     }
 
-
     # Step: Send notifications
     $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
     $MgUserManager = $managerResponse.userPrincipalName

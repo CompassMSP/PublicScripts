@@ -2477,6 +2477,7 @@ try {
     Set-TerminatedMailbox @mailboxParams
 
    # Step: Remove Full Access to managedservices@compassmsp.com
+
     $properties = @(
         'Id',
         'Mail',
@@ -2502,10 +2503,9 @@ try {
         $MgUser[$prop] = $newUserResponse | Select-Object -ExpandProperty $prop -ErrorAction SilentlyContinue
     }
 
-    Write-ProgressStep -StepName 'Remove Managed Service Mailbox Assignment'
-
     if ($MgUser.Department -in @('Professional Services', 'Deployment')) {
-        Write-StatusMessage -Message "Adding full access to the managedservices@compassmsp.com mailbox..." -Type INFO
+
+        Write-StatusMessage -Message "Removing full access to the managedservices@compassmsp.com mailbox..." -Type INFO
 
         try {
             $mailboxPermissionParams = @{
@@ -2517,7 +2517,7 @@ try {
                 ErrorAction     = 'Stop'
             }
 
-            Add-MailboxPermission @mailboxPermissionParams
+            Remove-MailboxPermission @mailboxPermissionParams
         } catch {
             Write-StatusMessage -Message "Failed to add mailbox permission: $_" -Type ERROR
         }
