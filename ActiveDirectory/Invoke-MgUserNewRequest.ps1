@@ -4455,7 +4455,7 @@ The following user need to be added to the CompassMSP KnowBe4 account. <p> $($Mg
         $ToAddress = $config.Email.NotificationTo8x8
 
         $emailSubject = "8x8 – New User"
-        $callCenter = if ($MgUser.department -eq 'Reactive') { 'Yes' } else { 'No' }
+        $callCenter = if ($MgUser.department -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
         $emailContent = @"
 Please set up the following user with an 8x8 account.<br><br>
 Display Name: $($MgUser.displayName)<br>
