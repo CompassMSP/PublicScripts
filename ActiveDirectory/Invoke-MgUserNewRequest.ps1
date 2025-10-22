@@ -1722,7 +1722,7 @@ function Get-NewUserRequest {
             mobilePhone            = $data['Phone Number']
             timeZone               = $data['Time Zone']
             usageLocation          = "US"
-            copyUserOperations     = "Copy Attributes and Groups"
+            copyUserOperations     = $data['Copy User Operations']
             userToCopy             = $data['Permissions mirrored from']
             ancillaryLicense       = @()
             givenName              = $data['First Name']
@@ -1914,12 +1914,15 @@ function Get-NewUserRequest {
             }
 
             # Set copy user operations
-            if ($UserData.copyUserOperations) {
+            if ($UserData.userToCopy) {
                 foreach ($item in $cboCopyUserOperations.Items) {
-                    if ($item -eq $UserData.copyUserOperations) {
-                        $cboCopyUserOperations.SelectedItem = $item
-                        break
-                    }
+                    $cboCopyUserOperations.SelectedItem = 'Copy Attributes and Groups'
+                    break
+                }
+            } else {
+                foreach ($item in $cboCopyUserOperations.Items) {
+                    $cboCopyUserOperations.SelectedItem = -1
+                    break
                 }
             }
 
