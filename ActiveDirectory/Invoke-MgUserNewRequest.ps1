@@ -4171,7 +4171,6 @@ try {
         $setUserParams.TemplateAttributes = $templateAttributes
     }
 
-
     Set-UserOptionalFields @setUserParams
 
     # Set manager
