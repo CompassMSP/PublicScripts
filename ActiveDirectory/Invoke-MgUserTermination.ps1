@@ -214,6 +214,7 @@ function Write-ProgressStep {
     }
     $script:currentStep += 1
 }
+
 function Write-ProgressStep {
     [CmdletBinding()]
     param(
@@ -2046,7 +2047,6 @@ function Remove-UserFromEntraGroups {
     }
 }
 
-
 function Remove-UserLicenses {
     [CmdletBinding()]
     param(
@@ -2186,7 +2186,6 @@ function Remove-UserLicenses {
         throw
     }
 }
-
 
 function Set-TerminatedOneDrive {
     [CmdletBinding()]
@@ -2369,7 +2368,6 @@ $script:currentStep = 0
 Write-Host "`r  [✓] Progress tracking initialized" -ForegroundColor Green
 
 try {
-
     Write-Host "`n  Beginning User Termination..." -ForegroundColor Cyan
 
     # Load configuration
