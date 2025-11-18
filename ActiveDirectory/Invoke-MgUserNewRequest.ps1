@@ -4436,8 +4436,7 @@ try {
     Write-ProgressStep -StepName 'Configure calendar processing'
     Write-StatusMessage -Message "Configuring calendar processing settings for new user..." -Type INFO
 
-    Set-CalendarProcessing -Identity $newUserProperties.Email -TentativePendingApproval $false
-    Set-CalendarProcessing -Identity $newUserProperties.Email -AutomateProcessing 'None'
+    Set-CalendarProcessing -Identity $newUserProperties.Email -AutomateProcessing None -TentativePendingApproval $true -WarningAction SilentlyContinue
 
     # Step: Send notifications
     $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
