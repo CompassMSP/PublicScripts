@@ -4437,6 +4437,8 @@ try {
 
     Set-CalendarProcessing -Identity $newUserProperties.Email -AutomateProcessing None -TentativePendingApproval $true -WarningAction SilentlyContinue
 
+    Set-MailboxJunkEmailConfiguration $newUserProperties.Email -Enabled $false -WarningAction SilentlyContinue
+
     # Step: Send notifications
     $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
     $MgUserManager = $managerResponse.userPrincipalName
