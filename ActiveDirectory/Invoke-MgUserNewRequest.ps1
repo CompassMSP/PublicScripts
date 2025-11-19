@@ -4009,7 +4009,7 @@ $progressSteps = @(
     @{ Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
     @{ Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
     @{ Name = "Managed Service Mailbox Assignment"; Description = "Assigning access rights for managedservices mailbox" }
-    @{ Name = "Configure calendar processing"; Description = "Configure calendar processing settings" }
+    @{ Name = "Disable junk configuration"; Description = "Disable junk configuration settings" }
     @{ Name = "Notifications"; Description = "Sending email notifications" }
     @{ Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
     @{ Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
@@ -4431,11 +4431,9 @@ try {
         }
     }
 
-    # Step: Configure calendar processing
-    Write-ProgressStep -StepName 'Configure calendar processing'
-    Write-StatusMessage -Message "Configuring calendar processing settings for new user..." -Type INFO
-
-    Set-CalendarProcessing -Identity $newUserProperties.Email -AutomateProcessing None -TentativePendingApproval $true -WarningAction SilentlyContinue
+    # Step: Disable junk configuration
+    Write-ProgressStep -StepName 'Disable junk configuration'
+    Write-StatusMessage -Message "Disabling junk configuration for new user..." -Type INFO
 
     Set-MailboxJunkEmailConfiguration $newUserProperties.Email -Enabled $false -WarningAction SilentlyContinue
 
