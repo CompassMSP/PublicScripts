@@ -2857,7 +2857,7 @@ function New-UserProperties {
             FirstName         = $FirstName
             LastName          = $LastName
             DisplayName       = $DisplayName
-            mailNickname      = $accountName
+            mailNickname      = $FirstName + '.' + $LastName
             Email             = $userPrincipalName
             userPrincipalName = $userPrincipalName
         }
