@@ -2474,7 +2474,7 @@ try {
 
     Set-TerminatedMailbox @mailboxParams
 
-   # Step: Remove Full Access to managedservices@compassmsp.com
+    # Step: Remove Full Access to managedservices@compassmsp.com
 
     $properties = @(
         'Id',
@@ -2564,6 +2564,21 @@ The following user need to be removed from 8x8. <p> $($userInfo.selectMgUser.Dis
         Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
     } catch {
         Write-StatusMessage -Message "Failed to send 8x8 notification email: $($_.Exception.Message)" -Type ERROR
+    }
+
+    # Email for Salesforce
+    if ($MgUser.department -in @('Sales')) {
+        try {
+            $ToAddress = $config.Email.NotificationForSalesForceRequests
+            $emailSubject = "Salesforce – Remove User"
+            $emailContent = @"
+The following user need to be removed from Salesforce. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)
+"@
+
+            Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
+        } catch {
+            Write-StatusMessage -Message "Failed to send Salesforce notification email: $($_.Exception.Message)" -Type ERROR
+        }
     }
 
     # Step : Disconnect from Exchange Online and Graph

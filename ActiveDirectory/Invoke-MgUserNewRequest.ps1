@@ -4487,6 +4487,31 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
         Write-StatusMessage -Message "Failed to send 8x8 request email: $($_.Exception.Message)" -Type ERROR
     }
 
+    # Email for Salesforce
+    if ($MgUser.department -in @('Sales')) {
+        try {
+
+            $ToAddress = $config.Email.NotificationForSalesForceRequests
+
+            $emailSubject = "Salesforce – New User"
+            $emailContent = @"
+Please set up the following user with an Salesforce account.<br><br>
+Display Name: $($MgUser.displayName)<br>
+Mail: $($newUserProperties.Email)<br>
+Job Title: $($MgUser.jobTitle)<br>
+Manager: $($MgUserManager)
+
+<p>
+The user start date is $($userInput.employeeHireDate).<br>
+"@
+
+            Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
+
+        } catch {
+            Write-StatusMessage -Message "Failed to send Salesforce request email: $($_.Exception.Message)" -Type ERROR
+        }
+    }
+
     # Step: OneDrive Provisioning
     Write-ProgressStep -StepName 'OneDrive Provisioning'
     Write-StatusMessage -Message "OneDrive provisioning is currently disabled" -Type INFO
