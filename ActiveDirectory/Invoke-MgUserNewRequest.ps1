@@ -805,7 +805,7 @@ function Get-LicenseDisplayName {
         'AAD_PREMIUM_P2' { 'Microsoft Entra ID P2' }
         'POWERAPPS_DEV' { 'Microsoft PowerApps for Developer' }
         'POWERAPPS_VIRAL' { 'Microsoft Power Apps Plan 2 Trial' }
-        'Microsoft_Teams_Audio_Conferencing_select_dial_out' { 'Microsoft Teams Audio Conferencing with dial-out to USA/CAN' }
+        'Microsoft_Teams_Audio_Conferencing_select_dial_out' { 'Microsoft Teams Audio Conferencing with dial-out' }
         'Microsoft_Teams_Premium' { 'Microsoft Teams Premium' }
         'Microsoft_Teams_Enterprise_New' { 'Microsoft Teams Enterprise' }
         'MCOEV' { 'Microsoft Teams Phone Standard' }
@@ -859,7 +859,7 @@ function Get-FormattedLicenseInfo {
             "STREAM",
             "SharePoint Storage",
             "Skype for Business PSTN Domestic Calling",
-            "Teams Premium (for_Departments)",
+            "Teams Premium (for Departments)",
             "Microsoft_Teams_Exploratory_Dept",
             "Windows Store for Business",
             "Microsoft_Teams_Rooms_Pro_without_Audio_Conferencing",
