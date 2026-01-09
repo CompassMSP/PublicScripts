@@ -785,43 +785,50 @@ function Send-GraphMailMessage {
 # License Helper Functions
 function Get-LicenseDisplayName {
     param ([string]$SkuPartNumber)
-    $displayName = switch -Regex ($SkuPartNumber) {
-        "MCOPSTNC" { "Communications Credits" }
-        "PROJECT_MADEIRA_PREVIEW_IW_SKU" { "Dynamics 365 Business Central for IWs" }
-        "EXCHANGESTANDARD" { "Exchange Online (Plan 1)" }
-        "FLOW_FREE" { "Microsoft Power Automate Free" }
-        "MICROSOFT_BUSINESS_CENTER" { "Microsoft Business Center" }
-        "Microsoft_Copilot_for_Finance_trial" { "Microsoft Copilot for Finance trial" }
-        "Microsoft365_Lighthouse" { "Microsoft 365 Lighthouse" }
-        "MCOMEETADV" { "Microsoft 365 Audio Conferencing" }
-        "Microsoft_365_Copilot" { "Microsoft 365 Copilot" }
-        "O365_BUSINESS_ESSENTIALS" { "Microsoft 365 Business Basic" }
-        "SPB" { "Microsoft 365 Business Premium" }
-        "SPE_E3" { "Microsoft 365 E3" }
-        "AAD_PREMIUM_P2" { "Microsoft Entra ID P2" }
-        "POWERAPPS_DEV" { "Microsoft PowerApps for Developer" }
-        "POWERAPPS_VIRAL" { "Microsoft Power Apps Plan 2 Trial" }
-        "Microsoft_Teams_Audio_Conferencing_select_dial_out" { "Microsoft Teams Audio Conferencing with dial-out to USA/CAN" }
-        "Microsoft_Teams_Premium" { "Microsoft Teams Premium" }
-        "MCOEV" { "Microsoft Teams Phone Standard" }
-        "PHONESYSTEM_VIRTUALUSER" { "Microsoft Teams Phone Resource Account" }
-        "MEETING_ROOM" { "Microsoft Teams Rooms Standard" }
-        "ENTERPRISEPACK" { "Office 365 E3" }
-        "POWERAPPS_PER_USER" { "Power Apps Premium" }
-        "POWERAUTOMATE_ATTENDED_RPA" { "Power Automate Premium" }
-        "POWER_BI_PRO" { "Power BI Pro" }
-        "POWER_BI_STANDARD" { "Power BI Standard" }
-        "CCIBOTS_PRIVPREV_VIRAL" { "Power Virtual Agents Viral Trial" }
-        "PROJECT_P1" { "Project Plan 1" }
-        "PROJECTPROFESSIONAL" { "Project Plan 3" }
-        "PROJECT_PLAN3_DEPT" { "Project Plan 3 (for Department)" }
-        "RIGHTSMANAGEMENT_ADHOC" { "Rights Management Adhoc" }
-        "RMSBASIC" { "Rights Management Service Basic Content Protection" }
-        "SHAREPOINTSTORAGE" { "SharePoint Storage" }
-        "MCOPSTN1" { "Skype for Business PSTN Domestic Calling" }
-        "Teams_Premium_(for_Departments)" { "Teams Premium (for Departments)" }
-        "VISIOCLIENT" { "Visio Plan 2" }
-        "WINDOWS_STORE" { "Windows Store for Business" }
+    $displayName = switch -Exact ($SkuPartNumber) {
+        'MCOPSTNC' { 'Communications Credits' }
+        'PROJECT_MADEIRA_PREVIEW_IW_SKU' { 'Dynamics 365 Business Central for IWs' }
+        'EXCHANGESTANDARD' { 'Exchange Online (Plan 1)' }
+        'FLOW_FREE' { 'Microsoft Power Automate Free' }
+        'MICROSOFT_BUSINESS_CENTER' { 'Microsoft Business Center' }
+        'Microsoft_Copilot_for_Finance_trial' { 'Microsoft Copilot for Finance trial' }
+        'Microsoft365_Lighthouse' { 'Microsoft 365 Lighthouse' }
+        'MCOMEETADV' { 'Microsoft 365 Audio Conferencing' }
+        'Microsoft_365_Copilot' { 'Microsoft 365 Copilot' }
+        'O365_BUSINESS_ESSENTIALS' { 'Microsoft 365 Business Basic' }
+        'SPB' { 'Microsoft 365 Business Premium' }
+        'SPE_E3' { 'Microsoft 365 E3' }
+        'SPE_E5' { 'Microsoft 365 E5' }
+        'Microsoft_365_ Business_ Premium_(no Teams)' { 'Microsoft 365 Business Premium (No Teams)' }
+        'Microsoft_365_E3_(no_Teams)' { 'Microsoft 365 E3 (No Teams)' }
+        'Microsoft_365_E5_(no_Teams)' { 'Microsoft 365 E5 (No Teams)' }
+        'AAD_PREMIUM_P2' { 'Microsoft Entra ID P2' }
+        'POWERAPPS_DEV' { 'Microsoft PowerApps for Developer' }
+        'POWERAPPS_VIRAL' { 'Microsoft Power Apps Plan 2 Trial' }
+        'Microsoft_Teams_Audio_Conferencing_select_dial_out' { 'Microsoft Teams Audio Conferencing with dial-out to USA/CAN' }
+        'Microsoft_Teams_Premium' { 'Microsoft Teams Premium' }
+        'Microsoft_Teams_Enterprise_New' { 'Microsoft Teams Enterprise' }
+        'MCOEV' { 'Microsoft Teams Phone Standard' }
+        'PHONESYSTEM_VIRTUALUSER' { 'Microsoft Teams Phone Resource Account' }
+        'MEETING_ROOM' { 'Microsoft Teams Rooms Standard' }
+        'ENTERPRISEPACK' { 'Office 365 E3' }
+        'POWERAPPS_PER_USER' { 'Power Apps Premium' }
+        'POWERAUTOMATE_ATTENDED_RPA' { 'Power Automate Premium' }
+        'PBI_PREMIUM_PER_USER' { 'Power BI Premium' }
+        'POWER_BI_PRO' { 'Power BI Pro' }
+        'POWER_BI_STANDARD' { 'Power BI Standard' }
+        'CCIBOTS_PRIVPREV_VIRAL' { 'Power Virtual Agents Viral Trial' }
+        'PROJECT_P1' { 'Project Plan 1' }
+        'PROJECTPREMIUM' { 'Project Premium' }
+        'PROJECTPROFESSIONAL' { 'Project Plan 3' }
+        'PROJECT_PLAN3_DEPT' { 'Project Plan 3 (for Department)' }
+        'RIGHTSMANAGEMENT_ADHOC' { 'Rights Management Adhoc' }
+        'RMSBASIC' { 'Rights Management Service Basic Content Protection' }
+        'SHAREPOINTSTORAGE' { 'SharePoint Storage' }
+        'MCOPSTN1' { 'Skype for Business PSTN Domestic Calling' }
+        'Teams_Premium_(for_Departments)' { 'Teams Premium (for Departments)' }
+        'VISIOCLIENT' { 'Visio Plan 2' }
+        'WINDOWS_STORE' { 'Windows Store for Business' }
         default { $SkuPartNumber }
     }
     return $displayName
@@ -852,8 +859,11 @@ function Get-FormattedLicenseInfo {
             "STREAM",
             "SharePoint Storage",
             "Skype for Business PSTN Domestic Calling",
-            "Teams_Premium_(for_Departments)",
-            "Windows Store for Business"
+            "Teams Premium (for_Departments)",
+            "Microsoft_Teams_Exploratory_Dept",
+            "Windows Store for Business",
+            "Microsoft_Teams_Rooms_Pro_without_Audio_Conferencing",
+            "Power_Automate_per_process"
         )
     )
     return $Skus | ForEach-Object {
@@ -2153,19 +2163,22 @@ function Get-NewUserRequest {
             # Define the licenses you care about
             $requiredLicenses = @(
                 "Exchange Online (Plan 1)",
-                "Office 365 E3",
                 "Microsoft 365 Business Basic",
                 "Microsoft 365 E3",
-                "Microsoft 365 Business Premium"
+                "Microsoft 365 E5",
+                "Microsoft 365 Business Premium",
+                "Microsoft 365 E3 (No Teams)",
+                "Microsoft 365 E5 (No Teams)",
+                "Microsoft 365 Business Premium (No Teams)"
             )
 
             # Populate the combo box with matching licenses
             foreach ($license in $licenseInfo) {
                 foreach ($reqLicense in $requiredLicenses) {
-                    if ($license.DisplayName -like "*$reqLicense*") {
+                    if ($license.SortName -eq $reqLicense) {
                         $comboItem = New-Object System.Windows.Controls.ComboBoxItem
                         $comboItem.Content = $license.DisplayName
-                        $comboItem.Tag = $license.SkuId  # Store the SkuId for use later
+                        $comboItem.Tag = $license.SkuId # Store the SkuId for use later
                         [void]$cboRequiredLicense.Items.Add($comboItem)
                     }
                 }
@@ -2175,12 +2188,11 @@ function Get-NewUserRequest {
             foreach ($license in $licenseInfo) {
                 $isRequired = $false
                 foreach ($reqLicense in $requiredLicenses) {
-                    if ($license.DisplayName -like "*$reqLicense*") {
+                    if ($license.SortName -eq $reqLicense) {
                         $isRequired = $true
                         break
                     }
                 }
-
                 if (-not $isRequired) {
                     $listItem = New-Object System.Windows.Controls.ListBoxItem
                     $listItem.Content = $license.DisplayName
@@ -4054,6 +4066,7 @@ try {
     # Step: User Input
     Write-ProgressStep -StepName 'User Input'
     $userInput = Get-NewUserRequest
+
     if (-not $userInput) {
         Exit-Script -Message "Failed to get user input" -ExitCode ConfigError
     }
