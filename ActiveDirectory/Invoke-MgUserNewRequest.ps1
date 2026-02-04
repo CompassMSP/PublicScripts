@@ -4444,11 +4444,13 @@ try {
         }
     }
 
+    <#
     # Step: Disable junk configuration
     Write-ProgressStep -StepName 'Disable junk configuration'
     Write-StatusMessage -Message "Disabling junk configuration for new user..." -Type INFO
 
     Set-MailboxJunkEmailConfiguration $newUserProperties.Email -Enabled $false -WarningAction SilentlyContinue
+    #>
 
     # Step: Send notifications
     $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
