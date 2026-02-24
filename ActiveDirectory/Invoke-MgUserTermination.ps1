@@ -2047,6 +2047,145 @@ function Remove-UserFromEntraGroups {
     }
 }
 
+function Remove-UserGroupOwnership {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [hashtable]
+        $User,
+
+        [Parameter()]
+        [string]$ExportPath,
+
+        [Parameter()]
+        [switch]
+        $UseFallbackOwner,
+
+        [Parameter()]
+        [string]
+        $FallbackOwnerId
+    )
+
+    # Track groups where fallback was applied
+    $FallbackOwnerGroups = @()
+
+    try {
+        Write-StatusMessage -Message "Finding owned groups" -Type INFO
+
+        try {
+            # Get owned groups
+            $response = Invoke-MgGraphRequest `
+                -Method GET `
+                -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/ownedObjects/microsoft.graph.group" `
+                -ErrorAction Stop
+
+            $ownedGroups = $response.value
+
+            if (-not $ownedGroups) {
+                Write-StatusMessage -Message "No owned groups found" -Type INFO
+                return $null
+            }
+
+            # Format for processing
+            $AllOwnedGroups = $ownedGroups | ForEach-Object {
+                [PSCustomObject]@{
+                    Id          = $_.id
+                    DisplayName = $_.displayName
+                }
+            }
+
+            Write-StatusMessage -Message "Found $($AllOwnedGroups.Count) owned groups to process" -Type INFO
+
+            # Export if requested
+            if ($ExportPath) {
+                try {
+                    $AllOwnedGroups | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
+                    Write-StatusMessage -Message "Exported owned groups to: $ExportPath" -Type OK
+                }
+                catch {
+                    Write-StatusMessage -Message "Failed to export owned groups" -Type ERROR
+                }
+            }
+
+            foreach ($group in $AllOwnedGroups) {
+
+                Write-StatusMessage -Message "Processing ownership for: $($group.DisplayName)" -Type INFO
+
+                try {
+                    # Get current owners
+                    $ownersResponse = Invoke-MgGraphRequest `
+                        -Method GET `
+                        -Uri "https://graph.microsoft.com/v1.0/groups/$($group.Id)/owners?`$select=id" `
+                        -ErrorAction Stop
+
+                    $ownerCount = $ownersResponse.value.Count
+
+                    if ($ownerCount -le 1) {
+
+                        if ($UseFallbackOwner) {
+
+                            if (-not $FallbackOwnerId) {
+                                Write-StatusMessage -Message "Fallback owner switch used but no FallbackOwnerId provided" -Type ERROR
+                                continue
+                            }
+
+                            Write-StatusMessage -Message "User is sole owner. Adding fallback owner..." -Type WARN
+
+                            $body = @{
+                                "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$FallbackOwnerId"
+                            } | ConvertTo-Json
+
+                            Invoke-MgGraphRequest `
+                                -Method POST `
+                                -Uri "https://graph.microsoft.com/v1.0/groups/$($group.Id)/owners/`$ref" `
+                                -Body $body `
+                                -ContentType "application/json" `
+                                -ErrorAction Stop
+
+                            Write-StatusMessage -Message "Fallback owner added to $($group.DisplayName)" -Type OK
+
+                            # Track group for final export
+                            $FallbackOwnerGroups += $group
+                        }
+                        else {
+                            Write-StatusMessage -Message "Skipping $($group.DisplayName) - user is only owner" -Type ERROR
+                            continue
+                        }
+                    }
+
+                    # Remove ownership
+                    $removeUri = "https://graph.microsoft.com/v1.0/groups/$($group.Id)/owners/$($User.Id)/`$ref"
+
+                    Invoke-MgGraphRequest `
+                        -Method DELETE `
+                        -Uri $removeUri `
+                        -ErrorAction Stop
+
+                    Write-StatusMessage -Message "Removed ownership from: $($group.DisplayName)" -Type OK
+                }
+                catch {
+                    Write-StatusMessage -Message "Failed processing ownership for $($group.DisplayName)" -Type ERROR
+                }
+            }
+
+            # Return results for final export / summary
+            return [PSCustomObject]@{
+                OwnedGroups        = $AllOwnedGroups
+                FallbackOwnerGroups = $FallbackOwnerGroups
+            }
+        }
+        catch {
+            Write-StatusMessage -Message "Failed to retrieve owned groups" -Type ERROR
+            throw
+        }
+    }
+    catch {
+        Write-StatusMessage -Message "Critical error in Remove-UserGroupOwnership" -Type ERROR
+        throw
+    }
+}
+
 function Remove-UserLicenses {
     [CmdletBinding()]
     param(
@@ -2280,33 +2419,19 @@ function Start-Finalize {
         [string]$GrantUserOneDriveAccess,
 
         [Parameter()]
-        [string]$ExportPath
-    )
+        [string]$ExportPath,
 
-    <# Start AD Sync
-    Write-StatusMessage -Message "Starting AD sync cycle" -Type INFO
-    try {
-        Import-Module -Name ADSync -UseWindowsPowerShell -WarningAction:SilentlyContinue -ErrorAction Stop
-        $null = Start-ADSyncSyncCycle -PolicyType Delta -ErrorAction Stop
-        Write-StatusMessage -Message "AD sync cycle initiated successfully" -Type OK
-    } catch {
-        try {
-            # Fallback to direct PowerShell execution if module import fails
-            $null = powershell.exe -command Start-ADSyncSyncCycle -PolicyType Delta
-            Write-StatusMessage -Message "AD sync cycle initiated through PowerShell" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to start AD sync cycle" -Type ERROR
-            throw
-        }
-    }
-    #>
+        [Parameter()]
+        [array]
+        $FallbackOwnerGroups
+    )
 
     # Build summary parts
     $summaryParts = @(
         "Summary of Actions:",
         "----------------------------------------",
         "$($User.displayName) should now be offboarded unless any errors occurred during the process.",
-        "If any info below is blank then something went wrong in the script. ",
+        "If any info below is blank then something went wrong in the script.",
         "User Termination Status:",
         "- EntraID: $($User.Id)",
         "- Display Name: $($User.displayName)",
@@ -2324,6 +2449,22 @@ function Start-Finalize {
     }
     if ($ExportPath) {
         $summaryParts += "- Attributes, Groups and licenses exported to: $ExportPath"
+    }
+
+    # Add fallback owner group info
+    if ($FallbackOwnerGroups) {
+        $summaryParts += ""
+        $summaryParts += "Groups where fallback owner was added:"
+        $summaryParts += "----------------------------------------"
+
+        foreach ($g in $FallbackOwnerGroups) {
+            if ($g.DisplayName) {
+                $summaryParts += "- $($g.DisplayName) ($($g.Id))"
+            }
+            else {
+                $summaryParts += "- $g"
+            }
+        }
     }
 
     $summaryParts += "----------------------------------------"
@@ -2530,6 +2671,13 @@ try {
     $groupExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Groups_Id.csv"
     Remove-UserFromEntraGroups -User $userInfo.selectMgUser -ExportPath $groupExportPath
 
+    $groupOwnerExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_GroupsOwnership_Id.csv"
+    $ownershipResults = Remove-UserGroupOwnership `
+    -User $userInfo.selectMgUser `
+    -UseFallbackOwner `
+    -FallbackOwnerId "f91a781a-a556-4947-8358-699d0c7bf2d5" `
+    -ExportPath $groupExportPath
+
     # Step: Remove Licenses
     Write-ProgressStep -StepName 'License Removal'
     $licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
@@ -2615,6 +2763,7 @@ The following user need to be removed from Salesforce. <p> $($userInfo.selectMgU
         -SetUserMailFWD $SetUserMailFWD `
         -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
         -ExportPath $config.Paths.TermExportPath
+        -FallbackOwnerGroups $ownershipResults.FallbackOwnerGroups
 
     # Clear the progress bar
     Write-Progress -Activity "User Termination" -Completed
