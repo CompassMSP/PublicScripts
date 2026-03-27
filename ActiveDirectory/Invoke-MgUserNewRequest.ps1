@@ -4473,33 +4473,79 @@ try {
     $MsgFrom = $config.Email.NotificationFrom
     $CcAddress = $config.Email.NotificationCcAddress
 
-    # Email Compass West for 8x8
+    # Create ticket for 8x8 provisioning on the Telcom Board
     try {
 
-        $ToAddress = $config.Email.NotificationTo8x8
+        function Get-ConnectWiseManageToken {
+            param (
+                [string]$CompanyId,
+                [string]$PublicKey,
+                [string]$PrivateKey,
+                [string]$clientId
+            )
+
+            # Encode companyId+publicKey:privateKey in Base64
+            $pair = "$CompanyId+$PublicKey`:$PrivateKey"
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+            $base64 = [Convert]::ToBase64String($bytes)
+
+            # Create headers with Basic authentication
+            $headers = @{
+                "Authorization" = "Basic $base64"
+                "Content-Type"  = "application/json"
+                "ClientId"      = $clientId
+            }
+
+            return $headers
+        }
+
+        Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
 
         $emailSubject = "8x8 – New User"
         $callCenter = if ($MgUser.department -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
+
         $emailContent = @"
-Please set up the following user with an 8x8 account.<br><br>
-Display Name: $($MgUser.displayName)<br>
-Mail: $($newUserProperties.Email)<br>
-Job Title: $($MgUser.jobTitle)<br>
-Department: $($MgUser.department)<br>
-OfficeLocation:  $($MgUser.officeLocation)<br>
-Call Center: $callCenter<br>
-User to Copy: $($userInput.userToCopy)<br>
+Please set up the following user with an 8x8 account.
+
+Display Name: $($MgUser.displayName)
+Mail: $($newUserProperties.Email)
+Job Title: $($MgUser.jobTitle)
+Department: $($MgUser.department)
+OfficeLocation:  $($MgUser.officeLocation)
+Call Center: $callCenter
+User to Copy: $($userInput.userToCopy)
 Manager: $($MgUserManager)
-<p>
-Please do not send the welcome email with the account setup.<br>
-<p>
-The user start date is $($userInput.employeeHireDate), so please send the welcome email the day prior to their start.<br>
+
+Please do not send the welcome email with the account setup.
+
+The user start date is $($userInput.employeeHireDate), so please send the welcome email the day prior to their start.
 "@
 
-        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
+        $body = @{
+            summary            = $emailSubject
+            initialDescription = $emailContent
+            company            = @{
+                identifier = 'CompassMSP'
+            }
+            board              = @{
+                name = "Telecom Managed Services"
+            }
+            status             = @{
+                name = "+New"
+            }
+        } | ConvertTo-Json -Depth 10
+
+        $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
+
+        Invoke-RestMethod `
+            -Method Post `
+            -Uri "$baseUrl/service/tickets" `
+            -Headers $headers `
+            -Body $body `
+            -ContentType "application/json"
 
     } catch {
-        Write-StatusMessage -Message "Failed to send 8x8 request email: $($_.Exception.Message)" -Type ERROR
+        Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: $($_.Exception.Message)" -Type ERROR
     }
 
     # Email for Salesforce

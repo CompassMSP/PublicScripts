@@ -2102,8 +2102,7 @@ function Remove-UserGroupOwnership {
                 try {
                     $AllOwnedGroups | Export-Csv -Path $ExportPath -NoTypeInformation -ErrorAction Stop
                     Write-StatusMessage -Message "Exported owned groups to: $ExportPath" -Type OK
-                }
-                catch {
+                } catch {
                     Write-StatusMessage -Message "Failed to export owned groups" -Type ERROR
                 }
             }
@@ -2147,8 +2146,7 @@ function Remove-UserGroupOwnership {
 
                             # Track group for final export
                             $FallbackOwnerGroups += $group
-                        }
-                        else {
+                        } else {
                             Write-StatusMessage -Message "Skipping $($group.DisplayName) - user is only owner" -Type ERROR
                             continue
                         }
@@ -2163,24 +2161,21 @@ function Remove-UserGroupOwnership {
                         -ErrorAction Stop
 
                     Write-StatusMessage -Message "Removed ownership from: $($group.DisplayName)" -Type OK
-                }
-                catch {
+                } catch {
                     Write-StatusMessage -Message "Failed processing ownership for $($group.DisplayName)" -Type ERROR
                 }
             }
 
             # Return results for final export / summary
             return [PSCustomObject]@{
-                OwnedGroups        = $AllOwnedGroups
+                OwnedGroups         = $AllOwnedGroups
                 FallbackOwnerGroups = $FallbackOwnerGroups
             }
-        }
-        catch {
+        } catch {
             Write-StatusMessage -Message "Failed to retrieve owned groups" -Type ERROR
             throw
         }
-    }
-    catch {
+    } catch {
         Write-StatusMessage -Message "Critical error in Remove-UserGroupOwnership" -Type ERROR
         throw
     }
@@ -2460,8 +2455,7 @@ function Start-Finalize {
         foreach ($g in $FallbackOwnerGroups) {
             if ($g.DisplayName) {
                 $summaryParts += "- $($g.DisplayName) ($($g.Id))"
-            }
-            else {
+            } else {
                 $summaryParts += "- $g"
             }
         }
@@ -2673,10 +2667,10 @@ try {
 
     $groupOwnerExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_GroupsOwnership_Id.csv"
     $ownershipResults = Remove-UserGroupOwnership `
-    -User $userInfo.selectMgUser `
-    -UseFallbackOwner `
-    -FallbackOwnerId "f91a781a-a556-4947-8358-699d0c7bf2d5" `
-    -ExportPath $groupExportPath
+        -User $userInfo.selectMgUser `
+        -UseFallbackOwner `
+        -FallbackOwnerId "f91a781a-a556-4947-8358-699d0c7bf2d5" `
+        -ExportPath $groupExportPath
 
     # Step: Remove Licenses
     Write-ProgressStep -StepName 'License Removal'
@@ -2688,30 +2682,66 @@ try {
     $MsgFrom = $config.Email.NotificationFrom
     $CcAddress = $config.Email.NotificationCcAddress
 
-    # Email to SOC for KnowBe4
-    try {
-        $ToAddress = $config.Email.NotificationToKnowBe4
-        $emailSubject = "KB4 – Remove User"
-        $emailContent = @"
-The following user need to be removed to the CompassMSP KnowBe4 account. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)
-"@
-
-        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
-    } catch {
-        Write-StatusMessage -Message "Failed to send KnowBe4 notification email: $($_.Exception.Message)" -Type ERROR
-    }
-
     # Email Compass West for 8x8
     try {
-        $ToAddress = $config.Email.NotificationTo8x8
+
+        function Get-ConnectWiseManageToken {
+            param (
+                [string]$CompanyId,
+                [string]$PublicKey,
+                [string]$PrivateKey,
+                [string]$clientId
+            )
+
+            # Encode companyId+publicKey:privateKey in Base64
+            $pair = "$CompanyId+$PublicKey`:$PrivateKey"
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+            $base64 = [Convert]::ToBase64String($bytes)
+
+            # Create headers with Basic authentication
+            $headers = @{
+                "Authorization" = "Basic $base64"
+                "Content-Type"  = "application/json"
+                "ClientId"      = $clientId
+            }
+
+            return $headers
+        }
+
+        Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
+
         $emailSubject = "8x8 – Remove User"
         $emailContent = @"
-The following user need to be removed from 8x8. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)
+The following user need to be removed from 8x8.
+
+$($userInfo.selectMgUser.DisplayName) - $($userInfo.selectMgUser.Mail)
 "@
 
-        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
+        $body = @{
+            summary            = $emailSubject
+            initialDescription = $emailContent
+            company            = @{
+                identifier = 'CompassMSP'
+            }
+            board              = @{
+                name = "Telecom Managed Services"
+            }
+            status             = @{
+                name = "+New"
+            }
+        } | ConvertTo-Json -Depth 10
+
+        $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
+
+        Invoke-RestMethod `
+            -Method Post `
+            -Uri "$baseUrl/service/tickets" `
+            -Headers $headers `
+            -Body $body `
+            -ContentType "application/json"
+
     } catch {
-        Write-StatusMessage -Message "Failed to send 8x8 notification email: $($_.Exception.Message)" -Type ERROR
+        Write-StatusMessage -Message "Failed to create 8x8 deprovisioning ticket: $($_.Exception.Message)" -Type ERROR
     }
 
     # Email for Salesforce
