@@ -4422,6 +4422,20 @@ try {
         }
     }
 
+    # Get KnowBe4 group memberships for the user
+    $response = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($mgUser.id)/memberOf" -ErrorAction Stop
+    $groupObjects = $response.value
+
+    $KnowBe4 = $groupObjects | Where-Object {
+        $_.'displayName' -eq 'KnowBe4'
+    }
+
+    if ($null -eq $KnowBe4) {
+        Write-Host "Adding user $($User.DisplayName) to KnowBe4 group."
+        $groupAddUri = "https://graph.microsoft.com/v1.0/groups/8f08008b-0c3d-4750-9170-d575911da336/members/`$ref"
+        $response = Invoke-MgGraphRequest -Method POST -Uri $groupAddUri -Body @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($mgUser.id)" } | Out-Null
+    }
+
     # Step: Full Access to managedservices@compassmsp.com
     Write-ProgressStep -StepName 'Managed Service Mailbox Assignment'
 
@@ -4458,20 +4472,6 @@ try {
     Write-ProgressStep -StepName 'Notifications'
     $MsgFrom = $config.Email.NotificationFrom
     $CcAddress = $config.Email.NotificationCcAddress
-
-    # Email to SOC for KnowBe4
-    try {
-        $ToAddress = $config.Email.NotificationToKnowBe4
-
-        $emailSubject = "KB4 – New User"
-        $emailContent = @"
-The following user need to be added to the CompassMSP KnowBe4 account. <p> $($MgUser.DisplayName) <br> $($newUserProperties.Email)
-"@
-
-        Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
-    } catch {
-        Write-StatusMessage -Message "Failed to send KnowBe4 notification email: $($_.Exception.Message)" -Type ERROR
-    }
 
     # Email Compass West for 8x8
     try {
