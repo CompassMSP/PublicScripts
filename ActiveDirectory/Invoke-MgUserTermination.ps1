@@ -2708,7 +2708,7 @@ try {
             return $headers
         }
 
-        Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
+        $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
 
         $emailSubject = "8x8 – Remove User"
         $emailContent = @"
@@ -2733,15 +2733,21 @@ $($userInfo.selectMgUser.DisplayName) - $($userInfo.selectMgUser.Mail)
 
         $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
 
-        Invoke-RestMethod `
+        $8x8TicketResults = Invoke-RestMethod `
             -Method Post `
             -Uri "$baseUrl/service/tickets" `
             -Headers $headers `
             -Body $body `
             -ContentType "application/json"
 
+        if ($8x8TicketResults) {
+            Write-StatusMessage -Message "Successfully created 8x8 removal ticket: $($8x8TicketResults.id)" -Type OK
+        } else {
+            Write-StatusMessage -Message "Failed to create 8x8 removal ticket: No response from API" -Type ERROR
+        }
+
     } catch {
-        Write-StatusMessage -Message "Failed to create 8x8 deprovisioning ticket: $($_.Exception.Message)" -Type ERROR
+        Write-StatusMessage -Message "Failed to create 8x8 removal ticket: $($_.Exception.Message)" -Type ERROR
     }
 
     # Email for Salesforce
@@ -2793,7 +2799,7 @@ The following user need to be removed from Salesforce. <p> $($userInfo.selectMgU
         -SetUserMailFWD $SetUserMailFWD `
         -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
         -ExportPath $config.Paths.TermExportPath
-        -FallbackOwnerGroups $ownershipResults.FallbackOwnerGroups
+    -FallbackOwnerGroups $ownershipResults.FallbackOwnerGroups
 
     # Clear the progress bar
     Write-Progress -Activity "User Termination" -Completed

@@ -4499,7 +4499,7 @@ try {
             return $headers
         }
 
-        Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
+        $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
 
         $emailSubject = "8x8 – New User"
         $callCenter = if ($MgUser.department -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
@@ -4537,12 +4537,18 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
 
         $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
 
-        Invoke-RestMethod `
+        $8x8TicketResults = Invoke-RestMethod `
             -Method Post `
             -Uri "$baseUrl/service/tickets" `
             -Headers $headers `
             -Body $body `
             -ContentType "application/json"
+
+        if ($8x8TicketResults) {
+            Write-StatusMessage -Message "Successfully created 8x8 provisioning ticket: $($8x8TicketResults.id)" -Type OK
+        } else {
+            Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: No response from API" -Type ERROR
+        }
 
     } catch {
         Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: $($_.Exception.Message)" -Type ERROR
