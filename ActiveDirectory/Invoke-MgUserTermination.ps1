@@ -2798,8 +2798,8 @@ The following user need to be removed from Salesforce. <p> $($userInfo.selectMgU
         -GrantUserFullControl $GrantUserFullControl `
         -SetUserMailFWD $SetUserMailFWD `
         -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
-        -ExportPath $config.Paths.TermExportPath
-    -FallbackOwnerGroups $ownershipResults.FallbackOwnerGroups
+        -ExportPath $config.Paths.TermExportPath `
+        -FallbackOwnerGroups $ownershipResults.FallbackOwnerGroups
 
     # Clear the progress bar
     Write-Progress -Activity "User Termination" -Completed
