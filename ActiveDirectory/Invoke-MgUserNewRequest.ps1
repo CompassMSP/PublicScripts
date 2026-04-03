@@ -1739,14 +1739,14 @@ function Get-NewUserRequest {
             surname                = $data['Last Name']
             jobTitle               = $data['Job Title']
             department             = $data['Department']
+            officeLocation         = $data['Sub Department']
             companyName            = "CompassMSP"
-            officeLocation         = $data['Job Location']
             employeeHireDate       = $startDate
             manager                = $managerEmail
             businessPhone          = $null
             faxNumber              = $null
             streetAddress          = $null
-            city                   = $null
+            city                   = $data['Site']
             state                  = $null
             postalCode             = $null
             country                = $null
@@ -4439,7 +4439,7 @@ try {
     # Step: Full Access to managedservices@compassmsp.com
     Write-ProgressStep -StepName 'Managed Service Mailbox Assignment'
 
-    if ($MgUser.Department -in @('Professional Services', 'Deployment')) {
+    if ($MgUser.officeLocation -in @('Professional Services', 'Deployment')) {
         Write-StatusMessage -Message "Adding full access to the managedservices@compassmsp.com mailbox..." -Type INFO
 
         try {
@@ -4502,7 +4502,7 @@ try {
         $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
 
         $emailSubject = "8x8 – New User"
-        $callCenter = if ($MgUser.department -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
+        $callCenter = if ($MgUser.officeLocation -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
 
         $emailContent = @"
 Please set up the following user with an 8x8 account.
@@ -4511,7 +4511,8 @@ Display Name: $($MgUser.displayName)
 Mail: $($newUserProperties.Email)
 Job Title: $($MgUser.jobTitle)
 Department: $($MgUser.department)
-OfficeLocation:  $($MgUser.officeLocation)
+Sub Department: $($MgUser.officeLocation)
+Site:  $($MgUser.city)
 Call Center: $callCenter
 User to Copy: $($userInput.userToCopy)
 Manager: $($MgUserManager)
