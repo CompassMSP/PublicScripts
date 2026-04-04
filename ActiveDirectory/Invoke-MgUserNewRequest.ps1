@@ -4512,7 +4512,6 @@ Mail: $($newUserProperties.Email)
 Job Title: $($MgUser.jobTitle)
 Department: $($MgUser.department)
 Sub Department: $($MgUser.officeLocation)
-Site:  $($MgUser.city)
 Call Center: $callCenter
 User to Copy: $($userInput.userToCopy)
 Manager: $($MgUserManager)
