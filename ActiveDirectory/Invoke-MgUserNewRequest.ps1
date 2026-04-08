@@ -1546,6 +1546,255 @@ function Get-NewUserRequest {
         $Variable = New-Variable -Name $Name -Value $Window.FindName($Name) -Force
     }
 
+    $Global:CountryMap = @{
+        "United States"                            = "US"
+        "Philippines"                              = "PH"
+        "Afghanistan"                              = "AF"
+        "Åland Islands"                            = "AX"
+        "Albania"                                  = "AL"
+        "Algeria"                                  = "DZ"
+        "American Samoa"                           = "AS"
+        "Andorra"                                  = "AD"
+        "Angola"                                   = "AO"
+        "Antarctica"                               = "AQ"
+        "Antigua and Barbuda"                      = "AG"
+        "Argentina"                                = "AR"
+        "Armenia"                                  = "AM"
+        "Aruba"                                    = "AW"
+        "Australia"                                = "AU"
+        "Austria"                                  = "AT"
+        "Azerbaijan"                               = "AZ"
+        "Bahamas"                                  = "BS"
+        "Bahrain"                                  = "BH"
+        "Bangladesh"                               = "BD"
+        "Barbados"                                 = "BB"
+        "Belarus"                                  = "BY"
+        "Belgium"                                  = "BE"
+        "Belize"                                   = "BZ"
+        "Benin"                                    = "BJ"
+        "Bermuda"                                  = "BM"
+        "Bhutan"                                   = "BT"
+        "Bolivia"                                  = "BO"
+        "Bonaire"                                  = "BQ"
+        "Bosnia and Herzegovina"                   = "BA"
+        "Botswana"                                 = "BW"
+        "Bouvet Island"                            = "BV"
+        "Brazil"                                   = "BR"
+        "British Indian Ocean Territory"           = "IO"
+        "British Virgin Islands"                   = "VG"
+        "Brunei"                                   = "BN"
+        "Bulgaria"                                 = "BG"
+        "Burkina Faso"                             = "BF"
+        "Burundi"                                  = "BI"
+        "Cabo Verde"                               = "CV"
+        "Cambodia"                                 = "KH"
+        "Cameroon"                                 = "CM"
+        "Canada"                                   = "CA"
+        "Cayman Islands"                           = "KY"
+        "Central African Republic"                 = "CF"
+        "Chad"                                     = "TD"
+        "Chile"                                    = "CL"
+        "China"                                    = "CN"
+        "Christmas Island"                         = "CX"
+        "Cocos (Keeling) Islands"                  = "CC"
+        "Colombia"                                 = "CO"
+        "Comoros"                                  = "KM"
+        "Congo"                                    = "CG"
+        "Congo (DRC)"                              = "CD"
+        "Cook Islands"                             = "CK"
+        "Costa Rica"                               = "CR"
+        "Côte d'Ivoire"                            = "CI"
+        "Croatia"                                  = "HR"
+        "Cuba"                                     = "CU"
+        "Curaçao"                                  = "CW"
+        "Cyprus"                                   = "CY"
+        "Czechia"                                  = "CZ"
+        "Denmark"                                  = "DK"
+        "Djibouti"                                 = "DJ"
+        "Dominica"                                 = "DM"
+        "Dominican Republic"                       = "DO"
+        "Ecuador"                                  = "EC"
+        "Egypt"                                    = "EG"
+        "El Salvador"                              = "SV"
+        "Equatorial Guinea"                        = "GQ"
+        "Eritrea"                                  = "ER"
+        "Estonia"                                  = "EE"
+        "eSwatini"                                 = "SZ"
+        "Ethiopia"                                 = "ET"
+        "Faroe Islands"                            = "FO"
+        "Fiji"                                     = "FJ"
+        "Finland"                                  = "FI"
+        "France"                                   = "FR"
+        "French Guiana"                            = "GF"
+        "French Polynesia"                         = "PF"
+        "French Southern Territories"              = "TF"
+        "Gabon"                                    = "GA"
+        "Gambia"                                   = "GM"
+        "Georgia"                                  = "GE"
+        "Germany"                                  = "DE"
+        "Ghana"                                    = "GH"
+        "Gibraltar"                                = "GI"
+        "Greece"                                   = "GR"
+        "Greenland"                                = "GL"
+        "Grenada"                                  = "GD"
+        "Guadeloupe"                               = "GP"
+        "Guam"                                     = "GU"
+        "Guatemala"                                = "GT"
+        "Guernsey"                                 = "GG"
+        "Guinea"                                   = "GN"
+        "Guinea-Bissau"                            = "GW"
+        "Guyana"                                   = "GY"
+        "Haiti"                                    = "HT"
+        "Heard Island and McDonald Islands"        = "HM"
+        "Honduras"                                 = "HN"
+        "Hong Kong SAR"                            = "HK"
+        "Hungary"                                  = "HU"
+        "Iceland"                                  = "IS"
+        "India"                                    = "IN"
+        "Indonesia"                                = "ID"
+        "Iran"                                     = "IR"
+        "Iraq"                                     = "IQ"
+        "Ireland"                                  = "IE"
+        "Isle of Man"                              = "IM"
+        "Israel"                                   = "IL"
+        "Italy"                                    = "IT"
+        "Jamaica"                                  = "JM"
+        "Japan"                                    = "JP"
+        "Jersey"                                   = "JE"
+        "Jordan"                                   = "JO"
+        "Kazakhstan"                               = "KZ"
+        "Kenya"                                    = "KE"
+        "Kiribati"                                 = "KI"
+        "Korea (South)"                            = "KR"
+        "Kuwait"                                   = "KW"
+        "Kyrgyzstan"                               = "KG"
+        "Laos"                                     = "LA"
+        "Latvia"                                   = "LV"
+        "Lebanon"                                  = "LB"
+        "Lesotho"                                  = "LS"
+        "Liberia"                                  = "LR"
+        "Libya"                                    = "LY"
+        "Liechtenstein"                            = "LI"
+        "Lithuania"                                = "LT"
+        "Luxembourg"                               = "LU"
+        "Macao SAR"                                = "MO"
+        "Madagascar"                               = "MG"
+        "Malawi"                                   = "MW"
+        "Malaysia"                                 = "MY"
+        "Maldives"                                 = "MV"
+        "Mali"                                     = "ML"
+        "Malta"                                    = "MT"
+        "Marshall Islands"                         = "MH"
+        "Martinique"                               = "MQ"
+        "Mauritania"                               = "MR"
+        "Mauritius"                                = "MU"
+        "Mayotte"                                  = "YT"
+        "Mexico"                                   = "MX"
+        "Micronesia"                               = "FM"
+        "Moldova"                                  = "MD"
+        "Monaco"                                   = "MC"
+        "Mongolia"                                 = "MN"
+        "Montenegro"                               = "ME"
+        "Montserrat"                               = "MS"
+        "Morocco"                                  = "MA"
+        "Mozambique"                               = "MZ"
+        "Myanmar"                                  = "MM"
+        "Namibia"                                  = "NA"
+        "Nauru"                                    = "NR"
+        "Nepal"                                    = "NP"
+        "Netherlands"                              = "NL"
+        "New Caledonia"                            = "NC"
+        "New Zealand"                              = "NZ"
+        "Nicaragua"                                = "NI"
+        "Niger"                                    = "NE"
+        "Nigeria"                                  = "NG"
+        "Niue"                                     = "NU"
+        "Norfolk Island"                           = "NF"
+        "North Korea"                              = "KP"
+        "North Macedonia"                          = "MK"
+        "Northern Mariana Islands"                 = "MP"
+        "Norway"                                   = "NO"
+        "Oman"                                     = "OM"
+        "Pakistan"                                 = "PK"
+        "Palau"                                    = "PW"
+        "Palestinian Authority"                    = "PS"
+        "Panama"                                   = "PA"
+        "Papua New Guinea"                         = "PG"
+        "Paraguay"                                 = "PY"
+        "Peru"                                     = "PE"
+        "Pitcairn Islands"                         = "PN"
+        "Poland"                                   = "PL"
+        "Portugal"                                 = "PT"
+        "Puerto Rico"                              = "PR"
+        "Qatar"                                    = "QA"
+        "Réunion"                                  = "RE"
+        "Romania"                                  = "RO"
+        "Russia"                                   = "RU"
+        "Rwanda"                                   = "RW"
+        "Saint Barthélemy"                         = "BL"
+        "Saint Kitts and Nevis"                    = "KN"
+        "Saint Lucia"                              = "LC"
+        "Saint Martin"                             = "MF"
+        "Saint Pierre and Miquelon"                = "PM"
+        "Saint Vincent and the Grenadines"         = "VC"
+        "Samoa"                                    = "WS"
+        "San Marino"                               = "SM"
+        "São Tomé and Príncipe"                    = "ST"
+        "Saudi Arabia"                             = "SA"
+        "Senegal"                                  = "SN"
+        "Serbia"                                   = "RS"
+        "Seychelles"                               = "SC"
+        "Sierra Leone"                             = "SL"
+        "Singapore"                                = "SG"
+        "Sint Maarten"                             = "SX"
+        "Slovakia"                                 = "SK"
+        "Slovenia"                                 = "SI"
+        "Solomon Islands"                          = "SB"
+        "Somalia"                                  = "SO"
+        "South Africa"                             = "ZA"
+        "South Georgia and South Sandwich Islands" = "GS"
+        "South Sudan"                              = "SS"
+        "Spain"                                    = "ES"
+        "Sri Lanka"                                = "LK"
+        "St Helena, Ascension, Tristan da Cunha"   = "SH"
+        "Sudan"                                    = "SD"
+        "Suriname"                                 = "SR"
+        "Svalbard"                                 = "SJ"
+        "Sweden"                                   = "SE"
+        "Switzerland"                              = "CH"
+        "Syria"                                    = "SY"
+        "Taiwan"                                   = "TW"
+        "Tajikistan"                               = "TJ"
+        "Tanzania"                                 = "TZ"
+        "Thailand"                                 = "TH"
+        "Timor-Leste"                              = "TL"
+        "Togo"                                     = "TG"
+        "Tokelau"                                  = "TK"
+        "Tonga"                                    = "TO"
+        "Trinidad and Tobago"                      = "TT"
+        "Tunisia"                                  = "TN"
+        "Türkiye"                                  = "TR"
+        "Turkmenistan"                             = "TM"
+        "Turks and Caicos Islands"                 = "TC"
+        "Tuvalu"                                   = "TV"
+        "Uganda"                                   = "UG"
+        "Ukraine"                                  = "UA"
+        "United Arab Emirates"                     = "AE"
+        "United Kingdom"                           = "GB"
+        "Uruguay"                                  = "UY"
+        "U.S. Outlying Islands"                    = "UM"
+        "U.S. Virgin Islands"                      = "VI"
+        "Uzbekistan"                               = "UZ"
+        "Vanuatu"                                  = "VU"
+        "Vatican City"                             = "VA"
+        "Venezuela"                                = "VE"
+        "Vietnam"                                  = "VN"
+        "Wallis and Futuna"                        = "WF"
+        "Yemen"                                    = "YE"
+        "Zambia"                                   = "ZM"
+        "Zimbabwe"                                 = "ZW"
+    }
+
     # Function to load JSON data
     function Invoke-LoadJsonFile {
         $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -1749,7 +1998,7 @@ function Get-NewUserRequest {
             city                   = $data['Site']
             state                  = $null
             postalCode             = $null
-            country                = $null
+            country                = $data['Country']
             departmentGroupOptions = @()
             testModeEnabled        = $false
             cloudOnly              = $true
@@ -2074,6 +2323,22 @@ function Get-NewUserRequest {
             return $value
         }
 
+        # Determine usageLocation with priority: Country field > Remote City > ComboBox
+        $autoUsageLocation = Get-UsageLocationFromFields -CountryText $txtCountry.Text -CityText $txtCity.Text -CountryMap $Global:CountryMap
+
+        if ($autoUsageLocation) {
+            $usageLocation = $autoUsageLocation
+        } elseif ($cboUsageLocation.SelectedValue) {
+            $usageLocation = $cboUsageLocation.SelectedValue
+        } else {
+            $usageLocation = ""
+        }
+
+        # Sync ComboBox to detected value
+        if ($usageLocation) {
+            $cboUsageLocation.SelectedValue = $usageLocation
+        }
+
         # Store form data in a custom object
         $formData = [PSCustomObject]@{
             requiredLicense        = @()
@@ -2083,7 +2348,7 @@ function Get-NewUserRequest {
             userPrincipalName      = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
             mobilePhone            = Get-ValueOrNull $txtMobilePhone.Text
             timeZone               = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
-            usageLocation          = if ($cboUsageLocation.SelectedItem) { $cboUsageLocation.SelectedItem.ToString() } else { "" }
+            usageLocation          = $usageLocation
             copyUserOperations     = if ($cboCopyUserOperations.SelectedItem -eq 'None') { $null } elseif ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
             userToCopy             = Get-ValueOrNull $txtUserToCopy.Text
             ancillaryLicense       = @()
@@ -2316,36 +2581,49 @@ function Get-NewUserRequest {
             [System.Windows.Controls.ComboBox]$ComboBox
         )
 
-        # Define country codes array
-        $countryCodes = @(
-            "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX", "AZ", "BA", "BB",
-            "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR", "BS", "BT", "BV", "BW", "BY",
-            "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM", "CN", "CO", "CR", "CU", "CV", "CW", "CX",
-            "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK",
-            "FM", "FO", "FR", "GA", "GB", "GD", "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS",
-            "GT", "GU", "GW", "GY", "HK", "HM", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR",
-            "IS", "IT", "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA",
-            "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH", "MK",
-            "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ", "NA", "NC", "NE",
-            "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF", "PG", "PH", "PK", "PL", "PM",
-            "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG",
-            "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR", "SS", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF",
-            "TG", "TH", "TJ", "TK", "TL", "TM", "TN", "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY",
-            "UZ", "VA", "VC", "VE", "VG", "VI", "VN", "VU", "WF", "WS", "YE", "YT", "ZA", "ZM", "ZW"
-        )
-
-        # Clear existing items
         $ComboBox.Items.Clear()
 
-        # Add all country codes to the ComboBox
-        foreach ($code in $countryCodes) {
-            [void]$ComboBox.Items.Add($code)
+        foreach ($country in $Global:CountryMap.GetEnumerator() | Sort-Object Key) {
+            [void]$ComboBox.Items.Add([PSCustomObject]@{
+                    Name = $country.Key
+                    Code = $country.Value
+                })
+        }
+        # Tell ComboBox what to show vs store
+        $ComboBox.DisplayMemberPath = "Name"
+        $ComboBox.SelectedValuePath = "Code"
+
+        # Default to US
+        $ComboBox.SelectedValue = "US"
+
+        Write-StatusMessage "Usage location initialized with country names." -Type INFO
+    }
+
+    function Get-UsageLocationFromFields {
+        param (
+            [string]$CountryText,
+            [string]$CityText,
+            [hashtable]$CountryMap
+        )
+
+        # Check the Country field first
+        if (-not [string]::IsNullOrWhiteSpace($CountryText)) {
+            $countryName = $CountryText.Trim()
+            if ($CountryMap.ContainsKey($countryName)) {
+                return $CountryMap[$countryName]
+            }
         }
 
-        # Set default value to US
-        $ComboBox.SelectedItem = "US"
+        # Fallback: check if City is like "Remote - COUNTRY"
+        if (-not [string]::IsNullOrWhiteSpace($CityText) -and $CityText -match '^Remote\s*-\s*(.+)$') {
+            $countryName = $Matches[1].Trim()
+            if ($CountryMap.ContainsKey($countryName)) {
+                return $CountryMap[$countryName]
+            }
+        }
 
-        Write-StatusMessage "Usage location initialized with default value: US" -Type INFO
+        # No match
+        return $null
     }
 
     # Function to initialize department groups
@@ -2515,6 +2793,21 @@ function Get-NewUserRequest {
                 $this.ToolTip = $null
             }
         })
+
+    # Event handler for Country or City changes
+    $UpdateUsageLocation = {
+        $newUsageLocation = Get-UsageLocationFromFields -CountryText $txtCountry.Text -CityText $txtCity.Text -CountryMap $Global:CountryMap
+
+        if ($newUsageLocation) {
+            $cboUsageLocation.SelectedValue = $newUsageLocation
+        } else {
+            $cboUsageLocation.SelectedIndex = -1
+        }
+    }
+
+    # Hook to update the TextChanged event for usage location
+    $txtCountry.Add_TextChanged($UpdateUsageLocation)
+    $txtCity.Add_TextChanged($UpdateUsageLocation)
 
     # Show the form
     $Window.ShowDialog() | Out-Null
