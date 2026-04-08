@@ -2378,7 +2378,7 @@ function Get-NewUserRequest {
         }
 
         # No match
-        return $null
+        return $CountryMap["United States"]
     }
 
     # Function to initialize department groups
