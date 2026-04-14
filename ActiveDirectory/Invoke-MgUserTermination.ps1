@@ -354,6 +354,7 @@ function Exit-Script {
 
 function Get-ScriptConfig {
     [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable])]
     param(
         [Parameter(Mandatory = $false)]
         [string]$ConfigPath = "C:\ProgramData\CompassScripts\config.json"
@@ -525,13 +526,10 @@ function Connect-ServiceEndpoints {
         if (($SharePoint -or $disconnectAll)) {
             try {
                 # Try to disconnect only if there's an active connection
-                try {
-                    $pnpContext = Get-PnPContext -ErrorAction Stop
-                    if ($pnpContext) {
-                        Disconnect-PnPOnline -ErrorAction Stop
-                        Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
-                    }
-                } catch {
+                $pnpContext = Get-PnPContext -ErrorAction Stop
+                if ($pnpContext) {
+                    Disconnect-PnPOnline -ErrorAction Stop
+                    Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
                 }
             } catch {
                 Write-StatusMessage -Message "Failed to disconnect from SharePoint Online: $_" -Type WARN
@@ -887,7 +885,7 @@ function Show-CustomAlert {
     # Find the top bar and add the MouseDown event
     $topBar = $alertWindow.FindName("Top_Bar")
     $topBar.Add_MouseDown({
-            param($s, $e)
+            param($e)
             if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
                 $alertWindow.DragMove()
             }
@@ -1523,7 +1521,7 @@ Continue? (Y/N)
         }
 
         # Return all the collected information
-        return @{
+        return [PSCustomObject]@{
             selectUserFromAD      = $UserFromAD
             selectDestinationOU   = $DestinationOU
             selectMailbox         = $365Mailbox

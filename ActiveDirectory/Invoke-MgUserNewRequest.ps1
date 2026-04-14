@@ -517,13 +517,10 @@ function Connect-ServiceEndpoints {
         if (($SharePoint -or $disconnectAll)) {
             try {
                 # Try to disconnect only if there's an active connection
-                try {
-                    $pnpContext = Get-PnPContext -ErrorAction Stop
-                    if ($pnpContext) {
-                        Disconnect-PnPOnline -ErrorAction Stop
-                        Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
-                    }
-                } catch {
+                $pnpContext = Get-PnPContext -ErrorAction Stop
+                if ($pnpContext) {
+                    Disconnect-PnPOnline -ErrorAction Stop
+                    Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
                 }
             } catch {
                 Write-StatusMessage -Message "Failed to disconnect from SharePoint Online: $_" -Type WARN
@@ -982,7 +979,7 @@ function Show-CustomAlert {
     # Find the top bar and add the MouseDown event
     $topBar = $alertWindow.FindName("Top_Bar")
     $topBar.Add_MouseDown({
-            param($s, $e)
+            param($e)
             if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
                 $alertWindow.DragMove()
             }
@@ -2942,7 +2939,7 @@ function New-DuplicatePromptForm {
     # Find the top bar and add the MouseDown event
     $topBar = $form.FindName("Top_Bar")
     $topBar.Add_MouseDown({
-            param($s, $e)
+            param($e)
             if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
                 $form.DragMove()
             }
@@ -3162,7 +3159,7 @@ function New-UserProperties {
         }
 
         # Return Cloud-Only properties
-        return @{
+        return [PSCustomObject]@{
             FirstName         = $FirstName
             LastName          = $LastName
             DisplayName       = $DisplayName
@@ -3210,7 +3207,6 @@ function New-ReadablePassword {
     #>
 
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
     param(
         [ValidateRange(2, 20)]
         [int]$WordCount = 3,
@@ -3267,7 +3263,7 @@ function New-ReadablePassword {
         } while ($response -ne 'y')
 
         Write-StatusMessage -Message "Password accepted" -Type OK
-        return @{
+        return [PSCustomObject]@{
             PlainPassword  = $plainPassword
             SecurePassword = ConvertTo-SecureString -String $plainPassword -AsPlainText -Force
         }
@@ -3811,12 +3807,12 @@ function Get-CopyUserGroups {
 
         if (-not $userResponse.value -or $userResponse.value.Count -eq 0) {
             Write-StatusMessage -Message "User '$userToCopy' not found" -Type WARN
-            return @()
+            return
         }
 
         if ($userResponse.value.Count -gt 1) {
             Write-StatusMessage -Message "Multiple users found for '$userToCopy', skipping" -Type WARN
-            return @()
+            return
         }
 
         $copyUser = $userResponse.value[0]
@@ -3825,7 +3821,7 @@ function Get-CopyUserGroups {
 
         if (-not $response -or $response.Count -eq 0) {
             Write-StatusMessage -Message "No groups found for user '$userToCopy'" -Type WARN
-            return @()
+            return
         }
 
         $filteredGroups = $response | Where-Object {
@@ -3855,7 +3851,7 @@ function Get-CopyUserGroups {
         return $filteredGroups
     } catch {
         Write-StatusMessage -Message "Failed to get groups from copy user '$userToCopy': $($_.Exception.Message)" -Type ERROR
-        return @()
+        return
     }
 }
 
@@ -3887,7 +3883,7 @@ function Get-DepartmentGroups {
 
         if ($groupsToAdd.Count -eq 0) {
             Write-StatusMessage -Message "No groups found for specified departments" -Type WARN
-            return @()
+            return
         }
 
         $groupFilters = $groupsToAdd | ForEach-Object { "displayName eq '$_'" }
@@ -3922,7 +3918,7 @@ function Get-DepartmentGroups {
         return $filteredGroups
     } catch {
         Write-StatusMessage -Message "Failed to fetch department groups: $($_.Exception.Message)" -Type ERROR
-        return @()
+        return
     }
 }
 
@@ -3936,10 +3932,6 @@ function Add-UserToGroups {
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [string]$UserId,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Source,
 
         [Parameter(Mandatory = $false)]
         [int]$MaxRetries = 3,
@@ -4062,7 +4054,7 @@ function Add-UserToGroups {
     }
 
     # Return both success and failure information
-    return @{
+    return [PSCustomObject]@{
         SuccessCount = $successCount
         FailureCount = $failureCount
         FailedGroups = $failedGroups
@@ -4661,7 +4653,7 @@ try {
 
             try {
                 # Add groups to user
-                $groupAddResults = Add-UserToGroups -UserId $mgUser.id -Groups $uniqueGroups -Source "combined groups"
+                $groupAddResults = Add-UserToGroups -UserId $mgUser.id -Groups $uniqueGroups
 
                 Write-StatusMessage -Message "User now belongs to $($groupAddResults.SuccessCount) groups" -Type INFO
                 if ($groupAddResults.FailureCount -gt 0) {
