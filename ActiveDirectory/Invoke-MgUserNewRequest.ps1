@@ -4062,6 +4062,48 @@ function Add-UserToGroups {
     }
 }
 
+function Add-UserToRequiredGroups {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [hashtable]
+        $User,
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$Groups  # Display names or email addresses
+    )
+
+    # Fetch current memberships once
+    $response = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.id)/memberOf" -ErrorAction Stop
+    $currentGroups = $response.value
+
+    foreach ($groupIdentifier in $Groups) {
+        # Determine filter type based on whether it looks like an email
+        if ($groupIdentifier -match '^[\w\.\-]+@[\w\.\-]+\.\w+$') {
+            $filter = "mail eq '$groupIdentifier'"
+        } else {
+            $filter = "displayName eq '$groupIdentifier'"
+        }
+
+        # Look up the group to get its ID
+        $groupLookup = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$filter" -ErrorAction Stop
+        $group = $groupLookup.value | Select-Object -First 1
+
+        if ($null -eq $group) {
+            Write-Warning "Group '$groupIdentifier' not found in directory. Skipping."
+            continue
+        }
+
+        # Check membership by ID
+        $isMember = $currentGroups | Where-Object { $_.id -eq $group.id }
+        if ($null -eq $isMember) {
+            Write-Host "Adding user $($User.DisplayName) to $($group.displayName) group."
+            $groupAddUri = "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref"
+            Invoke-MgGraphRequest -Method POST -Uri $groupAddUri -Body @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($User.id)" } | Out-Null
+        }
+    }
+}
+
 function Set-UserBookWithMeId {
     [CmdletBinding()]
     param(
@@ -4712,34 +4754,15 @@ try {
         }
     }
 
-    # Get KnowBe4 group memberships for the user
-    $response = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($mgUser.id)/memberOf" -ErrorAction Stop
-    $groupObjects = $response.value
+    # Add user to required groups
+    $requiredGroups = @(
+        'All Company'
+        'KnowBe4'
+        'Exclaimer Default'
+        'Exclaimer Add-in'
+    )
 
-    $KnowBe4 = $groupObjects | Where-Object {
-        $_.'displayName' -eq 'KnowBe4'
-    }
-
-    if ($null -eq $KnowBe4) {
-        Write-Host "Adding user $($User.DisplayName) to KnowBe4 group."
-        $groupAddUri = "https://graph.microsoft.com/v1.0/groups/8f08008b-0c3d-4750-9170-d575911da336/members/`$ref"
-        $response = Invoke-MgGraphRequest -Method POST -Uri $groupAddUri -Body @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($mgUser.id)" } | Out-Null
-    }
-
-    # Get Exclaimer group memberships for the user
-    $response = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($mgUser.id)/memberOf" -ErrorAction Stop
-    $groupObjects = $response.value
-
-    $Exclaimer = $groupObjects | Where-Object {
-        $_.'displayName' -eq 'Exclaimer Default'
-    }
-
-    if ($null -eq $Exclaimer) {
-        Write-Host "Adding user $($User.DisplayName) to Exclaimer group."
-        $groupAddUri = "https://graph.microsoft.com/v1.0/groups/a3b52e05-d76b-44ee-8c91-84a264d5a0b3/members/`$ref"
-        $response = Invoke-MgGraphRequest -Method POST -Uri $groupAddUri -Body @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($mgUser.id)" } | Out-Null
-    }
-
+    Add-UserToRequiredGroups -User $mgUser -Groups $requiredGroups
 
     # Step: Full Access to managedservices@compassmsp.com
     Write-ProgressStep -StepName 'Managed Service Mailbox Assignment'
@@ -4761,15 +4784,9 @@ try {
         } catch {
             Write-StatusMessage -Message "Failed to add mailbox permission: $_" -Type ERROR
         }
+    } else {
+        Write-StatusMessage -Message "User's office location does not require managedservices mailbox access. Skipping..." -Type INFO
     }
-
-    <#
-    # Step: Disable junk configuration
-    Write-ProgressStep -StepName 'Disable junk configuration'
-    Write-StatusMessage -Message "Disabling junk configuration for new user..." -Type INFO
-
-    Set-MailboxJunkEmailConfiguration $newUserProperties.Email -Enabled $false -WarningAction SilentlyContinue
-    #>
 
     # Step: Send notifications
     $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
