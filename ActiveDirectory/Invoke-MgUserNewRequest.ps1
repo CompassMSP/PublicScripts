@@ -756,7 +756,7 @@ function Send-GraphMailMessage {
 
         # Add attachment if specified
         if ($AttachmentPath) {
-            $attachmentContent = Get-Content -Path $AttachmentPath -Raw -Encoding Byte
+            $attachmentContent = Get-Content -Path $AttachmentPath -AsByteStream
             $attachmentBase64 = [System.Convert]::ToBase64String($attachmentContent)
 
             $messageParams.message['attachments'] = @(
@@ -3084,6 +3084,7 @@ function Get-TemplateUser {
 
 function New-UserProperties {
     [CmdletBinding()]
+    [OutputType([hashtable])]
     param(
         [Parameter(Mandatory)]
         [string]$DisplayName,
@@ -3159,7 +3160,7 @@ function New-UserProperties {
         }
 
         # Return Cloud-Only properties
-        return [PSCustomObject]@{
+        return @{
             FirstName         = $FirstName
             LastName          = $LastName
             DisplayName       = $DisplayName
