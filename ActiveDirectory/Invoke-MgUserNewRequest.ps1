@@ -4726,6 +4726,21 @@ try {
         $response = Invoke-MgGraphRequest -Method POST -Uri $groupAddUri -Body @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($mgUser.id)" } | Out-Null
     }
 
+    # Get Exclaimer group memberships for the user
+    $response = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($mgUser.id)/memberOf" -ErrorAction Stop
+    $groupObjects = $response.value
+
+    $Exclaimer = $groupObjects | Where-Object {
+        $_.'displayName' -eq 'Exclaimer Default'
+    }
+
+    if ($null -eq $Exclaimer) {
+        Write-Host "Adding user $($User.DisplayName) to Exclaimer group."
+        $groupAddUri = "https://graph.microsoft.com/v1.0/groups/a3b52e05-d76b-44ee-8c91-84a264d5a0b3/members/`$ref"
+        $response = Invoke-MgGraphRequest -Method POST -Uri $groupAddUri -Body @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($mgUser.id)" } | Out-Null
+    }
+
+
     # Step: Full Access to managedservices@compassmsp.com
     Write-ProgressStep -StepName 'Managed Service Mailbox Assignment'
 
