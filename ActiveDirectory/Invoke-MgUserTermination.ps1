@@ -354,7 +354,6 @@ function Exit-Script {
 
 function Get-ScriptConfig {
     [CmdletBinding()]
-    [OutputType([System.Collections.Hashtable])]
     param(
         [Parameter(Mandatory = $false)]
         [string]$ConfigPath = "C:\ProgramData\CompassScripts\config.json"
@@ -1521,7 +1520,7 @@ Continue? (Y/N)
         }
 
         # Return all the collected information
-        return [PSCustomObject]@{
+        return @{
             selectUserFromAD      = $UserFromAD
             selectDestinationOU   = $DestinationOU
             selectMailbox         = $365Mailbox
