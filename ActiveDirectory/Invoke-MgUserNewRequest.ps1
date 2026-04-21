@@ -849,7 +849,6 @@ function Get-FormattedLicenseInfo {
             "Microsoft Power Automate Free",
             "Microsoft PowerApps for Developer",
             "Microsoft Teams Phone Resource Account",
-            "Microsoft Teams Phone Standard",
             "Microsoft Teams Rooms Standard",
             "Power Apps Premium",
             "Power Automate Premium",
