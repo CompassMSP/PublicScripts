@@ -1037,7 +1037,9 @@ function Get-NewUserRequest {
                 <Button x:Name="btnLoadJson" Content="Load JSON" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnSaveJson" Content="Save JSON" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnRefreshLicenses" Content="Refresh Licenses" Width="120" Height="32" Margin="0,0,10,0"/>
+                <CheckBox x:Name="cbInstallSapience" Content="Install Sapience" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 <CheckBox x:Name="cbTestMode" Content="Test Mode" VerticalAlignment="Center" Margin="10,0,0,0"/>
+
             </WrapPanel>
         </StackPanel>
 
@@ -1176,6 +1178,7 @@ function Get-NewUserRequest {
                                         MaxHeight="270"
                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
                                         Margin="0,0,0,15"/>
+
                             </StackPanel>
                         </Grid>
                     </StackPanel>
@@ -1666,6 +1669,7 @@ function Get-NewUserRequest {
                 $txtState.Text = $jsonContent.state
                 $txtPostalCode.Text = $jsonContent.postalCode
                 $txtCountry.Text = $jsonContent.country
+                $cbInstallSapience.IsChecked = [bool]$jsonContent.installSapience
 
                 # Set department groups (multi-select) - DISABLED
                 if ($jsonContent.departmentGroupsDISABLED) {
@@ -1751,6 +1755,7 @@ function Get-NewUserRequest {
             postalCode             = $null
             country                = $data['Country']
             departmentGroupOptions = @()
+            InstallSapience        = $data['Sapience'] -eq 'Yes'
             testModeEnabled        = $false
             cloudOnly              = $true
         }
@@ -1978,6 +1983,7 @@ function Get-NewUserRequest {
             $txtState.Text = $UserData.state
             $txtPostalCode.Text = $UserData.postalCode
             $txtCountry.Text = $UserData.country
+            $cbInstallSapience.IsChecked = [bool]$UserData.installSapience
 
             # Set usage location
             if ($UserData.usageLocation) {
@@ -2060,6 +2066,7 @@ function Get-NewUserRequest {
         $txtState.Text = ""
         $txtPostalCode.Text = ""
         $txtCountry.Text = ""
+        $cbInstallSapience.IsChecked = $false
         #$lstDepartmentGroups.SelectedItems.Clear()
         Show-StatusMessage -Message "Form has been reset" -Type "Info"
     }
@@ -2120,6 +2127,7 @@ function Get-NewUserRequest {
             country                = Get-ValueOrNull $txtCountry.Text
             departmentGroupOptions = @()
             testModeEnabled        = $false
+            InstallSapience        = $false
             cloudOnly              = $true
         }
 
@@ -2151,6 +2159,12 @@ function Get-NewUserRequest {
             $formData.testModeEnabled = $true
         } else {
             $formData.testModeEnabled = $false
+        }
+
+        if ($cbInstallSapience.IsChecked -eq $true) {
+            $formData.installSapience = $true
+        } else {
+            $formData.installSapience = $false
         }
 
         return $formData
