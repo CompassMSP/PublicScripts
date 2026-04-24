@@ -995,6 +995,7 @@ function Get-NewUserRequest {
     Add-Type -AssemblyName PresentationFramework
     Add-Type -AssemblyName PresentationCore
     Add-Type -AssemblyName WindowsBase
+    Add-Type -AssemblyName System.Windows.Forms
 
     #region XAML Design
     [xml]$XAML = @"
@@ -1035,7 +1036,6 @@ function Get-NewUserRequest {
                 <Button x:Name="btnLocalFromHibob" Content="Load from HiBob" Style="{DynamicResource AccentButtonStyle}" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnRefreshLicenses" Content="Refresh Licenses" Width="120" Height="32" Margin="0,0,10,0"/>
                 <CheckBox x:Name="cbInstallSapience" Content="Install Sapience" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                <CheckBox x:Name="cbTestMode" Content="Test Mode" VerticalAlignment="Center" Margin="10,0,0,0"/>
 
             </WrapPanel>
         </StackPanel>
@@ -1505,6 +1505,20 @@ function Get-NewUserRequest {
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
+
+            <!-- Dev Tools Tab -->
+            <TabItem Header="Dev Tools">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10" Padding="0,0,20,0">
+                    <StackPanel Margin="10">
+                        <TextBlock Text="Developer Tools" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,15"/>
+                        <WrapPanel Margin="0,0,0,20">
+                            <Button x:Name="btnLoadJson" Content="Load JSON" Width="120" Height="32" Margin="0,0,10,0"/>
+                            <Button x:Name="btnSaveJson" Content="Save JSON" Width="120" Height="32" Margin="0,0,10,0"/>
+                        </WrapPanel>
+                        <CheckBox x:Name="cbTestMode" Content="Test Mode" VerticalAlignment="Center" Margin="0,0,0,10"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
 
         <!-- Footer -->
@@ -1547,6 +1561,192 @@ function Get-NewUserRequest {
     }
 
     # Function to load JSON data
+    function Invoke-LoadJsonFile {
+        $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+        $openFileDialog.Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
+        $openFileDialog.Title = "Select a JSON file"
+
+        if ($openFileDialog.ShowDialog() -eq "OK") {
+            try {
+                $jsonContent = Get-Content -Path $openFileDialog.FileName -Raw | ConvertFrom-Json
+
+                # Set the required license
+                if ($jsonContent.requiredLicense) {
+                    foreach ($item in $cboRequiredLicense.Items) {
+                        $itemText = $item.Content.ToString() -replace '\s+\(Available:.*?\)', ''
+                        if ($itemText -eq $jsonContent.requiredLicense) {
+                            $cboRequiredLicense.SelectedItem = $item
+                            break
+                        }
+                    }
+                }
+
+                # Set ancillary licenses (multi-select)
+                $ancillaryLicenseData = if ($jsonContent.ancillaryLicense) { $jsonContent.ancillaryLicense }
+
+                if ($ancillaryLicenseData) {
+                    # Convert input to array regardless of type
+                    $licenses = @()
+                    if ($ancillaryLicenseData -is [string]) {
+                        # If it's a single string, split by comma if it contains commas, otherwise use as is
+                        if ($ancillaryLicenseData -match ',') {
+                            $licenses = $ancillaryLicenseData -split ',' | ForEach-Object { $_.Trim() }
+                        } else {
+                            $licenses = @($ancillaryLicenseData.Trim())
+                        }
+                    } elseif ($ancillaryLicenseData -is [array]) {
+                        # If it's already an array, use it directly
+                        $licenses = $ancillaryLicenseData
+                    }
+
+                    # Clear any existing selections
+                    $lstAncillaryLicenses.SelectedItems.Clear()
+
+                    # Process each license
+                    foreach ($license in $licenses) {
+                        $trimmedLicense = $license.Trim()
+                        for ($i = 0; $i -lt $lstAncillaryLicenses.Items.Count; $i++) {
+                            # Only strip the availability count from the ListBox items
+                            $itemText = $lstAncillaryLicenses.Items[$i].Content -replace '\s*\(Available:.*\)', ''
+
+                            # Compare the stripped ListBox item text with the JSON license name
+                            if ($itemText -eq $trimmedLicense) {
+                                $lstAncillaryLicenses.SelectedItems.Add($lstAncillaryLicenses.Items[$i])
+                                break
+                            }
+                        }
+                    }
+                }
+
+                # Set the employee hire date
+                if ($jsonContent.employeeHireDate -and $jsonContent.employeeHireDate -ne "") {
+                    try {
+                        $dateEmployeeHireDate.SelectedDate = [DateTime]::Parse($jsonContent.employeeHireDate)
+                    } catch {
+                        Write-StatusMessage "Failed to parse date: $($jsonContent.employeeHireDate)" -Type ERROR
+                    }
+                }
+
+                # Set copy user operations
+                if ($jsonContent.copyUserOperations) {
+                    foreach ($item in $cboCopyUserOperations.Items) {
+                        if ($item -eq $jsonContent.copyUserOperations) {
+                            $cboCopyUserOperations.SelectedItem = $item
+                            break
+                        }
+                    }
+                }
+
+                # Set the domain and username from userPrincipalName
+                if ($jsonContent.userPrincipalName -and $jsonContent.userPrincipalName -match '@') {
+                    $upnParts = $jsonContent.userPrincipalName -split '@'
+                    $txtSamAccountName.Text = $upnParts[0]
+
+                    # Try to set domain from either the domain field or from the UPN
+                    $domainToSet = if ($jsonContent.domain) { $jsonContent.domain } else { $upnParts[1] }
+                    foreach ($item in $cboDomain.Items) {
+                        if ($item.ToString() -eq $domainToSet) {
+                            $cboDomain.SelectedItem = $item
+                            break
+                        }
+                    }
+                } elseif ($jsonContent.domain) {
+                    # If no UPN but domain exists, try to set just the domain
+                    foreach ($item in $cboDomain.Items) {
+                        if ($item.ToString() -eq $jsonContent.domain) {
+                            $cboDomain.SelectedItem = $item
+                            break
+                        }
+                    }
+                }
+
+                # Populate the form fields with JSON data
+                $txtDisplayName.Text = $jsonContent.displayName
+                $txtSamAccountName.Text = $jsonContent.userPrincipalName.Split('@')[0]
+                $txtMobilePhone.Text = $jsonContent.mobilePhone
+                $cboTimeZone.SelectedItem = $jsonContent.timeZone
+                $txtUserToCopy.Text = $jsonContent.userToCopy
+                $txtGivenName.Text = $jsonContent.givenName
+                $txtSurname.Text = $jsonContent.surname
+                $txtJobTitle.Text = $jsonContent.jobTitle
+                $txtDepartment.Text = $jsonContent.department
+                $txtCompanyName.Text = $jsonContent.companyName
+                $txtOfficeLocation.Text = $jsonContent.officeLocation
+                $txtManager.Text = $jsonContent.manager
+                $txtBusinessPhone.Text = $jsonContent.businessPhone
+                $txtFaxNumber.Text = $jsonContent.faxNumber
+                $txtStreetAddress.Text = $jsonContent.streetAddress
+                $txtCity.Text = $jsonContent.city
+                $txtState.Text = $jsonContent.state
+                $txtPostalCode.Text = $jsonContent.postalCode
+                $txtCountry.Text = $jsonContent.country
+                $cbInstallSapience.IsChecked = [bool]$jsonContent.installSapience
+
+                # Set department groups (multi-select) - DISABLED
+                if ($jsonContent.departmentGroupsDISABLED) {
+                    $groups = $jsonContent.departmentGroups -split ','
+                    foreach ($group in $groups) {
+                        $trimmedGroup = $group.Trim()
+                        for ($i = 0; $i -lt $lstDepartmentGroups.Items.Count; $i++) {
+                            if ($lstDepartmentGroups.Items[$i] -eq $trimmedGroup) {
+                                $lstDepartmentGroups.SelectedItems.Add($lstDepartmentGroups.Items[$i])
+                            }
+                        }
+                    }
+                }
+
+                Show-CustomAlert -Message "JSON file loaded successfully" -AlertType "Success" -Title "Success"
+            } catch {
+                Show-CustomAlert -Message "Error loading JSON file: $_" -AlertType "Error" -Title "Error"
+            }
+        }
+    }
+
+        # Function to save JSON data
+    function Save-JsonData {
+        # Get form data using the existing Get-FormData function
+        $formDataJSON = Get-FormData
+
+        if ($cboRequiredLicense.SelectedItem) {
+            $formDataJSON.requiredLicense = $cboRequiredLicense.SelectedItem.Content -replace '\s*\(Available:.*\)', ''
+        } else { "" }
+
+        # Get the ancillary licenses as an array of display names
+        $selectedAncillaryLicenses = @()
+        foreach ($item in $lstAncillaryLicenses.SelectedItems) {
+            # Strip out the (Available: X) part and add to array
+            $licenseName = $item.Content -replace '\s*\(Available:.*\)', ''
+            $selectedAncillaryLicenses += $licenseName
+        }
+
+        if ($selectedAncillaryLicenses -ne 0) {
+            $formDataJSON.ancillaryLicense = $selectedAncillaryLicenses
+        }
+
+        # Get the department groups as an array
+        if ($lstDepartmentGroups) {
+            $selectedDepartmentGroups = @()
+            foreach ($item in $lstDepartmentGroups.SelectedItems) {
+                $selectedDepartmentGroups += $item.Content
+            }
+        }
+
+        # Open save file dialog
+        $saveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
+        $saveFileDialog.Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*"
+        $saveFileDialog.Title = "Save JSON File"
+        $saveFileDialog.DefaultExt = "json"
+
+        if ($saveFileDialog.ShowDialog() -eq "OK") {
+            try {
+                $formDataJSON | ConvertTo-Json -Depth 5 | Set-Content -Path $saveFileDialog.FileName
+                Show-CustomAlert -Message "JSON file saved successfully" -AlertType "Success" -Title "Success"
+            } catch {
+                Show-CustomAlert -Message "Error saving JSON file: $_" -AlertType "Error" -Title "Error"
+            }
+        }
+    }
+
     # Function to convert Input to JSON data
     function Convert-ToUserJson {
         param(
@@ -1852,7 +2052,6 @@ function Get-NewUserRequest {
         }
     }
 
-    # Function to save JSON data
     # Function to reset the form
     function Reset-Form {
         $cboRequiredLicense.SelectedIndex = -1
@@ -2277,7 +2476,7 @@ function Get-NewUserRequest {
             default { "Information" }
         }
 
-        [System.Windows.MessageBox]::Show($Message, $Title, "OK", $icon)
+        [void][System.Windows.MessageBox]::Show($Message, $Title, "OK", $icon)
     }
 
     # Add event handlers
@@ -2285,15 +2484,25 @@ function Get-NewUserRequest {
             Reset-Form
             Show-HiBobDataInput
         })
+    $btnLoadJson.Add_Click({
+            Reset-Form
+            Invoke-LoadJsonFile
+        })
+    $btnSaveJson.Add_Click({ Save-JsonData })
     $btnReset.Add_Click({ Reset-Form })
     $btnRefreshLicenses.Add_Click({ Initialize-Licenses })
     #$btnRefreshDepartments.Add_Click({ Initialize-DepartmentGroups })
     $btnSubmit.Add_Click({
+            # Run the validation first
             $isValid = Invoke-ValidateForm -DisplayName $txtDisplayName.Text -RequiredLicense $cboRequiredLicense
-            if ($isValid) {
-                $Window.DialogResult = $true
-                $Window.Close()
+
+            if ($isValid -eq $true) {
+                # If validation passes, collect the form data
+                $formData = Get-FormData
+                $Window.Close()  # Close the window after submission
+                return $formData  # Return the form data
             } else {
+                # If validation fails, do not close the window and optionally show a message
                 Write-StatusMessage "Validation failed. Please fix the errors and try again." -Type ERROR
             }
         })
@@ -2305,27 +2514,6 @@ function Get-NewUserRequest {
 
     # Add event handler for the refresh button
     $btnRefreshDomains.Add_Click({ Initialize-Domains })
-
-    $cboRequiredLicense.Add_SelectionChanged({
-        if ($cboRequiredLicense.SelectedItem) {
-            $licenseText = $cboRequiredLicense.SelectedItem.Content
-            if ($licenseText -match "\(Available:\s*(\d+)\)" -and [int]$Matches[1] -le 0) {
-                $licenseName = $licenseText -replace '\s*\(Available:.*\)', ''
-                Show-StatusMessage -Message "Warning: '$licenseName' has no available licenses. Purchase additional licenses before submitting." -Type "Warning"
-            }
-        }
-    })
-
-    $lstAncillaryLicenses.Add_SelectionChanged({
-        foreach ($selectedItem in $lstAncillaryLicenses.SelectedItems) {
-            $licenseText = $selectedItem.Content
-            if ($licenseText -match "\(Available:\s*(\d+)\)" -and [int]$Matches[1] -le 0) {
-                $licenseName = $licenseText -replace '\s*\(Available:.*\)', ''
-                Show-StatusMessage -Message "Warning: '$licenseName' has no available licenses. Purchase additional licenses before submitting." -Type "Warning"
-                return
-            }
-        }
-    })
 
     # Initialize licenses
     Initialize-Licenses
@@ -2633,7 +2821,13 @@ function Get-NewUserRequest {
 
     # Event handler for Country or City changes
     $UpdateUsageLocation = {
-        $cboUsageLocation.SelectedValue = Get-UsageLocationFromFields -CountryText $txtCountry.Text -CityText $txtCity.Text -CountryMap $CountryMap
+        $newUsageLocation = Get-UsageLocationFromFields -CountryText $txtCountry.Text -CityText $txtCity.Text -CountryMap $CountryMap
+
+        if ($newUsageLocation) {
+            $cboUsageLocation.SelectedValue = $newUsageLocation
+        } else {
+            $cboUsageLocation.SelectedIndex = -1
+        }
     }
 
     # Hook to update the TextChanged event for usage location
@@ -2643,10 +2837,8 @@ function Get-NewUserRequest {
     # Show the form
     $Window.ShowDialog() | Out-Null
 
-    if ($Window.DialogResult -eq $true) {
-        return Get-FormData
-    }
-    return $null
+    # Return the form data
+    return Get-FormData
 }
 
 function New-DuplicatePromptForm {
