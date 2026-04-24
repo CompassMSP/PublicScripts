@@ -30,12 +30,20 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2025-06-25
+    Last Modified: 2026-04-23
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.3.2      2026-04-23   Feature Updates:
+                               - Refactored UI for better user experience and streamlined workflow
+                               - Cleaned up old code and functions that are no longer used after refactor
+                               - Improved error handling and user feedback throughout the script
+                               - Added SapienceIQ provisioning and UI elements
+                               - Added default groups for standard users
+                               - Variable cleanup and optimization
+
     4.3.1      2026-04-08   Feature Updates:
                                - Refactored Country-to-Code mapping for improved readability and maintainability
                                - Added auto-update for Usage Location combo box when Country or City fields are modified
@@ -1278,6 +1286,27 @@ function Get-NewUserRequest {
                                     </TextBlock>
                                 </Grid>
 
+                                <Label Content="Employee ID"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtEmployeeId" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter employee ID"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtEmployeeId}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
                                 <Label Content="365 Usage Location"/>
                                 <ComboBox x:Name="cboUsageLocation" Height="32" Margin="0,0,0,15"/>
                             </StackPanel>
@@ -1326,11 +1355,11 @@ function Get-NewUserRequest {
                                     </TextBlock>
                                 </Grid>
 
-                                <Label Content="Office Location"/>
+                                <Label Content="Sub Department (Office Location)"/>
                                 <Grid Margin="0,0,0,15">
                                     <TextBox x:Name="txtOfficeLocation" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
                                     <TextBlock IsHitTestVisible="False"
-                                             Text="Enter office location"
+                                             Text="Enter sub department (office location)"
                                              VerticalAlignment="Center"
                                              Margin="8,0,0,0"
                                              Foreground="{DynamicResource TextControlPlaceholderForeground}">
@@ -1674,6 +1703,7 @@ function Get-NewUserRequest {
                 $txtOfficeLocation.Text = $jsonContent.officeLocation
                 $txtManager.Text = $jsonContent.manager
                 $txtBusinessPhone.Text = $jsonContent.businessPhone
+                $txtEmployeeId.Text = $jsonContent.employeeId
                 $txtFaxNumber.Text = $jsonContent.faxNumber
                 $txtStreetAddress.Text = $jsonContent.streetAddress
                 $txtCity.Text = $jsonContent.city
@@ -1702,7 +1732,7 @@ function Get-NewUserRequest {
         }
     }
 
-        # Function to save JSON data
+    # Function to save JSON data
     function Save-JsonData {
         # Get form data using the existing Get-FormData function
         $formDataJSON = Get-FormData
@@ -1803,6 +1833,7 @@ function Get-NewUserRequest {
             companyName            = "CompassMSP"
             employeeHireDate       = $startDate
             manager                = $managerEmail
+            EmployeeId             = $data['EmployeeID']
             businessPhone          = $null
             faxNumber              = $null
             streetAddress          = $null
@@ -2032,6 +2063,7 @@ function Get-NewUserRequest {
             $txtCompanyName.Text = $UserData.companyName
             $txtOfficeLocation.Text = $UserData.officeLocation
             $txtManager.Text = $UserData.manager
+            $txtEmployeeId.Text = $UserData.employeeId
             $txtBusinessPhone.Text = $UserData.businessPhone
             $txtFaxNumber.Text = $UserData.faxNumber
             $txtStreetAddress.Text = $UserData.streetAddress
@@ -2070,6 +2102,7 @@ function Get-NewUserRequest {
         $txtManager.Text = ""
         $dateEmployeeHireDate.SelectedDate = $null
         $txtCompanyName.Text = ""
+        $txtEmployeeId.Text = ""
         $txtBusinessPhone.Text = ""
         $txtFaxNumber.Text = ""
         $txtStreetAddress.Text = ""
@@ -2129,6 +2162,7 @@ function Get-NewUserRequest {
             officeLocation         = Get-ValueOrNull $txtOfficeLocation.Text
             employeeHireDate       = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
             manager                = Get-ValueOrNull $txtManager.Text
+            employeeId             = Get-ValueOrNull $txtEmployeeId.Text
             businessPhone          = Get-ValueOrNull $txtBusinessPhone.Text
             faxNumber              = Get-ValueOrNull $txtFaxNumber.Text
             streetAddress          = Get-ValueOrNull $txtStreetAddress.Text
@@ -4217,6 +4251,9 @@ function Start-NewUserFinalize {
         [hashtable]
         $User,
 
+        [Parameter()]
+        [string]$ManagerDisplayName,
+
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]$Password,
@@ -4350,6 +4387,30 @@ function Start-NewUserFinalize {
         "4. Review any warnings above and take appropriate action.",
         "5. If any group assignments failed, manual remediation may be required."
     )
+
+    if ($userInput.InstallSapience -eq $true) {
+        $summaryParts += @(
+            "",
+            "Sapience Requested:",
+            "----------------------------------------",
+            "This user is required to have Sapience. Please ensure a user is created in the Sapience portal. You will need the following information to create the user in Sapience:",
+            "- First Name: $($User.givenName)",
+            "- Last Name: $($User.surname)",
+            "- Email: $($User.Mail)",
+            "- Worker ID: $($User.EmployeeId)"
+            "- Job Title: $($User.jobTitle)",
+            "- Job Family: $($User.Department)",
+            "- Department: $(if ($User.OfficeLocation) { $User.OfficeLocation } else { $User.Department })"
+            "- Manager: $($ManagerDisplayName)"
+            "- Domain: AzureAD"
+            "- Domain ID: $($User.DisplayName -replace '\s')"
+            "- Work Schedule: Default Work Schedule"
+            "- Activity Collection: On"
+            "- Worker Type: Full-Time"
+            "- App Role: Activity Access"
+            "- Work Location Type (Custom Fields): $($User.City)"
+        )
+    }
 
     # Display summary
     try {
@@ -4570,7 +4631,8 @@ try {
         'jobTitle',
         'Department',
         'officeLocation',
-        'City'
+        'City',
+        'EmployeeId'
     )
 
     $selectQuery = [string]::Join(',', $properties)
@@ -4594,6 +4656,8 @@ try {
     if (-not $MgUser) {
         Exit-Script -Message 'Cannot get new user from graph' -ExitCode UserNotFound
     }
+
+    $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
 
     # License Assignment
     Write-ProgressStep -StepName 'License Assignment'
@@ -4786,6 +4850,10 @@ try {
         'Exclaimer Add-in'
     )
 
+    if ($userInput.InstallSapience -eq $true) {
+        $requiredGroups += 'SapienceIQ Users'
+    }
+
     Add-UserToRequiredGroups -User $mgUser -Groups $requiredGroups
 
     # Step: Full Access to managedservices@compassmsp.com
@@ -4813,8 +4881,6 @@ try {
     }
 
     # Step: Send notifications
-    $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($($MgUser.id))/manager"
-    $MgUserManager = $managerResponse.userPrincipalName
     Write-ProgressStep -StepName 'Notifications'
     $MsgFrom = $config.Email.NotificationFrom
     $CcAddress = $config.Email.NotificationCcAddress
@@ -4860,7 +4926,8 @@ Department: $($MgUser.department)
 Sub Department: $($MgUser.officeLocation)
 Call Center: $callCenter
 User to Copy: $($userInput.userToCopy)
-Manager: $($MgUserManager)
+Manager Email: $($managerResponse.mail)
+Manager Display Name: $($managerResponse.displayName)
 
 Please do not send the welcome email with the account setup.
 
@@ -4912,7 +4979,8 @@ Please set up the following user with an Salesforce account.<br><br>
 Display Name: $($MgUser.displayName)<br>
 Mail: $($newUserProperties.Email)<br>
 Job Title: $($MgUser.jobTitle)<br>
-Manager: $($MgUserManager)
+Manager Email: $($managerResponse.mail)<br>
+Manager Display Name: $($managerResponse.displayName)<br>
 
 <p>
 The user start date is $($userInput.employeeHireDate).<br>
@@ -4942,6 +5010,7 @@ The user start date is $($userInput.employeeHireDate).<br>
     Write-StatusMessage -Message "Building final summary..." -Type INFO
 
     Start-NewUserFinalize -User $MgUser `
+        -ManagerDisplayName $($managerResponse.displayName) `
         -TemplateUserCheck $TemplateUserCheck `
         -Password $passwordResult.PlainPassword `
         -AssignedGroupCount $groupAddResults.SuccessCount `
