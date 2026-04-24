@@ -1359,7 +1359,7 @@ function Get-NewUserRequest {
                                 <Grid Margin="0,0,0,15">
                                     <TextBox x:Name="txtOfficeLocation" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
                                     <TextBlock IsHitTestVisible="False"
-                                             Text="Enter sub department (office location)"
+                                             Text="Enter sub department"
                                              VerticalAlignment="Center"
                                              Margin="8,0,0,0"
                                              Foreground="{DynamicResource TextControlPlaceholderForeground}">
