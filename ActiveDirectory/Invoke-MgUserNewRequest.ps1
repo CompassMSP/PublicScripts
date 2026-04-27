@@ -4637,7 +4637,7 @@ try {
     'JobTitle', 'Department', 'OfficeLocation', 'City', 'EmployeeId'
 
     $uri = "https://graph.microsoft.com/v1.0/users/$($newUserProperties.Email)?`$select=$($properties -join ',')"
-    $newUserResponse = Invoke-RestMethod -Method GET -Uri $uri -Headers @{ Authorization = "Bearer $accessToken" }
+    $newUserResponse = Invoke-MgGraphRequest -Method GET -Uri $uri
 
     $MgUser = @{}
     $properties | ForEach-Object { $MgUser[$_] = $newUserResponse.$_ }
