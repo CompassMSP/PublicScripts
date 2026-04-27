@@ -2226,7 +2226,7 @@ function Get-NewUserRequest {
             $lstAncillaryLicenses.Items.Clear()
 
             # Get license info from Microsoft Graph
-            $skuQuery = "v1.0/subscribedSkus"
+            $skuQuery = "https://graph.microsoft.com/v1.0/subscribedSkus"
 
             $skuResponse = Invoke-MgGraphRequest -Method GET -Uri $skuQuery
 
@@ -2346,7 +2346,7 @@ function Get-NewUserRequest {
             $btnRefreshDomains.IsEnabled = $false
 
             # Get domains from Graph API
-            $domainQuery = "v1.0/domains"
+            $domainQuery = "https://graph.microsoft.com/v1.0/domains"
             $domainResponse = Invoke-MgGraphRequest -Method GET -Uri $domainQuery
 
             # Filter for verified domains and sort by Id
@@ -3022,7 +3022,7 @@ function Test-EntraUserIsDisabled {
         [string]$UserToCheck
     )
     try {
-        $graphQuery = "v1.0/users?`$filter=displayName eq '$UserToCheck' or userPrincipalName eq '$UserToCheck'&`$select=accountEnabled"
+        $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=displayName eq '$UserToCheck' or userPrincipalName eq '$UserToCheck'&`$select=accountEnabled"
         $userResult = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
         if ($userResult.value.Count -eq 1) {
             return -not $userResult.value[0].accountEnabled
@@ -3045,7 +3045,7 @@ function Get-EntraUserCopiedAttributes {
         Write-StatusMessage -Message "Getting template user details for: $UserToCopy" -Type INFO
 
         # Build Graph API query with proper version
-        $graphQuery = "v1.0/users?`$filter=displayName eq '$UserToCopy' or userPrincipalName eq '$UserToCopy'&`$select=id,userPrincipalName,displayName,companyName,officeLocation,jobTitle,department,faxNumber,streetAddress,city,state,postalCode,country"
+        $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=displayName eq '$UserToCopy' or userPrincipalName eq '$UserToCopy'&`$select=id,userPrincipalName,displayName,companyName,officeLocation,jobTitle,department,faxNumber,streetAddress,city,state,postalCode,country"
 
         $templateUserGraph = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
 
@@ -3064,7 +3064,7 @@ function Get-EntraUserCopiedAttributes {
         $userId = $templateUserGraph.value[0].id
         $managerDisplayName = $null
         try {
-            $managerQuery = "v1.0/users/$userId/manager"
+            $managerQuery = "https://graph.microsoft.com/v1.0/users/$userId/manager"
             $manager = Invoke-MgGraphRequest -Method GET -Uri $managerQuery
             $managerDisplayName = $manager.displayName
         } catch {
@@ -3184,7 +3184,7 @@ function New-UserProperties {
 
         # Check Microsoft 365 for duplicates
         try {
-            $graphQuery = "v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
+            $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
             $mailbox = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
 
             if ($mailbox.value.Count -gt 0) {
@@ -3200,7 +3200,7 @@ function New-UserProperties {
                     $userPrincipalName = ($accountName + $Domain).ToLower()
 
                     # Verify the new email is unique
-                    $graphQuery = "v1.0/users?`$filter=mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
+                    $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
                     $checkMailbox = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
 
                     if ($checkMailbox.value.Count -gt 0) {
@@ -3405,7 +3405,7 @@ function New-UserStandard {
         }
 
         if ($PSCmdlet.ShouldProcess($NewUser.DisplayName, "Create user in Microsoft Graph")) {
-            $newUser = Invoke-MgGraphRequest -Method POST -Uri "v1.0/users" -Body ($newUserBody | ConvertTo-Json -Depth 10)
+            $newUser = Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users" -Body ($newUserBody | ConvertTo-Json -Depth 10)
             Write-StatusMessage -Message "Successfully created user in Microsoft Graph: $($NewUser.DisplayName)" -Type OK
             #return $newUser
         }
@@ -3539,7 +3539,7 @@ function Set-UserOptionalFields {
         if ($mergedInput.country) { $updateBody.country = $mergedInput.country }
 
         if ($updateBody.Count -gt 0) {
-            $userQuery = "v1.0/users?`$filter=userPrincipalName eq '$Identity'"
+            $userQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$Identity'"
             $maxRetries = 5
             $retryDelaySec = 10
             $user = $null
@@ -3560,7 +3560,7 @@ function Set-UserOptionalFields {
             }
 
             $userId = $user.value[0].id
-            Invoke-MgGraphRequest -Method PATCH -Uri "v1.0/users/$userId" -Body ($updateBody | ConvertTo-Json -Depth 10)
+            Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$userId" -Body ($updateBody | ConvertTo-Json -Depth 10)
         }
 
 
@@ -3587,14 +3587,14 @@ function Set-UserManager {
         Write-StatusMessage -Message "Setting manager for user: $Identity (Mode: $(if ($CloudOnly) { 'Cloud-Only' } else { 'AD + Cloud' }))" -Type INFO
 
         # Microsoft 365 manager setting
-        $graphQuery = "v1.0/users?`$filter=displayName eq '$ManagerInput' or userPrincipalName eq '$ManagerInput'"
+        $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=displayName eq '$ManagerInput' or userPrincipalName eq '$ManagerInput'"
         $manager = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
 
         if ($manager.value.Count -gt 0) {
             $managerId = $manager.value[0].id
 
             # Get the user's ID
-            $graphQuery = "v1.0/users?`$filter=userPrincipalName eq '$Identity'"
+            $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$Identity'"
             $user = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
 
             if ($user.value.Count -gt 0) {
@@ -3605,7 +3605,7 @@ function Set-UserManager {
                     "@odata.id" = "https://graph.microsoft.com/v1.0/users/$managerId"
                 }
 
-                Invoke-MgGraphRequest -Method PUT -Uri "v1.0/users/$userId/manager/`$ref" -Body ($updateBody | ConvertTo-Json)
+                Invoke-MgGraphRequest -Method PUT -Uri "https://graph.microsoft.com/v1.0/users/$userId/manager/`$ref" -Body ($updateBody | ConvertTo-Json)
                 Write-StatusMessage -Message "Successfully set manager for user: $Identity" -Type OK
             } else {
                 Write-StatusMessage -Message "User '$Identity' not found in Microsoft Graph." -Type WARN
@@ -4650,7 +4650,7 @@ try {
         Exit-Script -Message 'Cannot get new user from graph' -ExitCode UserNotFound
     }
 
-    $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($newUserProperties.Email)/manager"
+    $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($newUserProperties.Email)/manager"
 
     # License Assignment
     Write-ProgressStep -StepName 'License Assignment'
@@ -4660,7 +4660,7 @@ try {
         usageLocation = if ($userInput.usageLocation) { $userInput.usageLocation } else { 'US' }
     }
 
-    Invoke-MgGraphRequest -Method PATCH -Uri "v1.0/users/$($MgUser.id)" -Body ($updateUsageLocationBody | ConvertTo-Json)
+    Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.id)" -Body ($updateUsageLocationBody | ConvertTo-Json)
 
     # Sleep to allow usageLocation to propagate
     Start-Sleep -Seconds 5
