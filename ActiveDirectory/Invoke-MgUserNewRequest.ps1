@@ -4650,7 +4650,7 @@ try {
         Exit-Script -Message 'Cannot get new user from graph' -ExitCode UserNotFound
     }
 
-    $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($MgUser.id)/manager"
+    $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "v1.0/users/$($newUserProperties.Email)/manager"
 
     # License Assignment
     Write-ProgressStep -StepName 'License Assignment'
