@@ -3489,7 +3489,8 @@ function Set-UserOptionalFields {
             'state',
             'postalCode',
             'country',
-            'employeeHireDate'
+            'employeeHireDate',
+            'EmployeeId'
         )
 
         # Add allowed UserInput values first
@@ -3538,12 +3539,23 @@ function Set-UserOptionalFields {
         if ($mergedInput.country) { $updateBody.country = $mergedInput.country }
 
         if ($updateBody.Count -gt 0) {
-            # Get the user ID using the userPrincipalName
             $userQuery = "v1.0/users?`$filter=userPrincipalName eq '$Identity'"
-            $user = Invoke-MgGraphRequest -Method GET -Uri $userQuery
+            $maxRetries = 5
+            $retryDelaySec = 10
+            $user = $null
+
+            for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+                $user = Invoke-MgGraphRequest -Method GET -Uri $userQuery
+                if ($user.value.Count -gt 0) { break }
+
+                if ($attempt -lt $maxRetries) {
+                    Write-StatusMessage -Message "User not found: $Identity (attempt $attempt/$maxRetries), retrying in ${retryDelaySec}s..." -Type WARN
+                    Start-Sleep -Seconds $retryDelaySec
+                }
+            }
 
             if ($user.value.Count -eq 0) {
-                Write-StatusMessage -Message "User not found: $Identity" -Type ERROR
+                Write-StatusMessage -Message "User not found after $maxRetries attempts: $Identity" -Type ERROR
                 return
             }
 
@@ -4590,8 +4602,6 @@ try {
     }
 
     New-UserStandard @NewUserParams
-
-    Start-Sleep -Seconds 10
 
     # Set optional fields (from template + form)
     $setUserParams = @{
