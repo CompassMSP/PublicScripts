@@ -4633,36 +4633,17 @@ try {
     }
 
     # Get Created User
+    $properties = 'Id', 'Mail', 'DisplayName', 'GivenName', 'Surname',
+    'JobTitle', 'Department', 'OfficeLocation', 'City', 'EmployeeId'
 
-    $properties = @(
-        'Id',
-        'Mail',
-        'DisplayName',
-        'GivenName',
-        'Surname',
-        'jobTitle',
-        'Department',
-        'officeLocation',
-        'City',
-        'EmployeeId'
-    )
+    $uri = "https://graph.microsoft.com/v1.0/users/$($newUserProperties.Email)?`$select=$($properties -join ',')"
+    $newUserResponse = Invoke-RestMethod -Method GET -Uri $uri -Headers @{ Authorization = "Bearer $accessToken" }
 
-    $selectQuery = [string]::Join(',', $properties)
-
-    $newUserEmail = $newUserProperties.Email
-
-    $newUserQuery = "v1.0/users/$($newUserEmail)?`$select=$selectQuery"
-    $newUserResponse = Invoke-MgGraphRequest -Method GET -Uri $newUserQuery
-
-    # Build Hashtable from Response
     $MgUser = @{}
-    foreach ($prop in $properties) {
-        $MgUser[$prop] = $newUserResponse | Select-Object -ExpandProperty $prop -ErrorAction SilentlyContinue
-    }
+    $properties | ForEach-Object { $MgUser[$_] = $newUserResponse.$_ }
 
-    # Ensure Mail populated if Graph returned null (before license assignment)
-    if (-not $MgUser['Mail'] -or [string]::IsNullOrWhiteSpace([string]$MgUser['Mail'])) {
-        $MgUser['Mail'] = $newUserEmail
+    if ([string]::IsNullOrWhiteSpace($MgUser['Mail'])) {
+        $MgUser['Mail'] = $newUserProperties.Email
     }
 
     if (-not $MgUser) {
