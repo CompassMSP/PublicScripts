@@ -4651,7 +4651,7 @@ try {
 
     $newUserEmail = $newUserProperties.Email
 
-    $newUserQuery = "https://graph.microsoft.com/v1.0/users/$newUserEmail?`$select=$selectQuery"
+    $newUserQuery = "v1.0/users/$($newUserEmail)?`$select=$selectQuery"
     $newUserResponse = Invoke-MgGraphRequest -Method GET -Uri $newUserQuery
 
     # Build Hashtable from Response
