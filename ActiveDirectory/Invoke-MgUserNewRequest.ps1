@@ -4892,8 +4892,6 @@ try {
 
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
-    $MsgFrom = $config.Email.NotificationFrom
-    $CcAddress = $config.Email.NotificationCcAddress
 
     # Create ticket for 8x8 provisioning on the Telcom Board
     try {
@@ -4981,13 +4979,11 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
     if ($MgUser.department -in @('Sales')) {
         try {
 
-            $ToAddress = $config.Email.NotificationForSalesForceRequests
-
             $emailSubject = "Salesforce – New User"
             $emailContent = @"
 Please set up the following user with an Salesforce account.<br><br>
 Display Name: $($MgUser.displayName)<br>
-Mail: $($newUserProperties.Email)<br>
+Mail: $($MgUser.Mail)<br>
 Job Title: $($MgUser.jobTitle)<br>
 Manager Email: $($managerResponse.mail)<br>
 Manager Display Name: $($managerResponse.displayName)<br>
@@ -4996,7 +4992,7 @@ Manager Display Name: $($managerResponse.displayName)<br>
 The user start date is $($userInput.employeeHireDate).<br>
 "@
 
-            Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
+            Send-GraphMailMessage -FromAddress $($config.Email.NotificationFrom) -ToAddress $($config.Email.NotificationForSalesForceRequests) -CcAddress $($config.Email.NotificationCcAddress) -Subject $emailSubject -Content $emailContent
 
         } catch {
             Write-StatusMessage -Message "Failed to send Salesforce request email: $($_.Exception.Message)" -Type ERROR
