@@ -4674,17 +4674,15 @@ try {
     # License Assignment
     Write-ProgressStep -StepName 'License Assignment'
     Write-StatusMessage -Message "Setting Usage Location for new user..." -Type INFO
-    if ($userInput.usageLocation) {
-        $setUsageLocation = $userInput.usageLocation
-    } else {
-        $setUsageLocation = 'US'
-    }
 
     $updateUsageLocationBody = @{
-        usageLocation = $setUsageLocation
+        usageLocation = if ($userInput.usageLocation) { $userInput.usageLocation } else { 'US' }
     }
 
     Invoke-MgGraphRequest -Method PATCH -Uri "v1.0/users/$($MgUser.id)" -Body ($updateUsageLocationBody | ConvertTo-Json)
+
+    # Sleep to allow usageLocation to propagate
+    Start-Sleep -Seconds 5
 
     # Required license - will exit on failure
     Set-UserLicenses -User $MgUser -License $userInput.requiredLicense -Required
