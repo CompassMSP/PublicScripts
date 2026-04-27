@@ -4591,6 +4591,8 @@ try {
 
     New-UserStandard @NewUserParams
 
+    Start-Sleep -Seconds 10
+
     # Set optional fields (from template + form)
     $setUserParams = @{
         UserInput = $userInput
