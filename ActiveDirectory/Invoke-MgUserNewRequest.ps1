@@ -4111,9 +4111,14 @@ function Add-UserToRequiredGroups {
         [string[]]$Groups  # Display names or email addresses
     )
 
-    # Fetch current memberships once
-    $response = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.id)/memberOf" -Headers $script:GraphHeaders -ErrorAction Stop
-    $currentGroups = $response.value
+    # Fetch current memberships once (paginate through all pages)
+    $currentGroups = @()
+    $memberOfUri = "https://graph.microsoft.com/v1.0/users/$($User.id)/memberOf"
+    do {
+        $response = Invoke-RestMethod -Method GET -Uri $memberOfUri -Headers $script:GraphHeaders -ErrorAction Stop
+        $currentGroups += $response.value
+        $memberOfUri = $response.'@odata.nextLink'
+    } while ($memberOfUri)
 
     foreach ($groupIdentifier in $Groups) {
         # Determine filter type based on whether it looks like an email
@@ -4138,6 +4143,8 @@ function Add-UserToRequiredGroups {
             Write-StatusMessage -Message "Adding user $($User.DisplayName) to $($group.displayName) group." -Type INFO
             $groupAddUri = "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref"
             Invoke-RestMethod -Method POST -Uri $groupAddUri -Headers $script:GraphHeaders -Body (@{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($User.id)" } | ConvertTo-Json) -ContentType "application/json" | Out-Null
+        } else {
+            Write-StatusMessage -Message "User $($User.DisplayName) is already a member of $($group.displayName). Skipping." -Type INFO
         }
     }
 }
