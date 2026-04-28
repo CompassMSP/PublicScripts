@@ -566,7 +566,9 @@ function Get-GraphToken {
 function Get-ServiceCert {
     param([string]$Subject)
     $cert = Get-ChildItem Cert:\LocalMachine\My |
-    Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now }
+        Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now } |
+        Sort-Object NotAfter -Descending |
+        Select-Object -First 1
     if (-not $cert) { Exit-Script -Message "No valid certificate found matching '$Subject'" -ExitCode ConfigError }
     $cert
 }
@@ -1712,7 +1714,7 @@ function Get-NewUserRequest {
             $selectedAncillaryLicenses += $licenseName
         }
 
-        if ($selectedAncillaryLicenses -ne 0) {
+        if ($selectedAncillaryLicenses -gt 0) {
             $formDataJSON.ancillaryLicense = $selectedAncillaryLicenses
         }
 
@@ -3367,7 +3369,7 @@ function New-UserStandard {
             surname           = $NewUser.LastName
             userPrincipalName = $NewUser.UserPrincipalName
             mailNickname      = $NewUser.mailNickname
-            mail              = $NewUser.mail
+            mail              = $NewUser.Email
             passwordProfile   = @{
                 forceChangePasswordNextSignIn = $true
                 password                      = $Password
@@ -3380,9 +3382,8 @@ function New-UserStandard {
         }
 
     } catch {
-        $target = if ($CloudOnly) { "user in Microsoft Graph" } else { "AD user" }
-        Write-StatusMessage -Message "Failed to create $($target): $_" -Type ERROR
-        Exit-Script -Message "Failed to create $target" -ExitCode GeneralError
+        Write-StatusMessage -Message "Failed to create user in Microsoft Graph): $_" -Type ERROR
+        Exit-Script -Message "Failed to create user in Microsoft Graph" -ExitCode GeneralError
     }
 }
 
@@ -4129,7 +4130,8 @@ function Add-UserToRequiredGroups {
         }
 
         # Look up the group to get its ID
-        $groupLookup = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$filter" -Headers $script:GraphHeaders -ErrorAction Stop
+        $encodedFilter = [uri]::EscapeDataString($filter)
+        $groupLookup = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$encodedFilter" -Headers $script:GraphHeaders -ErrorAction Stop
         $group = $groupLookup.value | Select-Object -First 1
 
         if ($null -eq $group) {
@@ -4251,6 +4253,12 @@ function Start-NewUserFinalize {
 
         [bool]$TemplateUserCheck,
 
+        [Parameter(Mandatory)]
+        [pscustomobject]$UserInput,
+
+        [Parameter()]
+        [bool]$SkippedTemplateUserGroups = $false,
+
         [Parameter()]
         [hashtable]$GroupOperationSummary = @{
             CopyUserGroups   = @{
@@ -4287,7 +4295,7 @@ function Start-NewUserFinalize {
         "- Display Name: $($User.displayName)",
         "- Email Address: $($User.mail)",
         "- Password: $Password",
-        "- Template User: $(if ($TemplateUserCheck) {$userInput.userToCopy} else {'No template user selected.'})",
+        "- Template User: $(if ($TemplateUserCheck) {$UserInput.userToCopy} else {'No template user selected.'})",
         "",
         "Group Assignment Status:",
         "----------------------------------------",
@@ -4330,7 +4338,7 @@ function Start-NewUserFinalize {
     # Add warnings and important notes
     $warnings = @()
 
-    if ($skippedTemplateUserGroups) {
+    if ($SkippedTemplateUserGroups) {
         $warnings += "Template group copy was skipped"
     }
 
@@ -4375,7 +4383,7 @@ function Start-NewUserFinalize {
         "5. If any group assignments failed, manual remediation may be required."
     )
 
-    if ($userInput.InstallSapience -eq $true) {
+    if ($UserInput.InstallSapience -eq $true) {
         $summaryParts += @(
             "",
             "Sapience Requested:",
@@ -4425,7 +4433,6 @@ $progressSteps = @(
     @{ Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
     @{ Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
     @{ Name = "Managed Service Mailbox Assignment"; Description = "Assigning access rights for managedservices mailbox" }
-    @{ Name = "Disable junk configuration"; Description = "Disable junk configuration settings" }
     @{ Name = "Notifications"; Description = "Sending email notifications" }
     @{ Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
     @{ Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
@@ -4496,7 +4503,7 @@ try {
     # Check is Template User is Enabled
     if ($userInput.userToCopy) {
         if (Test-EntraUserIsDisabled -UserToCheck $userInput.userToCopy) {
-            Write-StatusMessage -Message "Template user $($userInput.userToCopy) is disabled. Skipping template copy." -Type WARNING
+            Write-StatusMessage -Message "Template user $($userInput.userToCopy) is disabled. Skipping template copy." -Type WARN
             $userInput.userToCopy = $null
         }
     }
@@ -4888,7 +4895,7 @@ The user start date is $($userInput.employeeHireDate).<br>
 "@
 
             Send-GraphMailMessage -FromAddress $($config.Email.NotificationFrom) -ToAddress $($config.Email.NotificationForSalesForceRequests) -CcAddress $($config.Email.NotificationCcAddress) -Subject $emailSubject -Content $emailContent
-            Write-StatusMessage
+            Write-StatusMessage -Message "Salesforce request email sent successfully" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to send Salesforce request email: $($_.Exception.Message)" -Type ERROR
         }
@@ -5004,6 +5011,8 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
     Start-NewUserFinalize -User $MgUser `
         -ManagerDisplayName $($managerResponse.displayName) `
         -TemplateUserCheck $TemplateUserCheck `
+        -UserInput $userInput `
+        -SkippedTemplateUserGroups ([bool]$skippedTemplateUserGroups) `
         -Password $passwordResult.PlainPassword `
         -AssignedGroupCount $groupAddResults.SuccessCount `
         -GroupOperationSummary $groupOperationSummary

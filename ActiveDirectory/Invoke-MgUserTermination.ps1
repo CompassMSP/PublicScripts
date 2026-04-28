@@ -214,40 +214,12 @@ function Write-ProgressStep {
     # Guard against division by zero or missing values
     if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
         Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
-        Write-Progress -Activity "User Termination" -Status $status
-    } else {
-        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
-        Write-Progress -Activity "User Termination" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
-    }
-    $script:currentStep += 1
-}
-
-function Write-ProgressStep {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$StepName
-    )
-
-    # Find the step object by name
-    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
-
-    if (-not $step) {
-        Write-Warning "Progress step '$StepName' not found."
-        return
-    }
-
-    $stepNumber = $step.Number
-    $status = $step.Description
-
-    # Guard against division by zero or missing values
-    if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
-        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
         Write-Progress -Activity "New User Creation" -Status $status
     } else {
         Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
         Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
     }
+    $script:currentStep += 1
 }
 
 #Region Standard Functions
@@ -482,7 +454,9 @@ function Get-GraphToken {
 function Get-ServiceCert {
     param([string]$Subject)
     $cert = Get-ChildItem Cert:\LocalMachine\My |
-    Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now }
+        Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now } |
+        Sort-Object NotAfter -Descending |
+        Select-Object -First 1
     if (-not $cert) { Exit-Script -Message "No valid certificate found matching '$Subject'" -ExitCode ConfigError }
     $cert
 }
@@ -686,7 +660,9 @@ function Connect-ServiceEndpoints {
 
             Write-StatusMessage -Message "Connecting to Exchange Online..." -Type 'INFO'
             $ExOCert = Get-ChildItem Cert:\LocalMachine\My |
-            Where-Object { ($_.Subject -like "*$($ExOCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+                Where-Object { ($_.Subject -like "*$($ExOCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) } |
+                Sort-Object NotAfter -Descending |
+                Select-Object -First 1
 
             if ($null -eq $ExOCert) {
                 Exit-Script -Message "No valid ExO PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
@@ -715,7 +691,9 @@ function Connect-ServiceEndpoints {
 
             Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type 'INFO'
             $PnPCert = Get-ChildItem Cert:\LocalMachine\My |
-            Where-Object { ($_.Subject -like "*$($PnPCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
+                Where-Object { ($_.Subject -like "*$($PnPCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) } |
+                Sort-Object NotAfter -Descending |
+                Select-Object -First 1
 
             if ($null -eq $PnPCert) {
                 Exit-Script -Message "No valid PnP PowerShell certificates found in the LocalMachine\My store." -ExitCode ConfigError
@@ -882,7 +860,7 @@ function Send-GraphMailMessage {
 
         # Add attachment if specified
         if ($AttachmentPath) {
-            $attachmentContent = Get-Content -Path $AttachmentPath -Raw -Encoding Byte
+            $attachmentContent = Get-Content -Path $AttachmentPath -AsByteStream -Raw
             $attachmentBase64 = [System.Convert]::ToBase64String($attachmentContent)
 
             $messageParams.message['attachments'] = @(
@@ -2039,11 +2017,17 @@ function Remove-UserFromEntraDirectoryRoles {
         Write-StatusMessage -Message "Checking for directory role memberships..." -Type INFO
 
         try {
-            # Get all objects the user is a member of
-            $memberOf = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf" -Headers $script:GraphHeaders -ErrorAction Stop
+            # Get all objects the user is a member of (paginated)
+            $memberOfValues = [System.Collections.Generic.List[object]]::new()
+            $memberOfUri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf"
+            do {
+                $memberOf = Invoke-RestMethod -Method GET -Uri $memberOfUri -Headers $script:GraphHeaders -ErrorAction Stop
+                $memberOfValues.AddRange($memberOf.value)
+                $memberOfUri = $memberOf.'@odata.nextLink'
+            } while ($memberOfUri)
 
             # Filter for directoryRole memberships
-            $directoryRoles = $memberOf.value | Where-Object {
+            $directoryRoles = $memberOfValues | Where-Object {
                 $_.'@odata.type' -eq '#microsoft.graph.directoryRole'
             }
 
@@ -2095,9 +2079,14 @@ function Remove-UserFromEntraGroups {
         Write-StatusMessage -Message "Finding Azure groups" -Type INFO
 
         try {
-            # Get group memberships for the user
-            $response = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf" -Headers $script:GraphHeaders -ErrorAction Stop
-            $groupObjects = $response.value
+            # Get group memberships for the user (paginated)
+            $groupObjects = [System.Collections.Generic.List[object]]::new()
+            $memberOfUri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf"
+            do {
+                $response = Invoke-RestMethod -Method GET -Uri $memberOfUri -Headers $script:GraphHeaders -ErrorAction Stop
+                $groupObjects.AddRange($response.value)
+                $memberOfUri = $response.'@odata.nextLink'
+            } while ($memberOfUri)
 
             # Filter out directory roles, dynamic groups, and cloud-only groups
             $filteredGroups = $groupObjects | Where-Object {
@@ -2350,7 +2339,7 @@ function Remove-UserLicenses {
                 try {
                     $licenseBody = @{
                         addLicenses    = @()
-                        removeLicenses = @(@{ skuId = $license.skuId })
+                        removeLicenses = @($license.skuId)
                     } | ConvertTo-Json -Depth 3
 
                     Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
@@ -2599,11 +2588,8 @@ Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
 
 #Region Main Execution
 
-Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
-
 Write-Host "  [ ] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
 $progressSteps = @(
-    @{ Name = "Initialization"; Description = "Loading configuration and connecting services" }
     @{ Name = "User Input"; Description = "Gathering termination details" }
     @{ Name = "AD Tasks"; Description = "Disabling user in Active Directory" }
     @{ Name = "Disable Entra User"; Description = "Disabling user in Entra" }
@@ -2646,7 +2632,7 @@ try {
         Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
     }
 
-    if ($result.TestModeEnabled -eq 'True') { $script:TestMode = $true }
+    if ($result.TestModeEnabled) { $script:TestMode = $true }
     # Optional fields - use $null for unset values
     $GrantUserFullControl = if ($result.InputUserFullControl) { $result.InputUserFullControl.Trim() } else { $null }
     $SetUserMailFWD = if ($result.InputUserFWD) { $result.InputUserFWD.Trim() } else { $null }
@@ -2741,15 +2727,15 @@ try {
 
     $selectQuery = [string]::Join(',', $properties)
 
-    $newUserEmail = $newUserProperties.Email
+    $termUserEmail = $UserInfo.selectMgUser.Mail
 
-    $newUserQuery = "https://graph.microsoft.com/v1.0/users/$newUserEmail`?`$select=$selectQuery"
-    $newUserResponse = Invoke-RestMethod -Method GET -Uri $newUserQuery -Headers $script:GraphHeaders
+    $UserQueryUri = "https://graph.microsoft.com/v1.0/users/$termUserEmail`?`$select=$selectQuery"
+    $termUserResponse = Invoke-RestMethod -Method GET -Uri $UserQueryUri -Headers $script:GraphHeaders
 
     # Build Hashtable from Response
     $MgUser = @{}
     foreach ($prop in $properties) {
-        $MgUser[$prop] = $newUserResponse | Select-Object -ExpandProperty $prop -ErrorAction SilentlyContinue
+        $MgUser[$prop] = $termUserResponse | Select-Object -ExpandProperty $prop -ErrorAction SilentlyContinue
     }
 
     # Step: Remove Full Access to managedservices@compassmsp.com
@@ -2786,7 +2772,7 @@ try {
     $ownershipResults = Remove-UserGroupOwnership `
         -User $userInfo.selectMgUser `
         -UseFallbackOwner `
-        -FallbackOwnerId "f91a781a-a556-4947-8358-699d0c7bf2d5" `
+        -FallbackOwnerId $config.Offboarding.FallbackOwnerId `
         -ExportPath $groupOwnerExportPath
 
     # Step: Remove Licenses
@@ -2904,7 +2890,7 @@ $($userInfo.selectMgUser.DisplayName) - $($userInfo.selectMgUser.Mail)
         }
 
         if ($GrantUserOneDriveAccess) {
-            $oneDriveParams['OneDriveUser'] = $oneDriveUser
+            $oneDriveParams['OneDriveUser'] = $oneDriveUser.PrimarySmtpAddress
         }
 
         Set-TerminatedOneDrive @oneDriveParams
@@ -2924,7 +2910,7 @@ $($userInfo.selectMgUser.DisplayName) - $($userInfo.selectMgUser.Mail)
     # Clear the progress bar
     Write-Progress -Activity "User Termination" -Completed
 
-    Exit-Script -Message "$User has been successfully disabled." -ExitCode Success
+    Exit-Script -Message "$($result.InputUser) has been successfully disabled." -ExitCode Success
 } catch {
     Write-StatusMessage -Message "Script failed: $($_.Exception.Message)" -Type ERROR
     Write-StatusMessage -Message "At: $($_.InvocationInfo.PositionMessage)" -Type ERROR
