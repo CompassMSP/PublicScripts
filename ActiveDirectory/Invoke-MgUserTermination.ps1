@@ -1480,24 +1480,9 @@ function Get-TerminationPrerequisites {
                     -Properties MemberOf, UserPrincipalName, Mail, DisplayName
 
                 if ($partialMatches) {
-                    if ($partialMatches.Count -gt 1) {
-                        Write-StatusMessage -Message "Multiple matching users found:" -Type 'WARN'
-                        $index = 0
-                        $partialMatches | ForEach-Object {
-                            Write-Host "`n[$index] DisplayName: $($_.DisplayName)"
-                            Write-Host "    UPN: $($_.UserPrincipalName)"
-                            Write-Host "    Email: $($_.Mail)"
-                            $index++
-                        }
-
-                        do {
-                            $selection = Read-Host "`nEnter the number of the correct user or 'exit' to cancel"
-                            if ($selection -eq 'exit') {
-                                Exit-Script -Message "User cancelled the operation" -ExitCode Cancelled
-                            }
-                        } while ($selection -notmatch '^\d+$' -or [int]$selection -ge $partialMatches.Count)
-
-                        $UserFromAD = Get-ADUser -Identity $partialMatches[$selection].DistinguishedName -Properties MemberOf
+                    if (@($partialMatches).Count -gt 1) {
+                        $matchList = ($partialMatches | ForEach-Object { "$($_.DisplayName) ($($_.UserPrincipalName))" }) -join ', '
+                        Exit-Script -Message "Multiple AD users matched '$User' — termination aborted. Matches: $matchList" -ExitCode GeneralError
                     } else {
                         $UserFromAD = Get-ADUser -Identity $partialMatches[0].DistinguishedName -Properties MemberOf
                     }
@@ -1538,6 +1523,9 @@ function Get-TerminationPrerequisites {
         Write-StatusMessage -Message "Attempting to find $MailboxIdentity in Exchange" -Type 'INFO'
         try {
             $365Mailbox = Get-Mailbox -Identity $MailboxIdentity -ErrorAction Stop
+            if (@($365Mailbox).Count -gt 1) {
+                Exit-Script -Message "Multiple mailboxes returned for '$MailboxIdentity' — termination aborted. Provide a more specific identifier." -ExitCode GeneralError
+            }
         } catch {
             Exit-Script -Message "Could not find user in Exchange: $_" -ExitCode UserNotFound
         }
