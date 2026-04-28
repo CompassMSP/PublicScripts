@@ -1981,7 +1981,7 @@ function Get-NewUserRequest {
             # Set copy user operations
             if ($UserData.userToCopy) {
                 foreach ($item in $cboCopyUserOperations.Items) {
-                    $cboCopyUserOperations.SelectedItem = 'Copy Attributes and Groups'
+                    $cboCopyUserOperations.SelectedItem = 'Copy Groups'
                     break
                 }
             } else {
