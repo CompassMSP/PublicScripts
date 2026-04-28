@@ -4632,7 +4632,7 @@ try {
         Write-StatusMessage -Message 'No manager user object selected. Skipping...' -Type WARN
     }
 
-    # Get Created User
+    # Get Created User object from Graph to retrieve properties for downstream operations (like group assignment and Sapience provisioning)
     $properties = 'Id', 'Mail', 'DisplayName', 'GivenName', 'Surname',
     'JobTitle', 'Department', 'OfficeLocation', 'City', 'EmployeeId'
 
@@ -4646,11 +4646,28 @@ try {
         $MgUser['Mail'] = $newUserProperties.Email
     }
 
-    if (-not $MgUser) {
-        Exit-Script -Message 'Cannot get new user from graph' -ExitCode UserNotFound
+    # Get Manager of new user (for summary and Sapience provisioning)
+    try {
+        $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.Id)/manager"
+    } catch {
+        $managerResponse = $null
+        if ($_.Exception.Response.StatusCode -ne 404) {
+            Write-StatusMessage -Message "Manager lookup failed: $($_.Exception.Message)" -Type WARN
+        }
     }
 
-    $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($newUserProperties.Email)/manager"
+    if (-not $managerResponse) {
+        $searchManager = if ($userInput.manager) { $userInput.manager }
+        elseif ($copyUserAttributes) { $templateUserManager }
+
+        if ($searchManager) {
+            try {
+                $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$searchManager"
+            } catch {
+                Write-StatusMessage -Message "Failed to find manager '$searchManager': $($_.Exception.Message)" -Type WARN
+            }
+        }
+    }
 
     # License Assignment
     Write-ProgressStep -StepName 'License Assignment'
