@@ -187,7 +187,7 @@ if (-not $PSBoundParameters['Verbose']) {
 # Initialize loading animation
 Clear-Host
 
-Write-Host "`n  Initializing User Termination Script v4.0.0..." -ForegroundColor Cyan
+Write-Host "`n  Initializing User Termination Script v4.4.0..." -ForegroundColor Cyan
 $startTime = Get-Date
 Write-Host "  Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
 
