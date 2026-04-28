@@ -1425,6 +1425,7 @@ function Get-TerminationPrerequisites {
             $properties = @(
                 'Id',
                 'Mail',
+                'UserPrincipalName',
                 'DisplayName',
                 'Department',
                 'OnPremisesSyncEnabled'
@@ -1530,7 +1531,10 @@ function Get-TerminationPrerequisites {
         }
 
         # Find user in Exchange (always run)
-        $MailboxIdentity = if ($UserFromAD) { $UserFromAD.UserPrincipalName } else { $mgUser.Mail }
+        $MailboxIdentity = if ($UserFromAD) { $UserFromAD.UserPrincipalName } elseif ($mgUser.UserPrincipalName) { $mgUser.UserPrincipalName } else { $mgUser.Mail }
+        if (-not $MailboxIdentity) {
+            Exit-Script -Message "Could not determine mailbox identity: user has no UPN or mail attribute" -ExitCode UserNotFound
+        }
         Write-StatusMessage -Message "Attempting to find $MailboxIdentity in Exchange" -Type 'INFO'
         try {
             $365Mailbox = Get-Mailbox -Identity $MailboxIdentity -ErrorAction Stop
@@ -1542,7 +1546,7 @@ function Get-TerminationPrerequisites {
         $confirmMessage = @"
 The user below will be disabled:
 Display Name = $($mgUser.DisplayName)
-UserPrincipalName = $($mgUser.Mail)
+UserPrincipalName = $($mgUser.UserPrincipalName)
 Mailbox name =  $($365Mailbox.DisplayName)
 Azure name = $($mgUser.DisplayName)
 Destination OU = $($DestinationOU)

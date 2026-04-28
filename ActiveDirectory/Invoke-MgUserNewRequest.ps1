@@ -3636,6 +3636,7 @@ function Set-UserLicenses {
 
             do {
                 try {
+                    Write-StatusMessage -Message "Attempting to assign license: $($lic.DisplayName) (Attempt $($retryCount + 1) of $MaxRetries)" -Type INFO
                     # Assign the license
                     $licenseBody = @{
                         addLicenses    = @(@{ skuId = $lic.SkuId })
@@ -3646,7 +3647,8 @@ function Set-UserLicenses {
                     $response = Invoke-RestMethod -Method POST -Uri $uri -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
 
                     # Wait a moment for the license to be processed
-                    Start-Sleep -Seconds 2
+                    Write-StatusMessage -Message "License POST accepted, waiting for replication before verifying..." -Type INFO
+                    Start-Sleep -Seconds 10
 
                     # Verify license assignment
                     $getSku = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/licenseDetails" -Headers $script:GraphHeaders -ErrorAction Stop
@@ -3664,6 +3666,19 @@ function Set-UserLicenses {
                     }
                 } catch {
                     $retryCount++
+
+                    # 400 can mean "already assigned" — verify before retrying
+                    try {
+                        $verifySku = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/licenseDetails" -Headers $script:GraphHeaders -ErrorAction Stop
+                        if ($verifySku.value.skuId -contains $lic.SkuId) {
+                            $licenseAssigned = $true
+                            Write-StatusMessage -Message "License already present on user: $($lic.DisplayName)" -Type OK
+                            break
+                        }
+                    } catch {
+                        # Ignore verification errors; fall through to normal retry logic
+                    }
+
                     if ($retryCount -lt $MaxRetries) {
                         Write-StatusMessage -Message "Error assigning license (attempt $retryCount of $MaxRetries): $($_.Exception.Message)" -Type WARN
                         Start-Sleep -Seconds $RetryDelaySeconds
@@ -4929,7 +4944,7 @@ The user start date is $($userInput.employeeHireDate).<br>
                 return $headers
             }
 
-            $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
+            $headers = Get-ConnectWiseManageToken -CompanyId $($config.ConnectWiseManage.CompanyId) -PublicKey $($config.ConnectWiseManage.PublicKey) -PrivateKey $($config.ConnectWiseManage.PrivateKey) -clientId $($config.ConnectWiseManage.ClientId)
 
             $emailSubject = "8x8 – New User"
             $callCenter = if ($MgUser.officeLocation -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
