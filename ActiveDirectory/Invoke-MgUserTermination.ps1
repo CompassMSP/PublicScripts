@@ -1,6 +1,8 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 #requires -RunAsAdministrator
-#requires -Modules ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups
+#requires -Modules ExchangeOnlineManagement
+
+$script:GraphHeaders = $null
 
 <#
 .SYNOPSIS
@@ -36,6 +38,11 @@
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.0      2026-04-27   Refactor:
+                               - Migrated all Graph calls from Microsoft.Graph module to Invoke-RestMethod
+                               - Replaced Connect-MgGraph/Disconnect-MgGraph with Get-GraphToken certificate auth
+                               - Removed dependency on Microsoft.Graph.Users and Microsoft.Graph.Groups modules
+
     4.3.0      2025-06-25   Feature Updates:
                                 - Started conversion process to move away from Graph Powershell to GraphAPI via Invoke-MgGraphRequest.
 
@@ -326,7 +333,9 @@ function Exit-Script {
         if (-not $script:TestMode) {
             Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
             try {
-                Connect-ServiceEndpoints -Disconnect
+                # Disconnect
+                $script:GraphHeaders = $null
+                Disconnect-ExchangeOnline -Confirm:$false
             } catch {
                 Write-StatusMessage -Message "Failed to disconnect services during exit" -Type ERROR
             }
@@ -337,7 +346,11 @@ function Exit-Script {
 
         # In test mode, don't actually exit
         if ($script:TestMode) {
-            Write-StatusMessage -Message "Test Mode: Script would exit here with code $($exitCodes[$ExitCode])" -Type WARN
+            Write-StatusMessage -Message "Test Mode: Script would exit here with code $($exitCodes[$ExitCode]) ($ExitCode)" -Type WARN
+            if ($exitCodes[$ExitCode] -ne 0) {
+                Write-StatusMessage -Message "Entering nested prompt — all script variables are accessible. Type 'exit' to resume." -Type WARN
+                $host.EnterNestedPrompt()
+            }
             return
         }
 
@@ -350,6 +363,128 @@ function Exit-Script {
             exit 99
         }
     }
+}
+
+function Get-GraphToken {
+    [CmdletBinding(DefaultParameterSetName = 'Secret')]
+    param (
+        [Parameter(Mandatory)]
+        [string]$TenantId,
+        [Parameter(Mandatory)]
+        [string]$ClientId,
+
+        [Parameter(Mandatory, ParameterSetName = 'Secret')]
+        [string]$ClientSecret,
+
+        [Parameter(Mandatory, ParameterSetName = 'Certificate')]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$ClientCert,
+
+        [string]$ExchangeOrg,
+        [string]$AnchorMailbox,
+        [switch]$Exchange,
+        [switch]$EXORest
+    )
+
+    $scope = if ($Exchange -or $EXORest) {
+        if (-not $ExchangeOrg) { throw "-ExchangeOrg is required for Exchange API" }
+        "https://outlook.office365.com/.default"
+    } else {
+        "https://graph.microsoft.com/.default"
+    }
+
+    $body = @{
+        client_id  = $ClientId
+        scope      = $scope
+        grant_type = "client_credentials"
+    }
+
+    if ($PSCmdlet.ParameterSetName -eq 'Certificate') {
+        $tokenUrl = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+
+        # Build x5t (base64url SHA-1 thumbprint)
+        $thumbBytes = [byte[]]::new($ClientCert.Thumbprint.Length / 2)
+        for ($i = 0; $i -lt $ClientCert.Thumbprint.Length; $i += 2) {
+            $thumbBytes[$i / 2] = [Convert]::ToByte($ClientCert.Thumbprint.Substring($i, 2), 16)
+        }
+        $x5t = [Convert]::ToBase64String($thumbBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        $header = [Convert]::ToBase64String(
+            [System.Text.Encoding]::UTF8.GetBytes(
+                (@{ alg = 'RS256'; typ = 'JWT'; x5t = $x5t } | ConvertTo-Json -Compress)
+            )
+        ).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $payload = [Convert]::ToBase64String(
+            [System.Text.Encoding]::UTF8.GetBytes(
+                (@{
+                    aud = $tokenUrl
+                    iss = $ClientId
+                    sub = $ClientId
+                    jti = [Guid]::NewGuid().ToString()
+                    nbf = $now
+                    exp = $now + 600
+                } | ConvertTo-Json -Compress)
+            )
+        ).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        $sigInput = "$header.$payload"
+
+        # .PrivateKey works for CAPI keys; CNG keys require the extension method via static call
+        $rsa = $ClientCert.PrivateKey
+        if (-not $rsa) {
+            $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($ClientCert)
+        }
+        if (-not $rsa) { throw "Cannot access private key for cert '$($ClientCert.Subject)'. Ensure the key is accessible under the current user/process." }
+
+        $sigBytes = if ($rsa -is [System.Security.Cryptography.RSACryptoServiceProvider]) {
+            $rsa.SignData([System.Text.Encoding]::UTF8.GetBytes($sigInput), 'SHA256')
+        } else {
+            $rsa.SignData(
+                [System.Text.Encoding]::UTF8.GetBytes($sigInput),
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
+            )
+        }
+        $signature = [Convert]::ToBase64String($sigBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        $body['client_assertion_type'] = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+        $body['client_assertion'] = "$sigInput.$signature"
+    } else {
+        $body['client_secret'] = $ClientSecret
+    }
+
+    try {
+        $response = Invoke-RestMethod -Method Post `
+            -Uri "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token" `
+            -Body $body -ErrorAction Stop
+
+        if ($EXORest) {
+            return @{
+                Authorization  = "Bearer $($response.access_token)"
+                'Content-Type' = 'application/json'
+            }
+        } elseif ($Exchange) {
+            $existing = Get-ConnectionInformation -ErrorAction SilentlyContinue
+            if (-not $existing) {
+                Connect-ExchangeOnline -AccessToken $response.access_token -Organization $ExchangeOrg -ShowBanner:$false
+            }
+            return "Connected to Exchange Online for $ExchangeOrg"
+        } else {
+            return @{ Authorization = "Bearer $($response.access_token)"; 'Content-Type' = 'application/json' }
+        }
+
+    } catch {
+        throw "Failed to get access token: $($_.Exception.Message)"
+    }
+}
+
+function Get-ServiceCert {
+    param([string]$Subject)
+    $cert = Get-ChildItem Cert:\LocalMachine\My |
+    Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now }
+    if (-not $cert) { Exit-Script -Message "No valid certificate found matching '$Subject'" -ExitCode ConfigError }
+    $cert
 }
 
 function Get-ScriptConfig {
@@ -512,13 +647,9 @@ function Connect-ServiceEndpoints {
         }
 
         # Disconnect from Microsoft Graph
-        if (($Graph -or $disconnectAll) -and (Get-MgContext)) {
-            try {
-                $null = Disconnect-MgGraph -ErrorAction Stop
-                Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
-            } catch {
-                Write-StatusMessage -Message "Failed to disconnect from Microsoft Graph: $_" -Type WARN
-            }
+        if ($Graph -or $disconnectAll) {
+            $script:GraphHeaders = $null
+            Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
         }
 
         # Disconnect from SharePoint
@@ -567,22 +698,9 @@ function Connect-ServiceEndpoints {
 
         # Connect to Microsoft Graph
         if ($Graph -or $connectAll) {
-            $requiredGraphParams = @('GraphAppId', 'TenantId', 'GraphCertSubject')
-            $missingGraphParams = $requiredGraphParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
-
-            if ($missingGraphParams) {
-                throw "Graph connection requires the following parameters: $($missingGraphParams -join ', ')"
-            }
-
             Write-StatusMessage -Message "Connecting to Microsoft Graph..." -Type 'INFO'
-            $GraphCert = Get-ChildItem Cert:\LocalMachine\My |
-            Where-Object { ($_.Subject -like "*$($GraphCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
-
-            if ($null -eq $GraphCert) {
-                Exit-Script -Message "No valid Graph PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
-            }
-
-            Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
+            $GraphCert = Get-ServiceCert -Subject $GraphCertSubject
+            $script:GraphHeaders = Get-GraphToken -TenantId $TenantId -ClientId $GraphAppId -ClientCert $GraphCert
             Write-StatusMessage -Message "Connected to Microsoft Graph" -Type 'OK'
         }
 
@@ -782,7 +900,7 @@ function Send-GraphMailMessage {
 
         # Use Graph API directly
         $graphUri = "https://graph.microsoft.com/v1.0/users/$FromAddress/sendMail"
-        Invoke-MgGraphRequest -Method POST -Uri $graphUri -Body $jsonBody -ContentType "application/json"
+        Invoke-RestMethod -Method POST -Uri $graphUri -Headers $script:GraphHeaders -Body $jsonBody -ContentType "application/json"
         Write-StatusMessage -Message "Email notification sent successfully" -Type OK
     } catch {
         Write-StatusMessage -Message "Failed to send email notification: $_" -Type ERROR
@@ -1337,7 +1455,7 @@ function Get-TerminationPrerequisites {
             $selectQuery = [string]::Join(',', $properties)
 
             $termUserQuery = "https://graph.microsoft.com/v1.0/users/$User`?`$select=$selectQuery"
-            $termUserResponse = Invoke-MgGraphRequest -Method GET -Uri $termUserQuery
+            $termUserResponse = Invoke-RestMethod -Method GET -Uri $termUserQuery -Headers $script:GraphHeaders
 
             # Build Hashtable from Response
             $MgUser = @{}
@@ -1688,8 +1806,8 @@ function Disable-GraphUser {
             # Convert to JSON with nulls included
             $bodyJson = $updateUserParams | ConvertTo-Json -Depth 3
 
-            # Send the PATCH request using Invoke-MgGraphRequest
-            Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0//users/$($User.Id)" -Method PATCH -Body $bodyJson -ErrorAction Stop
+            # Send the PATCH request
+            Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)" -Headers $script:GraphHeaders -Body $bodyJson -ContentType "application/json" -ErrorAction Stop
 
             Write-StatusMessage -Message "User account disabled and attributes cleared" -Type OK
         } catch {
@@ -1725,7 +1843,7 @@ function Remove-UserSessions {
         # Revoke all sessions
         Write-StatusMessage -Message "Revoking all user signed in sessions" -Type INFO
         try {
-            Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/revokeSignInSessions" -Method POST -ErrorAction Stop
+            Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/revokeSignInSessions" -Headers $script:GraphHeaders -ErrorAction Stop
             Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to revoke user sessions" -Type ERROR
@@ -1746,7 +1864,7 @@ function Remove-UserSessions {
 
         try {
             # Get authentication methods
-            $authMethods = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/methods" -ErrorAction Stop
+            $authMethods = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/methods" -Headers $script:GraphHeaders -ErrorAction Stop
 
             foreach ($authMethod in $authMethods.value) {
                 $authType = $authMethod.'@odata.type'
@@ -1767,7 +1885,7 @@ function Remove-UserSessions {
                 $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/$($methodInfo.Path)/$methodId"
 
                 try {
-                    Invoke-MgGraphRequest -Method DELETE -Uri $uri -ErrorAction Stop
+                    Invoke-RestMethod -Method DELETE -Uri $uri -Headers $script:GraphHeaders -ErrorAction Stop
                     Write-StatusMessage -Message "$($methodInfo.Message): $methodId" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove authentication method $methodId of type $authType" -Type ERROR
@@ -1802,7 +1920,7 @@ function Remove-UserSessions {
 
         # Disable Azure AD devices
         try {
-            $termUserDevices = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/registeredDevices" -ErrorAction Stop
+            $termUserDevices = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/registeredDevices" -Headers $script:GraphHeaders -ErrorAction Stop
 
             foreach ($termUserDevice in $termUserDevices.value) {
                 Write-StatusMessage -Message "Disabling registered device: $($termUserDevice.id)" -Type INFO
@@ -1811,7 +1929,7 @@ function Remove-UserSessions {
                     $uri = "https://graph.microsoft.com/v1.0/devices/$($termUserDevice.id)"
                     $body = @{ accountEnabled = $false } | ConvertTo-Json
 
-                    Invoke-MgGraphRequest -Method PATCH -Uri $uri -Body $body -ErrorAction Stop
+                    Invoke-RestMethod -Method PATCH -Uri $uri -Headers $script:GraphHeaders -Body $body -ContentType "application/json" -ErrorAction Stop
 
                     Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.id)" -Type OK
                 } catch {
@@ -1922,7 +2040,7 @@ function Remove-UserFromEntraDirectoryRoles {
 
         try {
             # Get all objects the user is a member of
-            $memberOf = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf" -ErrorAction Stop
+            $memberOf = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf" -Headers $script:GraphHeaders -ErrorAction Stop
 
             # Filter for directoryRole memberships
             $directoryRoles = $memberOf.value | Where-Object {
@@ -1944,7 +2062,7 @@ function Remove-UserFromEntraDirectoryRoles {
                     Write-StatusMessage -Message "Removing from role: $roleName" -Type INFO
 
                     $removeUri = "https://graph.microsoft.com/v1.0/directoryRoles/$roleId/members/$($User.Id)/`$ref"
-                    Invoke-MgGraphRequest -Method DELETE -Uri $removeUri -ErrorAction Stop
+                    Invoke-RestMethod -Method DELETE -Uri $removeUri -Headers $script:GraphHeaders -ErrorAction Stop
 
                     Write-StatusMessage -Message "Successfully removed from role: $roleName" -Type OK
                 } catch {
@@ -1978,7 +2096,7 @@ function Remove-UserFromEntraGroups {
 
         try {
             # Get group memberships for the user
-            $response = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf" -ErrorAction Stop
+            $response = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/memberOf" -Headers $script:GraphHeaders -ErrorAction Stop
             $groupObjects = $response.value
 
             # Filter out directory roles, dynamic groups, and cloud-only groups
@@ -2023,7 +2141,7 @@ function Remove-UserFromEntraGroups {
                 try {
                     if ($group.securityEnabled -or $group.groupType -eq 'Unified') {
                         $uri = "https://graph.microsoft.com/v1.0/groups/$($group.Id)/members/$($User.Id)/`$ref"
-                        Invoke-MgGraphRequest -Method DELETE -Uri $uri -ErrorAction Stop
+                        Invoke-RestMethod -Method DELETE -Uri $uri -Headers $script:GraphHeaders -ErrorAction Stop
                         Write-StatusMessage -Message "Removed from Security/Unified Group: $($group.DisplayName)" -Type OK
                     } else {
                         # Fallback to Exchange Online for Distribution Groups
@@ -2072,9 +2190,10 @@ function Remove-UserGroupOwnership {
 
         try {
             # Get owned groups
-            $response = Invoke-MgGraphRequest `
+            $response = Invoke-RestMethod `
                 -Method GET `
                 -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/ownedObjects/microsoft.graph.group" `
+                -Headers $script:GraphHeaders `
                 -ErrorAction Stop
 
             $ownedGroups = $response.value
@@ -2110,9 +2229,10 @@ function Remove-UserGroupOwnership {
 
                 try {
                     # Get current owners
-                    $ownersResponse = Invoke-MgGraphRequest `
+                    $ownersResponse = Invoke-RestMethod `
                         -Method GET `
                         -Uri "https://graph.microsoft.com/v1.0/groups/$($group.Id)/owners?`$select=id" `
+                        -Headers $script:GraphHeaders `
                         -ErrorAction Stop
 
                     $ownerCount = $ownersResponse.value.Count
@@ -2132,9 +2252,10 @@ function Remove-UserGroupOwnership {
                                 "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$FallbackOwnerId"
                             } | ConvertTo-Json
 
-                            Invoke-MgGraphRequest `
+                            Invoke-RestMethod `
                                 -Method POST `
                                 -Uri "https://graph.microsoft.com/v1.0/groups/$($group.Id)/owners/`$ref" `
+                                -Headers $script:GraphHeaders `
                                 -Body $body `
                                 -ContentType "application/json" `
                                 -ErrorAction Stop
@@ -2152,9 +2273,10 @@ function Remove-UserGroupOwnership {
                     # Remove ownership
                     $removeUri = "https://graph.microsoft.com/v1.0/groups/$($group.Id)/owners/$($User.Id)/`$ref"
 
-                    Invoke-MgGraphRequest `
+                    Invoke-RestMethod `
                         -Method DELETE `
                         -Uri $removeUri `
+                        -Headers $script:GraphHeaders `
                         -ErrorAction Stop
 
                     Write-StatusMessage -Message "Removed ownership from: $($group.DisplayName)" -Type OK
@@ -2202,7 +2324,7 @@ function Remove-UserLicenses {
         try {
             # Get current license assignments from Graph
             $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/licenseDetails"
-            $response = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+            $response = Invoke-RestMethod -Method GET -Uri $uri -Headers $script:GraphHeaders -ErrorAction Stop
             $licenseDetails = $response.value | Select-Object skuPartNumber, skuId, id
 
             if ($ExportPath) {
@@ -2231,7 +2353,7 @@ function Remove-UserLicenses {
                         removeLicenses = @(@{ skuId = $license.skuId })
                     } | ConvertTo-Json -Depth 3
 
-                    Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                    Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Ancillary License: $($license.skuPartNumber)" -Type OK
                     Start-Sleep -Seconds 2
                 } catch {
@@ -2248,7 +2370,7 @@ function Remove-UserLicenses {
                         removeLicenses = @($license.skuId)
                     } | ConvertTo-Json -Depth 3
 
-                    Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                    Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Primary License: $($license.skuPartNumber)" -Type OK
                     Start-Sleep -Seconds 2
                 } catch {
@@ -2275,7 +2397,7 @@ function Remove-UserLicenses {
                                 removeLicenses = @($license.skuId)
                             } | ConvertTo-Json -Depth 3
 
-                            Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                            Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
                             Write-StatusMessage -Message "Successfully removed license on retry: $($license.skuPartNumber)" -Type OK
                             Start-Sleep -Seconds 2
                         } catch {
@@ -2507,18 +2629,15 @@ try {
 
     $script:TestEmailAddress = $config.TestMode.Email
 
-    # Get connection parameters from config
-    $Organization = $config.ExchangeOnline.Organization
-    $ExOAppId = $config.ExchangeOnline.AppId
-    $ExOCertSubject = $Config.ExchangeOnline.CertificateSubject
-    $GraphAppId = $config.Graph.AppId
-    $tenantID = $config.Graph.TenantId
-    $GraphCertSubject = $Config.Graph.CertificateSubject
-    $PnPAppId = $config.PnPSharePoint.AppId
-    $PnPUrl = $config.PnPSharePoint.Url
-    $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
+    # PnP variables required by Connect-ServiceEndpoints -SharePoint
+    $Organization    = $config.ExchangeOnline.Organization
+    $PnPAppId        = $config.PnPSharePoint.AppId
+    $PnPUrl          = $config.PnPSharePoint.Url
+    $PnPCertSubject  = $config.PnPSharePoint.CertificateSubject
 
-    Connect-ServiceEndpoints -ExchangeOnline -Graph
+    # Connect
+    $script:GraphHeaders = Get-GraphToken -TenantId $($config.Graph.TenantId) -ClientId $($config.Graph.AppId) -ClientCert (Get-ServiceCert $($Config.Graph.CertificateSubject))
+    Connect-ExchangeOnline -AppId $($config.ExchangeOnline.AppId) -Organization $Organization -CertificateThumbprint (Get-ServiceCert $($Config.ExchangeOnline.CertificateSubject)).Thumbprint -ShowBanner:$false
 
     # Call the custom input window function
 
@@ -2606,8 +2725,8 @@ try {
 
     Set-TerminatedMailbox @mailboxParams
 
-    # Step: Remove Full Access to managedservices@compassmsp.com
-
+    # Get user properties from Graph for conditional logic and final summary
+    Write-StatusMessage -Message "Retrieving user properties from Graph for final processing..." -Type INFO
     $properties = @(
         'Id',
         'Mail',
@@ -2625,7 +2744,7 @@ try {
     $newUserEmail = $newUserProperties.Email
 
     $newUserQuery = "https://graph.microsoft.com/v1.0/users/$newUserEmail`?`$select=$selectQuery"
-    $newUserResponse = Invoke-MgGraphRequest -Method GET -Uri $newUserQuery
+    $newUserResponse = Invoke-RestMethod -Method GET -Uri $newUserQuery -Headers $script:GraphHeaders
 
     # Build Hashtable from Response
     $MgUser = @{}
@@ -2633,6 +2752,7 @@ try {
         $MgUser[$prop] = $newUserResponse | Select-Object -ExpandProperty $prop -ErrorAction SilentlyContinue
     }
 
+    # Step: Remove Full Access to managedservices@compassmsp.com
     if ($MgUser.Department -in @('Professional Services', 'Deployment')) {
 
         Write-StatusMessage -Message "Removing full access to the managedservices@compassmsp.com mailbox..." -Type INFO
@@ -2667,7 +2787,7 @@ try {
         -User $userInfo.selectMgUser `
         -UseFallbackOwner `
         -FallbackOwnerId "f91a781a-a556-4947-8358-699d0c7bf2d5" `
-        -ExportPath $groupExportPath
+        -ExportPath $groupOwnerExportPath
 
     # Step: Remove Licenses
     Write-ProgressStep -StepName 'License Removal'
@@ -2803,9 +2923,12 @@ The following user need to be removed from Salesforce. <p> $($userInfo.selectMgU
 
     Exit-Script -Message "$User has been successfully disabled." -ExitCode Success
 } catch {
-
     Write-StatusMessage -Message "Script failed: $($_.Exception.Message)" -Type ERROR
-    Write-StatusMessage -Message "Stack Trace: $($_.ScriptStackTrace)" -Type ERROR
+    Write-StatusMessage -Message "At: $($_.InvocationInfo.PositionMessage)" -Type ERROR
+    if ($_.Exception.InnerException) {
+        Write-StatusMessage -Message "Inner exception: $($_.Exception.InnerException.Message)" -Type ERROR
+    }
+    Write-StatusMessage -Message "Stack Trace:`n$($_.ScriptStackTrace)" -Type ERROR
 
     # Clear the progress bar
     Write-Progress -Activity "User Termination" -Status "Failed" -PercentComplete 100
