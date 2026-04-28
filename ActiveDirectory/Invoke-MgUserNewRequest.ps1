@@ -4861,7 +4861,8 @@ try {
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
 
-    # Email for Salesforce
+    if ($($script:TestMode) -eq $false) {
+            # Email for Salesforce
     if ($MgUser.department -in @('Sales')) {
         Write-StatusMessage -Message "User is in Sales department. Sending notification for Salesforce provisioning..." -Type INFO
         try {
@@ -4969,6 +4970,10 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
         } catch {
             Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: $($_.Exception.Message)" -Type ERROR
         }
+    }
+
+    } else {
+        Write-StatusMessage -Message "Test mode is enabled. Skipping Salesforce notification and 8x8 ticket creation." -Type INFO
     }
 
     # Step: OneDrive Provisioning

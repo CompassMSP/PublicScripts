@@ -2630,10 +2630,10 @@ try {
     $script:TestEmailAddress = $config.TestMode.Email
 
     # PnP variables required by Connect-ServiceEndpoints -SharePoint
-    $Organization    = $config.ExchangeOnline.Organization
-    $PnPAppId        = $config.PnPSharePoint.AppId
-    $PnPUrl          = $config.PnPSharePoint.Url
-    $PnPCertSubject  = $config.PnPSharePoint.CertificateSubject
+    $Organization = $config.ExchangeOnline.Organization
+    $PnPAppId = $config.PnPSharePoint.AppId
+    $PnPUrl = $config.PnPSharePoint.Url
+    $PnPCertSubject = $config.PnPSharePoint.CertificateSubject
 
     # Connect
     $script:GraphHeaders = Get-GraphToken -TenantId $($config.Graph.TenantId) -ClientId $($config.Graph.AppId) -ClientCert (Get-ServiceCert $($Config.Graph.CertificateSubject))
@@ -2796,90 +2796,93 @@ try {
 
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
-    $MsgFrom = $config.Email.NotificationFrom
-    $CcAddress = $config.Email.NotificationCcAddress
 
-    # Email Compass West for 8x8
-    try {
+    if ($($script:TestMode) -eq $false) {
 
-        function Get-ConnectWiseManageToken {
-            param (
-                [string]$CompanyId,
-                [string]$PublicKey,
-                [string]$PrivateKey,
-                [string]$clientId
-            )
+        # Email for Salesforce
+        if ($MgUser.department -in @('Sales')) {
+            try {
+                $emailSubject = "Salesforce – Remove User"
+                $emailContent = @"
+The following user need to be removed from Salesforce. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)
+"@
 
-            # Encode companyId+publicKey:privateKey in Base64
-            $pair = "$CompanyId+$PublicKey`:$PrivateKey"
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
-            $base64 = [Convert]::ToBase64String($bytes)
-
-            # Create headers with Basic authentication
-            $headers = @{
-                "Authorization" = "Basic $base64"
-                "Content-Type"  = "application/json"
-                "ClientId"      = $clientId
+                Send-GraphMailMessage -FromAddress $($config.Email.NotificationFrom) -ToAddress $($config.Email.NotificationForSalesForceRequests) -CcAddress $($config.Email.NotificationCcAddress) -Subject $emailSubject -Content $emailContent
+            } catch {
+                Write-StatusMessage -Message "Failed to send Salesforce notification email: $($_.Exception.Message)" -Type ERROR
             }
-
-            return $headers
         }
 
-        $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
+        # Email Compass West for 8x8
+        try {
 
-        $emailSubject = "8x8 – Remove User"
-        $emailContent = @"
+            function Get-ConnectWiseManageToken {
+                param (
+                    [string]$CompanyId,
+                    [string]$PublicKey,
+                    [string]$PrivateKey,
+                    [string]$clientId
+                )
+
+                # Encode companyId+publicKey:privateKey in Base64
+                $pair = "$CompanyId+$PublicKey`:$PrivateKey"
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+                $base64 = [Convert]::ToBase64String($bytes)
+
+                # Create headers with Basic authentication
+                $headers = @{
+                    "Authorization" = "Basic $base64"
+                    "Content-Type"  = "application/json"
+                    "ClientId"      = $clientId
+                }
+
+                return $headers
+            }
+
+            $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
+
+            $emailSubject = "8x8 – Remove User"
+            $emailContent = @"
 The following user need to be removed from 8x8.
 
 $($userInfo.selectMgUser.DisplayName) - $($userInfo.selectMgUser.Mail)
 "@
 
-        $body = @{
-            summary            = $emailSubject
-            initialDescription = $emailContent
-            company            = @{
-                identifier = 'CompassMSP'
+            $body = @{
+                summary            = $emailSubject
+                initialDescription = $emailContent
+                company            = @{
+                    identifier = 'CompassMSP'
+                }
+                board              = @{
+                    name = "Telecom Managed Services"
+                }
+                status             = @{
+                    name = "+New"
+                }
+            } | ConvertTo-Json -Depth 10
+
+            $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
+
+            $8x8TicketResults = Invoke-RestMethod `
+                -Method Post `
+                -Uri "$baseUrl/service/tickets" `
+                -Headers $headers `
+                -Body $body `
+                -ContentType "application/json"
+
+            if ($8x8TicketResults) {
+                Write-StatusMessage -Message "Successfully created 8x8 removal ticket: $($8x8TicketResults.id)" -Type OK
+            } else {
+                Write-StatusMessage -Message "Failed to create 8x8 removal ticket: No response from API" -Type ERROR
             }
-            board              = @{
-                name = "Telecom Managed Services"
-            }
-            status             = @{
-                name = "+New"
-            }
-        } | ConvertTo-Json -Depth 10
 
-        $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
-
-        $8x8TicketResults = Invoke-RestMethod `
-            -Method Post `
-            -Uri "$baseUrl/service/tickets" `
-            -Headers $headers `
-            -Body $body `
-            -ContentType "application/json"
-
-        if ($8x8TicketResults) {
-            Write-StatusMessage -Message "Successfully created 8x8 removal ticket: $($8x8TicketResults.id)" -Type OK
-        } else {
-            Write-StatusMessage -Message "Failed to create 8x8 removal ticket: No response from API" -Type ERROR
-        }
-
-    } catch {
-        Write-StatusMessage -Message "Failed to create 8x8 removal ticket: $($_.Exception.Message)" -Type ERROR
-    }
-
-    # Email for Salesforce
-    if ($MgUser.department -in @('Sales')) {
-        try {
-            $ToAddress = $config.Email.NotificationForSalesForceRequests
-            $emailSubject = "Salesforce – Remove User"
-            $emailContent = @"
-The following user need to be removed from Salesforce. <p> $($userInfo.selectMgUser.DisplayName) <br> $($userInfo.selectMgUser.Mail)
-"@
-
-            Send-GraphMailMessage -FromAddress $MsgFrom -ToAddress $ToAddress -CcAddress $CcAddress -Subject $emailSubject -Content $emailContent
         } catch {
-            Write-StatusMessage -Message "Failed to send Salesforce notification email: $($_.Exception.Message)" -Type ERROR
+            Write-StatusMessage -Message "Failed to create 8x8 removal ticket: $($_.Exception.Message)" -Type ERROR
         }
+
+    } else {
+        Write-StatusMessage -Message "Test mode is enabled. Skipping Salesforce notification and 8x8 ticket creation." -Type INFO
     }
 
     # Step : Disconnect from Exchange Online and Graph
