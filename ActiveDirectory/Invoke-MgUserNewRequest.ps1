@@ -1,6 +1,8 @@
 #requires -Version 7.0
 #requires -RunAsAdministrator
-#requires -Modules ExchangeOnlineManagement,Microsoft.Graph.Users,Microsoft.Graph.Groups
+#requires -Modules ExchangeOnlineManagement
+
+$script:GraphHeaders = $null
 <#
 TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .SYNOPSIS
@@ -30,12 +32,21 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2026-04-23
+    Last Modified: 2026-04-27
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.0      2026-04-27   Refactor:
+                               - Migrated all Graph calls from Microsoft.Graph module to Invoke-RestMethod
+                               - Replaced Connect-MgGraph/Disconnect-MgGraph with Get-GraphToken certificate auth
+                               - Removed dependency on Microsoft.Graph.Users and Microsoft.Graph.Groups modules
+                               - All relative Graph URIs normalized to full https://graph.microsoft.com URLs
+                               - Removed Connect-ServiceEndpoints and moved Graph connection logic to Get-GraphToken for better modularity and token management
+                               - Moved Exchange Online connection outside function with plans to add it to Get-GraphToken in the future
+                               - Started exploring Exchange REST API for mailbox operations in preparation for moving those operations away from the ExchangeOnlineManagement module
+
     4.3.2      2026-04-23   Feature Updates:
                                - Refactored UI for better user experience and streamlined workflow
                                - Cleaned up old code and functions that are no longer used after refactor
@@ -326,7 +337,9 @@ function Exit-Script {
         if (-not $script:TestMode) {
             Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
             try {
-                Connect-ServiceEndpoints -Disconnect
+                # Disconnect
+                $script:GraphHeaders = $null
+                Disconnect-ExchangeOnline -Confirm:$false
             } catch {
                 Write-StatusMessage -Message "Failed to disconnect services during exit" -Type ERROR
             }
@@ -337,7 +350,11 @@ function Exit-Script {
 
         # In test mode, don't actually exit
         if ($script:TestMode) {
-            Write-StatusMessage -Message "Test Mode: Script would exit here with code $($exitCodes[$ExitCode])" -Type WARN
+            Write-StatusMessage -Message "Test Mode: Script would exit here with code $($exitCodes[$ExitCode]) ($ExitCode)" -Type WARN
+            if ($exitCodes[$ExitCode] -ne 0) {
+                Write-StatusMessage -Message "Entering nested prompt — all script variables are accessible. Type 'exit' to resume." -Type WARN
+                $host.EnterNestedPrompt()
+            }
             return
         }
 
@@ -432,181 +449,126 @@ function Get-ScriptConfig {
     }
 }
 
-function Connect-ServiceEndpoints {
-    <#
-    .SYNOPSIS
-        Manages connections to Microsoft 365 service endpoints.
+function Get-GraphToken {
+    [CmdletBinding(DefaultParameterSetName = 'Secret')]
+    param (
+        [Parameter(Mandatory)]
+        [string]$TenantId,
+        [Parameter(Mandatory)]
+        [string]$ClientId,
 
-    .DESCRIPTION
-        Handles both connection and disconnection to Exchange Online, Microsoft Graph,
-        and SharePoint Online services. Can connect/disconnect to all services or
-        specific services as needed.
+        [Parameter(Mandatory, ParameterSetName = 'Secret')]
+        [string]$ClientSecret,
 
-    .PARAMETER ExchangeOnline
-        Switch to specify Exchange Online service operations.
+        [Parameter(Mandatory, ParameterSetName = 'Certificate')]
+        [System.Security.Cryptography.X509Certificates.X509Certificate2]$ClientCert,
 
-    .PARAMETER Graph
-        Switch to specify Microsoft Graph service operations.
-
-    .PARAMETER SharePoint
-        Switch to specify SharePoint Online service operations.
-
-    .PARAMETER Disconnect
-        Switch to disconnect instead of connect. If used without other switches,
-        disconnects from all services.
-
-    .EXAMPLE
-        Connect-ServiceEndpoints
-        Connects to all services using default configuration.
-
-    .EXAMPLE
-        Connect-ServiceEndpoints -ExchangeOnline -Graph
-        Connects only to Exchange Online and Microsoft Graph services.
-
-    .EXAMPLE
-        Connect-ServiceEndpoints -Disconnect
-        Disconnects from all connected services.
-
-    .EXAMPLE
-        Connect-ServiceEndpoints -Disconnect -SharePoint
-        Disconnects only from SharePoint Online.
-
-    .EXAMPLE
-        Connect-ServiceEndpoints -ExchangeOnline
-        Connects only to Exchange Online service.
-
-    .NOTES
-        Requires appropriate certificates and permissions configured in config.json.
-        Uses global configuration variables for connection parameters.
-    #>
-
-    [CmdletBinding()]
-    param(
-        [Parameter()]
-        [switch]$ExchangeOnline,
-
-        [Parameter()]
-        [switch]$Graph,
-
-        [Parameter()]
-        [switch]$SharePoint,
-
-        [Parameter()]
-        [switch]$Disconnect
+        [string]$ExchangeOrg,
+        [string]$AnchorMailbox,
+        [switch]$Exchange,
+        [switch]$EXORest
     )
 
-    # If Disconnect is specified, handle disconnections
-    if ($Disconnect) {
-        Write-StatusMessage -Message "Disconnecting from services..." -Type INFO
-        # If no specific services selected, set all to true for disconnecting everything
-        $disconnectAll = -not ($ExchangeOnline -or $Graph -or $SharePoint)
-
-        # Disconnect from Exchange Online
-        if (($ExchangeOnline -or $disconnectAll) -and (Get-ConnectionInformation)) {
-            try {
-                Disconnect-ExchangeOnline -Confirm:$false -ErrorAction Stop
-                Write-StatusMessage -Message "Disconnected from Exchange Online" -Type OK
-            } catch {
-                Write-StatusMessage -Message "Failed to disconnect from Exchange Online: $_" -Type WARN
-            }
-        }
-
-        # Disconnect from Microsoft Graph
-        if (($Graph -or $disconnectAll) -and (Get-MgContext)) {
-            try {
-                $null = Disconnect-MgGraph -ErrorAction Stop
-                Write-StatusMessage -Message "Disconnected from Microsoft Graph" -Type OK
-            } catch {
-                Write-StatusMessage -Message "Failed to disconnect from Microsoft Graph: $_" -Type WARN
-            }
-        }
-
-        # Disconnect from SharePoint
-        if (($SharePoint -or $disconnectAll)) {
-            try {
-                # Try to disconnect only if there's an active connection
-                $pnpContext = Get-PnPContext -ErrorAction Stop
-                if ($pnpContext) {
-                    Disconnect-PnPOnline -ErrorAction Stop
-                    Write-StatusMessage -Message "Disconnected from SharePoint Online" -Type OK
-                }
-            } catch {
-                Write-StatusMessage -Message "Failed to disconnect from SharePoint Online: $_" -Type WARN
-            }
-        }
-
-        return
+    $scope = if ($Exchange -or $EXORest) {
+        if (-not $ExchangeOrg) { throw "-ExchangeOrg is required for Exchange API" }
+        "https://outlook.office365.com/.default"
+    } else {
+        "https://graph.microsoft.com/.default"
     }
 
-    # If not disconnecting, handle connections
-    if (-not $Disconnect) {
-        # If no specific services selected, connect to all
-        $connectAll = -not ($ExchangeOnline -or $Graph -or $SharePoint)
-        Write-StatusMessage -Message "Connecting to services..." -Type INFO
-
-        # Connect to Exchange Online
-        if ($ExchangeOnline -or $connectAll) {
-            $requiredExOParams = @('ExOAppId', 'Organization', 'ExOCertSubject')
-            $missingExOParams = $requiredExOParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
-
-            if ($missingExOParams) {
-                throw "Exchange Online connection requires the following parameters: $($missingExOParams -join ', ')"
-            }
-
-            Write-StatusMessage -Message "Connecting to Exchange Online..." -Type 'INFO'
-            $ExOCert = Get-ChildItem Cert:\LocalMachine\My |
-            Where-Object { ($_.Subject -like "*$($ExOCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
-
-            if ($null -eq $ExOCert) {
-                Exit-Script -Message "No valid ExO PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
-            }
-
-            Connect-ExchangeOnline -AppId $ExOAppId -Organization $Organization -CertificateThumbprint $($ExOCert.Thumbprint) -ShowBanner:$false
-            Write-StatusMessage -Message "Connected to Exchange Online" -Type 'OK'
-        }
-
-        # Connect to Microsoft Graph
-        if ($Graph -or $connectAll) {
-            $requiredGraphParams = @('GraphAppId', 'TenantId', 'GraphCertSubject')
-            $missingGraphParams = $requiredGraphParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
-
-            if ($missingGraphParams) {
-                throw "Graph connection requires the following parameters: $($missingGraphParams -join ', ')"
-            }
-
-            Write-StatusMessage -Message "Connecting to Microsoft Graph..." -Type 'INFO'
-            $GraphCert = Get-ChildItem Cert:\LocalMachine\My |
-            Where-Object { ($_.Subject -like "*$($GraphCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
-
-            if ($null -eq $GraphCert) {
-                Exit-Script -Message "No valid Graph PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
-            }
-
-            Connect-Graph -TenantId $TenantId -AppId $GraphAppId -Certificate $GraphCert -NoWelcome
-            Write-StatusMessage -Message "Connected to Microsoft Graph" -Type 'OK'
-        }
-
-        # Connect to SharePoint Online
-        if ($SharePoint -or $connectAll) {
-            $requiredPnPParams = @('PnPAppId', 'PnPUrl', 'Organization', 'PnPCertSubject')
-            $missingPnPParams = $requiredPnPParams.Where({ -not (Get-Variable -Name $_ -ErrorAction SilentlyContinue) })
-
-            if ($missingPnPParams) {
-                throw "SharePoint connection requires the following parameters: $($missingPnPParams -join ', ')"
-            }
-
-            Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type 'INFO'
-            $PnPCert = Get-ChildItem Cert:\LocalMachine\My |
-            Where-Object { ($_.Subject -like "*$($PnPCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) }
-
-            if ($null -eq $PnPCert) {
-                Exit-Script -Message "No valid PnP PowerShell certificates found in the LocalMachine\My store." -ExitCode ConfigError
-            }
-
-            Connect-PnPOnline -Url $PnPUrl -ClientId $PnPAppId -Tenant $Organization -Thumbprint $($PnPCert.Thumbprint)
-            Write-StatusMessage -Message "Connected to SharePoint Online" -Type 'OK'
-        }
+    $body = @{
+        client_id  = $ClientId
+        scope      = $scope
+        grant_type = "client_credentials"
     }
+
+    if ($PSCmdlet.ParameterSetName -eq 'Certificate') {
+        $tokenUrl = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+
+        # Build x5t (base64url SHA-1 thumbprint)
+        $thumbBytes = [byte[]]::new($ClientCert.Thumbprint.Length / 2)
+        for ($i = 0; $i -lt $ClientCert.Thumbprint.Length; $i += 2) {
+            $thumbBytes[$i / 2] = [Convert]::ToByte($ClientCert.Thumbprint.Substring($i, 2), 16)
+        }
+        $x5t = [Convert]::ToBase64String($thumbBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        $header = [Convert]::ToBase64String(
+            [System.Text.Encoding]::UTF8.GetBytes(
+                (@{ alg = 'RS256'; typ = 'JWT'; x5t = $x5t } | ConvertTo-Json -Compress)
+            )
+        ).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $payload = [Convert]::ToBase64String(
+            [System.Text.Encoding]::UTF8.GetBytes(
+                (@{
+                    aud = $tokenUrl
+                    iss = $ClientId
+                    sub = $ClientId
+                    jti = [Guid]::NewGuid().ToString()
+                    nbf = $now
+                    exp = $now + 600
+                } | ConvertTo-Json -Compress)
+            )
+        ).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        $sigInput = "$header.$payload"
+
+        # .PrivateKey works for CAPI keys; CNG keys require the extension method via static call
+        $rsa = $ClientCert.PrivateKey
+        if (-not $rsa) {
+            $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($ClientCert)
+        }
+        if (-not $rsa) { throw "Cannot access private key for cert '$($ClientCert.Subject)'. Ensure the key is accessible under the current user/process." }
+
+        $sigBytes = if ($rsa -is [System.Security.Cryptography.RSACryptoServiceProvider]) {
+            $rsa.SignData([System.Text.Encoding]::UTF8.GetBytes($sigInput), 'SHA256')
+        } else {
+            $rsa.SignData(
+                [System.Text.Encoding]::UTF8.GetBytes($sigInput),
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
+            )
+        }
+        $signature = [Convert]::ToBase64String($sigBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+        $body['client_assertion_type'] = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+        $body['client_assertion'] = "$sigInput.$signature"
+    } else {
+        $body['client_secret'] = $ClientSecret
+    }
+
+    try {
+        $response = Invoke-RestMethod -Method Post `
+            -Uri "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token" `
+            -Body $body -ErrorAction Stop
+
+        if ($EXORest) {
+            return @{
+                Authorization  = "Bearer $($response.access_token)"
+                'Content-Type' = 'application/json'
+            }
+        } elseif ($Exchange) {
+            $existing = Get-ConnectionInformation -ErrorAction SilentlyContinue
+            if (-not $existing) {
+                Connect-ExchangeOnline -AccessToken $response.access_token -Organization $ExchangeOrg -ShowBanner:$false
+            }
+            return "Connected to Exchange Online for $ExchangeOrg"
+        } else {
+            return @{ Authorization = "Bearer $($response.access_token)"; 'Content-Type' = 'application/json' }
+        }
+
+    } catch {
+        throw "Failed to get access token: $($_.Exception.Message)"
+    }
+}
+
+function Get-ServiceCert {
+    param([string]$Subject)
+    $cert = Get-ChildItem Cert:\LocalMachine\My |
+    Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now }
+    if (-not $cert) { Exit-Script -Message "No valid certificate found matching '$Subject'" -ExitCode ConfigError }
+    $cert
 }
 
 function Send-GraphMailMessage {
@@ -782,7 +744,7 @@ function Send-GraphMailMessage {
 
         # Use Graph API directly
         $graphUri = "https://graph.microsoft.com/v1.0/users/$FromAddress/sendMail"
-        Invoke-MgGraphRequest -Method POST -Uri $graphUri -Body $jsonBody -ContentType "application/json"
+        Invoke-RestMethod -Method POST -Uri $graphUri -Headers $script:GraphHeaders -Body $jsonBody -ContentType "application/json"
         Write-StatusMessage -Message "Email notification sent successfully" -Type OK
     } catch {
         Write-StatusMessage -Message "Failed to send email notification: $_" -Type ERROR
@@ -1545,6 +1507,7 @@ function Get-NewUserRequest {
                             <Button x:Name="btnSaveJson" Content="Save JSON" Width="120" Height="32" Margin="0,0,10,0"/>
                         </WrapPanel>
                         <CheckBox x:Name="cbTestMode" Content="Test Mode" VerticalAlignment="Center" Margin="0,0,0,10"/>
+                        <CheckBox x:Name="cbDisableSending8x8ProvisioningTicket" Content="Disable Sending 8x8 Provisioning Ticket" VerticalAlignment="Center" Margin="0,0,0,10"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -2143,37 +2106,38 @@ function Get-NewUserRequest {
 
         # Store form data in a custom object
         $formData = [PSCustomObject]@{
-            requiredLicense        = @()
-            displayName            = Get-ValueOrNull $txtDisplayName.Text
-            samAccountName         = Get-ValueOrNull $txtSamAccountName.Text
-            domain                 = if ($cboDomain.SelectedItem) { $cboDomain.SelectedItem.ToString() } else { "" }
-            userPrincipalName      = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
-            mobilePhone            = Get-ValueOrNull $txtMobilePhone.Text
-            timeZone               = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
-            usageLocation          = $usageLocation
-            copyUserOperations     = if ($cboCopyUserOperations.SelectedItem -eq 'None') { $null } elseif ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
-            userToCopy             = Get-ValueOrNull $txtUserToCopy.Text
-            ancillaryLicense       = @()
-            givenName              = Get-ValueOrNull $txtGivenName.Text
-            surname                = Get-ValueOrNull $txtSurname.Text
-            jobTitle               = Get-ValueOrNull $txtJobTitle.Text
-            department             = Get-ValueOrNull $txtDepartment.Text
-            companyName            = Get-ValueOrNull $txtCompanyName.Text
-            officeLocation         = Get-ValueOrNull $txtOfficeLocation.Text
-            employeeHireDate       = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
-            manager                = Get-ValueOrNull $txtManager.Text
-            employeeId             = Get-ValueOrNull $txtEmployeeId.Text
-            businessPhone          = Get-ValueOrNull $txtBusinessPhone.Text
-            faxNumber              = Get-ValueOrNull $txtFaxNumber.Text
-            streetAddress          = Get-ValueOrNull $txtStreetAddress.Text
-            city                   = Get-ValueOrNull $txtCity.Text
-            state                  = Get-ValueOrNull $txtState.Text
-            postalCode             = Get-ValueOrNull $txtPostalCode.Text
-            country                = Get-ValueOrNull $txtCountry.Text
-            departmentGroupOptions = @()
-            testModeEnabled        = $false
-            InstallSapience        = $false
-            cloudOnly              = $true
+            requiredLicense           = @()
+            displayName               = Get-ValueOrNull $txtDisplayName.Text
+            samAccountName            = Get-ValueOrNull $txtSamAccountName.Text
+            domain                    = if ($cboDomain.SelectedItem) { $cboDomain.SelectedItem.ToString() } else { "" }
+            userPrincipalName         = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
+            mobilePhone               = Get-ValueOrNull $txtMobilePhone.Text
+            timeZone                  = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
+            usageLocation             = $usageLocation
+            copyUserOperations        = if ($cboCopyUserOperations.SelectedItem -eq 'None') { $null } elseif ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
+            userToCopy                = Get-ValueOrNull $txtUserToCopy.Text
+            ancillaryLicense          = @()
+            givenName                 = Get-ValueOrNull $txtGivenName.Text
+            surname                   = Get-ValueOrNull $txtSurname.Text
+            jobTitle                  = Get-ValueOrNull $txtJobTitle.Text
+            department                = Get-ValueOrNull $txtDepartment.Text
+            companyName               = Get-ValueOrNull $txtCompanyName.Text
+            officeLocation            = Get-ValueOrNull $txtOfficeLocation.Text
+            employeeHireDate          = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
+            manager                   = Get-ValueOrNull $txtManager.Text
+            employeeId                = Get-ValueOrNull $txtEmployeeId.Text
+            businessPhone             = Get-ValueOrNull $txtBusinessPhone.Text
+            faxNumber                 = Get-ValueOrNull $txtFaxNumber.Text
+            streetAddress             = Get-ValueOrNull $txtStreetAddress.Text
+            city                      = Get-ValueOrNull $txtCity.Text
+            state                     = Get-ValueOrNull $txtState.Text
+            postalCode                = Get-ValueOrNull $txtPostalCode.Text
+            country                   = Get-ValueOrNull $txtCountry.Text
+            departmentGroupOptions    = @()
+            testModeEnabled           = $false
+            Send8x8ProvisioningTicket = $false
+            InstallSapience           = $false
+            cloudOnly                 = $true
         }
 
         # Store required licenses in an array of objects with DisplayName and SkuId
@@ -2206,6 +2170,12 @@ function Get-NewUserRequest {
             $formData.testModeEnabled = $false
         }
 
+        if ($cbDisableSending8x8ProvisioningTicket.IsChecked -eq $true) {
+            $formData.Send8x8ProvisioningTicket = $false
+        } else {
+            $formData.Send8x8ProvisioningTicket = $true
+        }
+
         if ($cbInstallSapience.IsChecked -eq $true) {
             $formData.installSapience = $true
         } else {
@@ -2228,7 +2198,7 @@ function Get-NewUserRequest {
             # Get license info from Microsoft Graph
             $skuQuery = "https://graph.microsoft.com/v1.0/subscribedSkus"
 
-            $skuResponse = Invoke-MgGraphRequest -Method GET -Uri $skuQuery
+            $skuResponse = Invoke-RestMethod -Method GET -Uri $skuQuery -Headers $script:GraphHeaders
 
             $skus = $skuResponse.value | Select-Object skuId, skuPartNumber, consumedUnits, @{ Name = 'PrepaidUnits'; Expression = { $_.prepaidUnits.enabled } }
 
@@ -2347,7 +2317,7 @@ function Get-NewUserRequest {
 
             # Get domains from Graph API
             $domainQuery = "https://graph.microsoft.com/v1.0/domains"
-            $domainResponse = Invoke-MgGraphRequest -Method GET -Uri $domainQuery
+            $domainResponse = Invoke-RestMethod -Method GET -Uri $domainQuery -Headers $script:GraphHeaders
 
             # Filter for verified domains and sort by Id
             $domains = $domainResponse.value | Where-Object { $_.isVerified -eq $true } | Sort-Object id
@@ -3023,7 +2993,7 @@ function Test-EntraUserIsDisabled {
     )
     try {
         $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=displayName eq '$UserToCheck' or userPrincipalName eq '$UserToCheck'&`$select=accountEnabled"
-        $userResult = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+        $userResult = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
         if ($userResult.value.Count -eq 1) {
             return -not $userResult.value[0].accountEnabled
         }
@@ -3047,7 +3017,7 @@ function Get-EntraUserCopiedAttributes {
         # Build Graph API query with proper version
         $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=displayName eq '$UserToCopy' or userPrincipalName eq '$UserToCopy'&`$select=id,userPrincipalName,displayName,companyName,officeLocation,jobTitle,department,faxNumber,streetAddress,city,state,postalCode,country"
 
-        $templateUserGraph = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+        $templateUserGraph = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
         # Check for null or multiple users
         if ($null -eq $templateUserGraph.value -or $templateUserGraph.value.Count -eq 0) {
@@ -3065,7 +3035,7 @@ function Get-EntraUserCopiedAttributes {
         $managerDisplayName = $null
         try {
             $managerQuery = "https://graph.microsoft.com/v1.0/users/$userId/manager"
-            $manager = Invoke-MgGraphRequest -Method GET -Uri $managerQuery
+            $manager = Invoke-RestMethod -Method GET -Uri $managerQuery -Headers $script:GraphHeaders
             $managerDisplayName = $manager.displayName
         } catch {
             Write-StatusMessage -Message "Could not retrieve manager for user $($UserToCopy): $_" -Type WARN
@@ -3185,7 +3155,7 @@ function New-UserProperties {
         # Check Microsoft 365 for duplicates
         try {
             $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
-            $mailbox = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+            $mailbox = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
             if ($mailbox.value.Count -gt 0) {
                 Write-StatusMessage -Message "Email address $userPrincipalName (or similar) already exists for mailbox: $($mailbox.value[0].userPrincipalName)" -Type WARN
@@ -3201,7 +3171,7 @@ function New-UserProperties {
 
                     # Verify the new email is unique
                     $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
-                    $checkMailbox = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+                    $checkMailbox = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
                     if ($checkMailbox.value.Count -gt 0) {
                         Write-StatusMessage -Message "New email address $userPrincipalName is also in use by: $($checkMailbox.value[0].displayName)" -Type ERROR
@@ -3405,9 +3375,8 @@ function New-UserStandard {
         }
 
         if ($PSCmdlet.ShouldProcess($NewUser.DisplayName, "Create user in Microsoft Graph")) {
-            $newUser = Invoke-MgGraphRequest -Method POST -Uri "https://graph.microsoft.com/v1.0/users" -Body ($newUserBody | ConvertTo-Json -Depth 10)
+            $null = Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users" -Headers $script:GraphHeaders -Body ($newUserBody | ConvertTo-Json -Depth 10) -ContentType "application/json"
             Write-StatusMessage -Message "Successfully created user in Microsoft Graph: $($NewUser.DisplayName)" -Type OK
-            #return $newUser
         }
 
     } catch {
@@ -3545,7 +3514,7 @@ function Set-UserOptionalFields {
             $user = $null
 
             for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
-                $user = Invoke-MgGraphRequest -Method GET -Uri $userQuery
+                $user = Invoke-RestMethod -Method GET -Uri $userQuery -Headers $script:GraphHeaders
                 if ($user.value.Count -gt 0) { break }
 
                 if ($attempt -lt $maxRetries) {
@@ -3560,7 +3529,7 @@ function Set-UserOptionalFields {
             }
 
             $userId = $user.value[0].id
-            Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$userId" -Body ($updateBody | ConvertTo-Json -Depth 10)
+            Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$userId" -Headers $script:GraphHeaders -Body ($updateBody | ConvertTo-Json -Depth 10) -ContentType "application/json"
         }
 
 
@@ -3577,25 +3546,22 @@ function Set-UserManager {
         [string]$Identity,
 
         [Parameter(Mandatory)]
-        [string]$ManagerInput,
-
-        [Parameter()]
-        [bool]$CloudOnly = $false
+        [string]$ManagerInput
     )
 
     try {
-        Write-StatusMessage -Message "Setting manager for user: $Identity (Mode: $(if ($CloudOnly) { 'Cloud-Only' } else { 'AD + Cloud' }))" -Type INFO
+        Write-StatusMessage -Message "Setting manager for user: $Identity" -Type INFO
 
         # Microsoft 365 manager setting
         $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=displayName eq '$ManagerInput' or userPrincipalName eq '$ManagerInput'"
-        $manager = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+        $manager = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
         if ($manager.value.Count -gt 0) {
             $managerId = $manager.value[0].id
 
             # Get the user's ID
             $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$Identity'"
-            $user = Invoke-MgGraphRequest -Method GET -Uri $graphQuery
+            $user = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
             if ($user.value.Count -gt 0) {
                 $userId = $user.value[0].id
@@ -3605,7 +3571,7 @@ function Set-UserManager {
                     "@odata.id" = "https://graph.microsoft.com/v1.0/users/$managerId"
                 }
 
-                Invoke-MgGraphRequest -Method PUT -Uri "https://graph.microsoft.com/v1.0/users/$userId/manager/`$ref" -Body ($updateBody | ConvertTo-Json)
+                Invoke-RestMethod -Method PUT -Uri "https://graph.microsoft.com/v1.0/users/$userId/manager/`$ref" -Headers $script:GraphHeaders -Body ($updateBody | ConvertTo-Json) -ContentType "application/json"
                 Write-StatusMessage -Message "Successfully set manager for user: $Identity" -Type OK
             } else {
                 Write-StatusMessage -Message "User '$Identity' not found in Microsoft Graph." -Type WARN
@@ -3676,13 +3642,13 @@ function Set-UserLicenses {
                     } | ConvertTo-Json -Depth 3
 
                     $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense"
-                    $response = Invoke-MgGraphRequest -Method POST -Uri $uri -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                    $response = Invoke-RestMethod -Method POST -Uri $uri -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
 
                     # Wait a moment for the license to be processed
                     Start-Sleep -Seconds 2
 
                     # Verify license assignment
-                    $getSku = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/licenseDetails" -ErrorAction Stop
+                    $getSku = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/licenseDetails" -Headers $script:GraphHeaders -ErrorAction Stop
 
                     if ($getSku.value.skuId -contains $lic.SkuId) {
                         $licenseAssigned = $true
@@ -3797,7 +3763,9 @@ function Get-PaginatedGraphResponse {
                     $pageCount++
                     Write-StatusMessage -Message "Fetching page $pageCount..." -Type INFO
 
-                    $response = Invoke-MgGraphRequest -Uri $nextLink -Method $Method -Body $Body -ContentType $ContentType -ErrorAction Stop
+                    $irmParams = @{ Uri = $nextLink; Method = $Method; Headers = $script:GraphHeaders; ErrorAction = 'Stop' }
+                    if ($Body) { $irmParams.Body = $Body; $irmParams.ContentType = $ContentType }
+                    $response = Invoke-RestMethod @irmParams
                     $success = $true
 
                     # Handle the response based on its structure
@@ -3863,7 +3831,7 @@ function Get-CopyUserGroups {
 
         do {
             try {
-                $userResponse = Invoke-MgGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+                $userResponse = Invoke-RestMethod -Method GET -Uri $uri -Headers $script:GraphHeaders -ErrorAction Stop
                 $success = $true
             } catch {
                 $retryCount++
@@ -4040,7 +4008,7 @@ function Add-UserToGroups {
                         "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$userId"
                     } | ConvertTo-Json
 
-                    Invoke-MgGraphRequest -Uri $uri -Method POST -Body $body -ContentType "application/json" -ErrorAction Stop
+                    Invoke-RestMethod -Uri $uri -Method POST -Headers $script:GraphHeaders -Body $body -ContentType "application/json" -ErrorAction Stop
                     $success = $true
                     $successCount++
                     Write-StatusMessage -Message "Successfully added user to Graph group: $($group.DisplayName)" -Type OK
@@ -4144,7 +4112,7 @@ function Add-UserToRequiredGroups {
     )
 
     # Fetch current memberships once
-    $response = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.id)/memberOf" -ErrorAction Stop
+    $response = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($User.id)/memberOf" -Headers $script:GraphHeaders -ErrorAction Stop
     $currentGroups = $response.value
 
     foreach ($groupIdentifier in $Groups) {
@@ -4156,20 +4124,20 @@ function Add-UserToRequiredGroups {
         }
 
         # Look up the group to get its ID
-        $groupLookup = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$filter" -ErrorAction Stop
+        $groupLookup = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$filter" -Headers $script:GraphHeaders -ErrorAction Stop
         $group = $groupLookup.value | Select-Object -First 1
 
         if ($null -eq $group) {
-            Write-Warning "Group '$groupIdentifier' not found in directory. Skipping."
+            Write-StatusMessage -Message "Group '$groupIdentifier' not found in directory. Skipping." -Type WARN
             continue
         }
 
         # Check membership by ID
         $isMember = $currentGroups | Where-Object { $_.id -eq $group.id }
         if ($null -eq $isMember) {
-            Write-Host "Adding user $($User.DisplayName) to $($group.displayName) group."
+            Write-StatusMessage -Message "Adding user $($User.DisplayName) to $($group.displayName) group." -Type INFO
             $groupAddUri = "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref"
-            Invoke-MgGraphRequest -Method POST -Uri $groupAddUri -Body @{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($User.id)" } | Out-Null
+            Invoke-RestMethod -Method POST -Uri $groupAddUri -Headers $script:GraphHeaders -Body (@{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($User.id)" } | ConvertTo-Json) -ContentType "application/json" | Out-Null
         }
     }
 }
@@ -4479,18 +4447,9 @@ try {
         Exit-Script -Message "Failed to load configuration" -ExitCode ConfigError
     }
 
-    # Get connection parameters from config
-    $Organization = $config.ExchangeOnline.Organization
-    $ExOAppId = $config.ExchangeOnline.AppId
-    $ExOCertSubject = $Config.ExchangeOnline.CertificateSubject
-    $GraphAppId = $config.Graph.AppId
-    $tenantID = $config.Graph.TenantId
-    $GraphCertSubject = $Config.Graph.CertificateSubject
-    $PnPAppId = $config.PnPSharePoint.AppId
-    $PnPUrl = $config.PnPSharePoint.Url
-    $PnPCertSubject = $Config.PnPSharePoint.CertificateSubject
-
-    Connect-ServiceEndpoints -ExchangeOnline -Graph
+    # Connect
+    $script:GraphHeaders = Get-GraphToken -TenantId $($config.Graph.TenantId) -ClientId $($config.Graph.AppId) -ClientCert (Get-ServiceCert $($Config.Graph.CertificateSubject))
+    Connect-ExchangeOnline -AppId $($config.ExchangeOnline.AppId) -Organization $($config.ExchangeOnline.Organization) -CertificateThumbprint (Get-ServiceCert $($Config.ExchangeOnline.CertificateSubject)).Thumbprint -ShowBanner:$false
 
     # Step: User Input
     Write-ProgressStep -StepName 'User Input'
@@ -4603,6 +4562,9 @@ try {
 
     New-UserStandard @NewUserParams
 
+    Write-StatusMessage -Message "Waiting for Entra replication and Graph availability of new user..." -Type INFO
+    Start-Sleep -Seconds 10
+
     # Set optional fields (from template + form)
     $setUserParams = @{
         UserInput = $userInput
@@ -4632,12 +4594,17 @@ try {
         Write-StatusMessage -Message 'No manager user object selected. Skipping...' -Type WARN
     }
 
+    # Sleep to allow Entra replication and Graph availability of new user object before proceeding with downstream operations
+    Write-StatusMessage -Message "Waiting for Entra replication and Graph availability of new user..." -Type INFO
+    Start-Sleep -Seconds 20
+
     # Get Created User object from Graph to retrieve properties for downstream operations (like group assignment and Sapience provisioning)
     $properties = 'Id', 'Mail', 'DisplayName', 'GivenName', 'Surname',
     'JobTitle', 'Department', 'OfficeLocation', 'City', 'EmployeeId'
 
     $uri = "https://graph.microsoft.com/v1.0/users/$($newUserProperties.Email)?`$select=$($properties -join ',')"
-    $newUserResponse = Invoke-MgGraphRequest -Method GET -Uri $uri
+
+    $newUserResponse = Invoke-RestMethod -Method GET -Uri $uri -Headers $script:GraphHeaders
 
     $MgUser = @{}
     $properties | ForEach-Object { $MgUser[$_] = $newUserResponse.$_ }
@@ -4648,7 +4615,7 @@ try {
 
     # Get Manager of new user (for summary and Sapience provisioning)
     try {
-        $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.Id)/manager"
+        $managerResponse = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.Id)/manager" -Headers $script:GraphHeaders
     } catch {
         $managerResponse = $null
         if ($_.Exception.Response.StatusCode -ne 404) {
@@ -4662,7 +4629,7 @@ try {
 
         if ($searchManager) {
             try {
-                $managerResponse = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$searchManager"
+                $managerResponse = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$searchManager" -Headers $script:GraphHeaders
             } catch {
                 Write-StatusMessage -Message "Failed to find manager '$searchManager': $($_.Exception.Message)" -Type WARN
             }
@@ -4673,14 +4640,16 @@ try {
     Write-ProgressStep -StepName 'License Assignment'
     Write-StatusMessage -Message "Setting Usage Location for new user..." -Type INFO
 
+    # Usage location is required for license assignment to succeed. Set to US by default if not provided in form.
     $updateUsageLocationBody = @{
         usageLocation = if ($userInput.usageLocation) { $userInput.usageLocation } else { 'US' }
     }
 
-    Invoke-MgGraphRequest -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.id)" -Body ($updateUsageLocationBody | ConvertTo-Json)
+    Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.id)" -Headers $script:GraphHeaders -Body ($updateUsageLocationBody | ConvertTo-Json) -ContentType "application/json"
 
     # Sleep to allow usageLocation to propagate
-    Start-Sleep -Seconds 5
+    Write-StatusMessage -Message "Waiting for Usage Location to propagate..." -Type INFO
+    Start-Sleep -Seconds 10
 
     # Required license - will exit on failure
     Set-UserLicenses -User $MgUser -License $userInput.requiredLicense -Required
@@ -4693,6 +4662,7 @@ try {
     # Step: Wait for Mailbox
     Write-ProgressStep -StepName 'Mailbox Provisioning'
     Write-StatusMessage -Message "Waiting for the mailbox to provision in 365..." -Type INFO
+
     # Wait for mailbox to be created
     if (-not (Wait-ForMailbox -Email $newUserProperties.Email)) {
         Write-StatusMessage -Message "Mailbox not yet provisioned. Some group operations may fail. Please verify group assignments script completes." -Type WARN
@@ -4891,38 +4861,65 @@ try {
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
 
+    # Email for Salesforce
+    if ($MgUser.department -in @('Sales')) {
+        Write-StatusMessage -Message "User is in Sales department. Sending notification for Salesforce provisioning..." -Type INFO
+        try {
+
+            $emailSubject = "Salesforce – New User"
+            $emailContent = @"
+Please set up the following user with an Salesforce account.<br><br>
+Display Name: $($MgUser.displayName)<br>
+Mail: $($MgUser.Mail)<br>
+Job Title: $($MgUser.jobTitle)<br>
+Manager Email: $($managerResponse.mail)<br>
+Manager Display Name: $($managerResponse.displayName)<br>
+
+<p>
+The user start date is $($userInput.employeeHireDate).<br>
+"@
+
+            Send-GraphMailMessage -FromAddress $($config.Email.NotificationFrom) -ToAddress $($config.Email.NotificationForSalesForceRequests) -CcAddress $($config.Email.NotificationCcAddress) -Subject $emailSubject -Content $emailContent
+            Write-StatusMessage
+        } catch {
+            Write-StatusMessage -Message "Failed to send Salesforce request email: $($_.Exception.Message)" -Type ERROR
+        }
+    }
+
     # Create ticket for 8x8 provisioning on the Telcom Board
-    try {
+    if ($userInput.Send8x8ProvisioningTicket -eq $true) {
+        Write-StatusMessage -Message "Creating ticket for 8x8 provisioning..." -Type INFO
+        try {
 
-        function Get-ConnectWiseManageToken {
-            param (
-                [string]$CompanyId,
-                [string]$PublicKey,
-                [string]$PrivateKey,
-                [string]$clientId
-            )
+            function Get-ConnectWiseManageToken {
+                param (
+                    [string]$CompanyId,
+                    [string]$PublicKey,
+                    [string]$PrivateKey,
+                    [string]$clientId
+                )
 
-            # Encode companyId+publicKey:privateKey in Base64
-            $pair = "$CompanyId+$PublicKey`:$PrivateKey"
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
-            $base64 = [Convert]::ToBase64String($bytes)
+                # Encode companyId+publicKey:privateKey in Base64
+                $pair = "$CompanyId+$PublicKey`:$PrivateKey"
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+                $base64 = [Convert]::ToBase64String($bytes)
 
-            # Create headers with Basic authentication
-            $headers = @{
-                "Authorization" = "Basic $base64"
-                "Content-Type"  = "application/json"
-                "ClientId"      = $clientId
+                # Create headers with Basic authentication
+                $headers = @{
+                    "Authorization" = "Basic $base64"
+                    "Content-Type"  = "application/json"
+                    "ClientId"      = $clientId
+                }
+
+                return $headers
             }
 
-            return $headers
-        }
+            $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
 
-        $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
+            $emailSubject = "8x8 – New User"
+            $callCenter = if ($MgUser.officeLocation -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
 
-        $emailSubject = "8x8 – New User"
-        $callCenter = if ($MgUser.officeLocation -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
-
-        $emailContent = @"
+            $emailContent = @"
 Please set up the following user with an 8x8 account.
 
 Display Name: $($MgUser.displayName)
@@ -4940,60 +4937,37 @@ Please do not send the welcome email with the account setup.
 The user start date is $($userInput.employeeHireDate), so please send the welcome email the day prior to their start.
 "@
 
-        $body = @{
-            summary            = $emailSubject
-            initialDescription = $emailContent
-            company            = @{
-                identifier = 'CompassMSP'
+            $body = @{
+                summary            = $emailSubject
+                initialDescription = $emailContent
+                company            = @{
+                    identifier = 'CompassMSP'
+                }
+                board              = @{
+                    name = "Telecom Managed Services"
+                }
+                status             = @{
+                    name = "+New"
+                }
+            } | ConvertTo-Json -Depth 10
+
+            $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
+
+            $8x8TicketResults = Invoke-RestMethod `
+                -Method Post `
+                -Uri "$baseUrl/service/tickets" `
+                -Headers $headers `
+                -Body $body `
+                -ContentType "application/json"
+
+            if ($8x8TicketResults) {
+                Write-StatusMessage -Message "Successfully created 8x8 provisioning ticket: $($8x8TicketResults.id)" -Type OK
+            } else {
+                Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: No response from API" -Type ERROR
             }
-            board              = @{
-                name = "Telecom Managed Services"
-            }
-            status             = @{
-                name = "+New"
-            }
-        } | ConvertTo-Json -Depth 10
-
-        $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
-
-        $8x8TicketResults = Invoke-RestMethod `
-            -Method Post `
-            -Uri "$baseUrl/service/tickets" `
-            -Headers $headers `
-            -Body $body `
-            -ContentType "application/json"
-
-        if ($8x8TicketResults) {
-            Write-StatusMessage -Message "Successfully created 8x8 provisioning ticket: $($8x8TicketResults.id)" -Type OK
-        } else {
-            Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: No response from API" -Type ERROR
-        }
-
-    } catch {
-        Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: $($_.Exception.Message)" -Type ERROR
-    }
-
-    # Email for Salesforce
-    if ($MgUser.department -in @('Sales')) {
-        try {
-
-            $emailSubject = "Salesforce – New User"
-            $emailContent = @"
-Please set up the following user with an Salesforce account.<br><br>
-Display Name: $($MgUser.displayName)<br>
-Mail: $($MgUser.Mail)<br>
-Job Title: $($MgUser.jobTitle)<br>
-Manager Email: $($managerResponse.mail)<br>
-Manager Display Name: $($managerResponse.displayName)<br>
-
-<p>
-The user start date is $($userInput.employeeHireDate).<br>
-"@
-
-            Send-GraphMailMessage -FromAddress $($config.Email.NotificationFrom) -ToAddress $($config.Email.NotificationForSalesForceRequests) -CcAddress $($config.Email.NotificationCcAddress) -Subject $emailSubject -Content $emailContent
 
         } catch {
-            Write-StatusMessage -Message "Failed to send Salesforce request email: $($_.Exception.Message)" -Type ERROR
+            Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: $($_.Exception.Message)" -Type ERROR
         }
     }
 
@@ -5009,7 +4983,9 @@ The user start date is $($userInput.employeeHireDate).<br>
     Write-ProgressStep -StepName 'Cleanup and Summary'
     Write-StatusMessage -Message "Disconnecting from Exchange Online and Graph." -Type INFO
 
-    Connect-ServiceEndpoints -Disconnect
+    # Disconnect
+    $script:GraphHeaders = $null
+    Disconnect-ExchangeOnline -Confirm:$false
 
     Write-StatusMessage -Message "Building final summary..." -Type INFO
 
@@ -5036,10 +5012,19 @@ The user start date is $($userInput.employeeHireDate).<br>
 
 } catch {
     Write-StatusMessage -Message "Script failed: $($_.Exception.Message)" -Type ERROR
-    Write-StatusMessage -Message "Stack Trace: $($_.ScriptStackTrace)" -Type ERROR
+    Write-StatusMessage -Message "At: $($_.InvocationInfo.PositionMessage)" -Type ERROR
+    if ($_.Exception.InnerException) {
+        Write-StatusMessage -Message "Inner exception: $($_.Exception.InnerException.Message)" -Type ERROR
+    }
+    Write-StatusMessage -Message "Stack Trace:`n$($_.ScriptStackTrace)" -Type ERROR
 
     # Clear the progress bar
     Write-Progress -Activity "New User Creation" -Status "Failed" -PercentComplete 100
 
-    Exit-Script -Message "Script failed during execution" -ExitCode GeneralError
+    if ($script:TestMode) {
+        Write-StatusMessage -Message "Test Mode: Unhandled exception. Entering nested prompt — all script variables accessible. Type 'exit' to resume." -Type WARN
+        $host.EnterNestedPrompt()
+    } else {
+        Exit-Script -Message "Script failed during execution" -ExitCode GeneralError
+    }
 }
