@@ -800,8 +800,7 @@ Function Install-Automate {
 ########################
 Set-Alias -Name LTI -Value Install-Automate -Description 'Install Automate Agent'
 ########################
-Function Push-Automate
-{
+Function Push-Automate {
 <#
 .SYNOPSIS
     This PowerShell Function is for pushing Automate Deployments
@@ -1275,8 +1274,7 @@ END
 ########################
 Set-Alias -Name LTP -Value Push-Automate -Description 'Push Automate Agent to Remote Computers'
 ########################
-Function Get-ADComputerNames
-{
+Function Get-ADComputerNames {
 Param(
     [Parameter()]
     [AllowNull()]
@@ -1322,8 +1320,7 @@ Write-Verbose "Invoke Error:   $InvokeDCError"
 $Computers
 } # End Get-ADComputerNames
 ########################
-Function Scan-Network
-{
+Function Scan-Network {
   [CmdletBinding(SupportsShouldProcess=$True)]
   Param (
   [Parameter()]
