@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-    These PowerShell Functions will Install, Push, Uninstall, and Confirm ConnectWise Automate installations. 
-        
+    These PowerShell Functions will Install, Push, Uninstall, and Confirm ConnectWise Automate installations.
+
 .DESCRIPTION
     Functions Included:
         Confirm-Automate
@@ -10,22 +10,22 @@
         Push-Automate
         Show-LTErrors
         Get-ADComputerNames
-					  
-					  
+
+
         Scan-Network
-        
+
         New-IPRange
         http://powershell.com/cs/media/p/9437.aspx
-        
+
         Invoke-Ping
         https://gallery.technet.microsoft.com/scriptcenter/Invoke-Ping-Test-in-b553242a
-        
+
         Get-IPv4Subnet
         https://github.com/briansworth/GetIPv4Address/blob/master/GetIPv4Subnet.psm1
 
 .LINK
     https://github.com/Braingears/PowerShell
-    
+
 .NOTES
     File Name      : Automate-Module.psm1
     Author         : Chuck Fowler (Chuck@Braingears.com)
@@ -33,42 +33,42 @@
     Creation Date  : 11/10/2019
     Purpose/Change : Initial script development
     Prerequisite   : PowerShell V2
-    
+
     Version        : 1.1
     Date           : 11/15/2019
     Changes        : Add $Automate.InstFolder and $Automate.InstRegistry and check for both to be consdered for $Automate.Installed
-                     It was found that the Automate Uninstaller EXE is leaving behind the LabTech registry keys and it was not being detected properly. 
-    
-    
+                     It was found that the Automate Uninstaller EXE is leaving behind the LabTech registry keys and it was not being detected properly.
+
+
 .EXAMPLE
     Confirm-Automate [-Silent]
 
     Confirm-Automate [-Show]
-    
+
 .EXAMPLE
     Uninstall-Automate [-Silent]
-    
+
 .EXAMPLE
     Install-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' [-Show]
-    
+
 .Example
     To push a single Automate Agent:
     Push-Automate -Computer 'ComputerName' -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
-    
+
     For multiple computers, use a | "pipe" into Push-Automate function:
     $Computers | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
-    - or - 
-     Scan-Network | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'   
+    - or -
+     Scan-Network | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
     - or -
     Get-ADComputerNames | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
-    - or - 
+    - or -
     "Computer1", "Computer2" | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
 
 #>
 Function Confirm-Automate {
 <#
 .SYNOPSIS
-    This PowerShell Function will confirm if Automate is installed, services running, and checking-in. 
+    This PowerShell Function will confirm if Automate is installed, services running, and checking-in.
 
 .DESCRIPTION
     This function will automatically start the Automate services (if stopped). It will collect Automate information from the registry.
@@ -84,28 +84,28 @@ Function Confirm-Automate {
 
 .LINK
     https://github.com/Braingears/PowerShell
-    
+
 .NOTES
     Version        : 1.0
     Author         : Chuck Fowler
     Creation Date  : 08/16/2019
     Purpose/Change : Initial script development
 
-    Version        : 1.1    
+    Version        : 1.1
     Date           : 11/15/2019
     Changes        : Add $Automate.InstFolder and $Automate.InstRegistry and check for both to be consdered for $Automate.Installed
-                     It was found that the Automate Uninstaller EXE is leaving behind the LabTech registry keys and it was not being detected properly. 
+                     It was found that the Automate Uninstaller EXE is leaving behind the LabTech registry keys and it was not being detected properly.
 
-    Version        : 1.2    
+    Version        : 1.2
     Date           : 04/02/2020
     Changes        : Add $Automate.Service -eq $null
-                     If the service still exists, the installation is failing with Exit Code 1638.                     
-                     
+                     If the service still exists, the installation is failing with Exit Code 1638.
+
 .EXAMPLE
     Confirm-Automate [-Silent]
 
     Confirm-Automate [-Show]
-    
+
     ServerAddress : https://yourserver.hostedrmm.com
     ComputerID    : 321
     ClientID      : 1
@@ -116,9 +116,9 @@ Function Confirm-Automate {
     LastHeartbeat : 29
     LastStatus    : 36
 
-    $Automate 
+    $Automate
     $Global:Automate
-    This output will be saved to $Automate as an object to be used in other functions. 
+    This output will be saved to $Automate as an object to be used in other functions.
 
 #>
  [CmdletBinding(SupportsShouldProcess=$True)]
@@ -140,7 +140,7 @@ Function Confirm-Automate {
         $Global:Automate | Add-Member -MemberType NoteProperty -Name LocationID -Value ((Get-ItemProperty "HKLM:\SOFTWARE\LabTech\Service").LocationID)
         $Global:Automate | Add-Member -MemberType NoteProperty -Name Version -Value ((Get-ItemProperty "HKLM:\SOFTWARE\LabTech\Service").Version)
         $Global:Automate | Add-Member -MemberType NoteProperty -Name InstFolder -Value (Test-Path "$($env:windir)\ltsvc")
-        $Global:Automate | Add-Member -MemberType NoteProperty -Name InstRegistry -Value $True      
+        $Global:Automate | Add-Member -MemberType NoteProperty -Name InstRegistry -Value $True
         $Global:Automate | Add-Member -MemberType NoteProperty -Name Installed -Value (Test-Path "$($env:windir)\ltsvc")
         $Global:Automate | Add-Member -MemberType NoteProperty -Name Service -Value ((Get-Service LTService).Status)
         $Global:Automate | Add-Member -MemberType NoteProperty -Name Online -Value $Online
@@ -157,7 +157,7 @@ Function Confirm-Automate {
             If (!$Silent) {
                 Write "Server Address checking-in to    $($Global:Automate.ServerAddress)"
                 Write "ComputerID:                      $($Global:Automate.ComputerID)"
-                Write "The Automate Agent Online        $($Global:Automate.Online)"        
+                Write "The Automate Agent Online        $($Global:Automate.Online)"
                 Write "Last Successful Heartbeat        $($Global:Automate.LastHeartbeat) seconds"
                 Write "Last Successful Status Update    $($Global:Automate.LastStatus) seconds"
             } # End Not Silent
@@ -167,7 +167,7 @@ Function Confirm-Automate {
         $Global:Automate = New-Object -TypeName psobject
         $Global:Automate | Add-Member -MemberType NoteProperty -Name ComputerName -Value $env:ComputerName
         $Global:Automate | Add-Member -MemberType NoteProperty -Name InstFolder -Value (Test-Path "$($env:windir)\ltsvc")
-        $Global:Automate | Add-Member -MemberType NoteProperty -Name InstRegistry -Value $False      
+        $Global:Automate | Add-Member -MemberType NoteProperty -Name InstRegistry -Value $False
         $Global:Automate | Add-Member -MemberType NoteProperty -Name Installed -Value ((Test-Path "$($env:windir)\ltsvc") -and (Test-Path "HKLM:\SOFTWARE\LabTech\Service"))
         $Global:Automate | Add-Member -MemberType NoteProperty -Name Service -Value ((Get-Service ltservice ).status)
         $Global:Automate | Add-Member -MemberType NoteProperty -Name Online -Value $Online
@@ -181,17 +181,17 @@ Set-Alias -Name LTC -Value Confirm-Automate -Description 'Confirm if Automate is
 Function Uninstall-Automate {
 <#
 .SYNOPSIS
-    This PowerShell Function Uninstall Automate. 
+    This PowerShell Function Uninstall Automate.
 
 .DESCRIPTION
-    This function will download the Automate Uninstaller from Connectwise and completely remove the Automate / LabTech Agent. 
-    
+    This function will download the Automate Uninstaller from Connectwise and completely remove the Automate / LabTech Agent.
+
 .PARAMETER Silent
     This will hide all output
 
 .LINK
     https://github.com/Braingears/PowerShell
-    
+
 .NOTES
     Version        : 1.0
     Author         : Chuck Fowler
@@ -203,13 +203,13 @@ Function Uninstall-Automate {
     Date           : 11/15/2019
     Changes        : Add $Automate.InstFolder and $Automate.InstRegistry and check for both to be consdered for $Automate.Installed
                      It was found that the Automate Uninstaller EXE is leaving behind the LabTech registry keys and it was not being detected properly.
-                     If the LTSVC Folder or Registry keys are found after the uninstaller runs, the script now performs a manual gutting via PowerShell.  
-                     
-    Version        : 1.2    
+                     If the LTSVC Folder or Registry keys are found after the uninstaller runs, the script now performs a manual gutting via PowerShell.
+
+    Version        : 1.2
     Date           : 04/02/2020
     Changes        : Add $Automate.Service -eq $null
-                     If the service still exists, the installation is failing with Exit Code 1638. 
-                     
+                     If the service still exists, the installation is failing with Exit Code 1638.
+
 .EXAMPLE
     Uninstall-Automate [-Silent]
 
@@ -247,7 +247,7 @@ Confirm-Automate -Silent -Verbose:$Verbose
     $WebClient.DownloadFile($DownloadPath, $SoftwareFullPath)
     If (!$Silent) {Write-Host "Removing Existing Automate Agent..."}
     Write-Verbose "Closing Open Applications and Stopping Services"
-    Stop-Process -Name "ltsvcmon","lttray","ltsvc","ltclient" -Force 
+    Stop-Process -Name "ltsvcmon","lttray","ltsvc","ltclient" -Force
     Stop-Service ltservice,ltsvcmon -Force
     $UninstallExitCode = (Start-Process "cmd" -ArgumentList "/c $($SoftwareFullPath)" -NoNewWindow -Wait -PassThru).ExitCode
     If (!$Silent) {
@@ -277,8 +277,8 @@ Confirm-Automate -Silent -Verbose:$Verbose
             Write-Verbose "LTService Service not Stopped. Disabling LTService Service"
             Set-Service ltservice -StartupType Disabled
             Stop-Service ltservice,ltsvcmon -Force
-        }    
-        Stop-Process -Name "ltsvcmon","lttray","ltsvc","ltclient" -Force 
+        }
+        Stop-Process -Name "ltsvcmon","lttray","ltsvc","ltclient" -Force
         Write-Verbose "Uninstalling LabTechAD Package"
         $UninstallApps2 = foreach ($App in $UninstallApps) {Get-WmiObject -Class Win32_Product -ComputerName . | Where-Object -FilterScript {$_.Name -like $App} | Select-Object -ExpandProperty "Name"}
         $UninstallAppsFound = $UninstallApps2 | Select-Object -Unique
@@ -340,27 +340,27 @@ Function Install-Automate {
 
 .DESCRIPTION
     Install the Automate Agent.
-    
-    This function will qualify the if another Autoamte agent is already 
-    installed on the computer. if the existing agent belongs to dIfferent 
-    Automate server, it will automatically "Rip & Replace" the existing 
-    agent. This comparison is based on the server's FQDN. 
-    
-    This function will also verify if the existing Automate agent is 
-    checking-in. The Confirm-Automate Function will verify the Server 
-    address, LocationID, and Heartbeat/Check-in. If these entries are 
-    missing or not checking-in properly; this function will automatically 
-    attempt to restart the services, and then "Rip & Replace" the agent to 
-    remediate the agent. 
-    
-    $Automate 
+
+    This function will qualify the if another Autoamte agent is already
+    installed on the computer. if the existing agent belongs to dIfferent
+    Automate server, it will automatically "Rip & Replace" the existing
+    agent. This comparison is based on the server's FQDN.
+
+    This function will also verify if the existing Automate agent is
+    checking-in. The Confirm-Automate Function will verify the Server
+    address, LocationID, and Heartbeat/Check-in. If these entries are
+    missing or not checking-in properly; this function will automatically
+    attempt to restart the services, and then "Rip & Replace" the agent to
+    remediate the agent.
+
+    $Automate
     $Global:Automate
     The output will be saved to $Automate as an object to be used in other functions.
-    
+
     Example:
     Install-Automate -Server YOURSERVER.DOMAIN.COM -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Transcript
-    
-    
+
+
     Tested OS:      Windows XP (with .Net 3.5.1 and PowerShell installed)
                     Windows Vista
                     Windows 7
@@ -374,7 +374,7 @@ Function Install-Automate {
 
 .PARAMETER Server
     This is the URL to your Automate server.
-    
+
         Install-Automate -Server 'server.hostedrmm.com' -LocationID 2 -Token 'adb68881994ed93960346478303476f4'
 
 .PARAMETER LocationID
@@ -385,78 +385,78 @@ Function Install-Automate {
     Use Token to install the Automate Agent directly to the appropieate client's location / site.
     If parameter is not specified, it will automatically attempt to use direct unauthenticated downloads.
     This method in blocked after Automate v20.0.6.178 (Patch 6)
-    
+
 .PARAMETER Force
     This will force the Automate Uninstaller prior to installation.
     Essentually, this will be a fresh install and a fresh check-in to the Automate server.
-    
+
         Install-Automate -Server 'server.hostedrmm.com' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Force
 
 .PARAMETER Silent
     This will hide all output (except a failed installation when Exit Code -ne 0)
     The function will exit once the installer has completed.
-        
+
         Install-Automate -Server 'server.hostedrmm.com' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Silent
-    
+
 .PARAMETER Transcript
     This parameter will save the entire transcript and responsed to:
     $($env:windir)\Temp\AutomateLogon.txt
-        
+
         Install-Automate -Server 'server.hostedrmm.com' -LocationID 2 -Token 'adb68881994ed93960346478303476f4' -Transcript -Verbose
 
 .LINK
     https://github.com/Braingears/PowerShell
-    
+
 .NOTES
     Version        : 1.0
     Author         : Chuck Fowler
     Creation Date  : 08/2019
     Purpose/Change : Initial script development
-    
+
     Version        : 1.1
     Date           : 11/15/2019
     Changes        : Add $Automate.InstFolder and $Automate.InstRegistry and check for both to be consdered for $Automate.Installed
                      It was found that the Automate Uninstaller EXE is leaving behind the LabTech registry keys and it was not being detected properly.
                      If the LTSVC Folder or Registry keys are found after the uninstaller runs, the script now performs a manual gutting via PowerShell.
-    
+
     Version        : 1.2
     Date           : 02/17/2020
     Changes        : Add MSIEXEC Log Files to C:\Windows\Temp\Automate_Agent_(Date).log
 
     Version        : 1.3
     Date           : 05/26/2020
-    Changes        : Look for and replace "Enter the server address here" with the actual Automate Server address. 
+    Changes        : Look for and replace "Enter the server address here" with the actual Automate Server address.
 
     Version        : 1.4
     Date           : 06/29/2020
-    Changes        : Added Token Parameter for Deployment 
+    Changes        : Added Token Parameter for Deployment
 
     Version        : 1.5
     Date           : 06/09/2021
     Changes        : Attempt to Restart the LTService prior to R&R
-                     It was found that the Rip & Replace was being too aggressive without at least trying to restart the LTService 
+                     It was found that the Rip & Replace was being too aggressive without at least trying to restart the LTService
                      and waiting for it to check-in.
 
     Version        : 1.6
     Date           : 02/02/2022
     Changes        : Add -SystemPassword Parameter
                      There are known issues with the MSI's Digital Certificate when the web portal embeds the Server, LocationID, and System Password metadata.
-                     When you use the -SystemPassword Parameter, a different MSI URL is used (prior to the metadata being embeded into the MSI), and the 
-                     Server Address, LocationID, and System Password is assigned as paramters in the MSIExec installation string. 
+                     When you use the -SystemPassword Parameter, a different MSI URL is used (prior to the metadata being embeded into the MSI), and the
+                     Server Address, LocationID, and System Password is assigned as paramters in the MSIExec installation string.
 
     Version        : 1.7
     Date           : 08/02/2024
     Changes        : Change -Token download from MSI to Zip due to changes in Automate Patch v24.7
                      The agent download no longer embeds the Server, Location, and Password in the MSI due to breaking the MSI's Digital Certificate. The default
-                     download is now ZIP which has to be extracted to MSI and MST. 
+                     download is now ZIP which has to be extracted to MSI and MST.
 
 .EXAMPLE
     Install-Automate -Server 'automate.domain.com' -LocationID 42 -Token 'adb68881994ed93960346478303476f4'
-    This will install the LabTech agent using the provided Server URL, LocationID, and required Token. 
-    
+    This will install the LabTech agent using the provided Server URL, LocationID, and required Token.
+
 .EXAMPLE
     Install-Automate -Server 'automate.domain.com' -LocationID 42 -SystemPassword 'ABCDEF12345678'
-    This will install the LabTech agent using the provided Server URL, LocationID, and required System Password. 
+    This will install the LabTech agent using the provided Server URL, LocationID, and required System Password.
 
 
 #>
@@ -520,7 +520,7 @@ Function Install-Automate {
         Write-Host ""
         $AutomateURL = "https://$($Server)"
     }
-    
+
     Try {
         Write-Verbose "Enabling downloads to use SSL/TLS v1.2"
         [Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072)
@@ -542,19 +542,19 @@ Function Install-Automate {
         Write-Verbose "Could not download from $($AutomateURL). Switching to http://$($Server)"
         $AutomateURL = "http://$($Server)"
     }
-    
-						 
-								
-																				
-														  
-								 
-																					   
-														  
-			
-														   
-																																																				
-																
-	 
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     Confirm-Automate -Silent -Verbose:$Verbose
     If (($Global:Automate.Service -eq 'Stopped') -and ($Global:Automate.ServerAddress -like "*$Server*") -and !($Force)) {
@@ -566,7 +566,7 @@ Function Install-Automate {
         }
         Catch {
             Write-Verbose "LTService service Restart Failed"
-        }            
+        }
         If ((Get-Service LTService).Status -eq "Running") {
 
             Write-Verbose "LTService was successfully Restarted"
@@ -578,15 +578,15 @@ Function Install-Automate {
                 Start-Sleep 6
                 Confirm-Automate -Silent -Verbose:$Verbose
                 If ($Global:Automate.Online) {
-                    If (!$Silent) {Write-Host "LTService service was successfully Restarted"}                    
+                    If (!$Silent) {Write-Host "LTService service was successfully Restarted"}
                     Break
                 }
             }# End While
         } Else {
             Write-Verbose "LTService service did not return to a running status"
         }
-    } # If LTService is Stopped     
-    
+    } # If LTService is Stopped
+
     Write-Verbose "Checking if server address matches and if Automate Agent is Online"
     Write-Verbose (($Global:Automate.ServerAddress -like "*$Server*") -and $Global:Automate.Online -and !$Force)
 
@@ -603,8 +603,8 @@ Function Install-Automate {
             Write-Host "The Existing Automate Server Does Not Match The Target Automate Server." -ForegroundColor Red
             Write-Host "Current Automate Server: $($Global:Automate.ServerAddress)" -ForegroundColor Red
             Write-Host "New Automate Server:     $($AutomateURL)" -ForegroundColor Green
-        } # If Different Server 
-        
+        } # If Different Server
+
         Write-Verbose "Downloading Automate Agent from $($AutomateURL)"
             If (!(Test-Path $SoftwarePath)) {New-Item -Path $SoftwarePath -ItemType Directory | Out-Null}
             Set-Location $SoftwarePath
@@ -626,7 +626,7 @@ Function Install-Automate {
             Write-Host "The Automate Server was inaccessible. Failed to Download:" -ForegroundColor Red
             Write-Host $DownloadPath -ForegroundColor Red
             Write-Host "Help: Get-Help Install-Automate -Full"
-            Write-Host "Exiting Installation..."    
+            Write-Host "Exiting Installation..."
             Break
         }
     } ElseIf ($Token -ne $Null) {
@@ -647,10 +647,10 @@ Function Install-Automate {
             Write-Host "The Automate Server was inaccessible or the Token Parameters were not entered or valid. Failed to Download:" -ForegroundColor Red
             Write-Host $DownloadPath -ForegroundColor Red
             Write-Host "Help: Get-Help Install-Automate -Full"
-            Write-Host "Exiting Installation..."    
+            Write-Host "Exiting Installation..."
             Break
         }
-        
+
         Try {
             Add-Type -AssemblyName System.IO.Compression.FileSystem
             [System.IO.Compression.ZipFile]::OpenRead($DownloadFullPath).Entries.FullName | Remove-Item -Force -ErrorAction SilentlyContinue | Out-Null
@@ -678,11 +678,11 @@ Function Install-Automate {
             Write-Host "The Automate Server was inaccessible. Failed to Download:" -ForegroundColor Red
             Write-Host $DownloadPath -ForegroundColor Red
             Write-Host "Help: Get-Help Install-Automate -Full"
-            Write-Host "Exiting Installation..."    
+            Write-Host "Exiting Installation..."
             Break
         }
     }
-            
+
         Write-Verbose "Removing Existing Automate Agent"
         Uninstall-Automate -Force:$Force -Silent:$Silent -Verbose:$Verbose
         If (!$Silent) {Write-Host "Installing Automate Agent to $AutomateURL"}
@@ -711,23 +711,23 @@ Function Install-Automate {
             } Else {
                 $InstallExitCode = (Start-Process 'msiexec.exe' -ArgumentList "/i $($SoftwareFullPath) TRANSFORMS=$($SoftwarePath)\Agent_Install.mst /quiet /norestart LOCATION=$($LocationID) SERVERADDRESS=$($AutomateURL) /L*V $($LogFullPath)" -NoNewWindow -Wait -PassThru).ExitCode
             }
-														   
-										 
-																									
-					
+
+
+
+
             Write-Host "Automate Installer Exit Code: $InstallExitCode" -ForegroundColor Yellow
-																					   
-																								
-								 
-																							   
-															 
-																		  
-											
-																																																																		 
-						
-																																																																										  
-				 
-																								   
+
+
+
+
+
+
+
+
+
+
+
+
             Write-Host "Automate Installer Logs: $LogFullPath" -ForegroundColor Yellow
         }# End Else
 
@@ -745,7 +745,7 @@ Function Install-Automate {
                     Get-Service LTService | Where {$_.Status -eq "Running"} | Restart-Service -Force
                     Confirm-Automate -Silent -Verbose:$Verbose
                 }
-                
+
                 $FailedSignup = Select-String -Path "$env:windir\LTSvc\LTErrors.txt" -Pattern "Failed Signup"
                 If ($FailedSignup -ne $Null) {
                     If (!$Silent) {
@@ -755,7 +755,7 @@ Function Install-Automate {
                     }
                     Break
                 }
-                
+
                 If ($Global:Automate.Online -and $Global:Automate.ComputerID -ne $Null) {
                     If (!$Silent) {
                         Write-Host "The Automate Agent Has Been Successfully Installed" -ForegroundColor Green
@@ -819,39 +819,39 @@ Function Push-Automate
 
 .DESCRIPTION
     Install the Automate Agent.
-    
-    This function will qualify the if another Autoamte agent is already 
-    installed on the computer. If the existing agent belongs to different 
-    Automate server, it will automatically "Rip & Replace" the existing 
-    agent. This comparison is based on the server's FQDN. 
-    
-    This function will also verify if the existing Automate agent is 
-    checking-in. The Confirm-Automate Function will verify the Server 
-    address, LocationID, and Heartbeat/Check-in. If these entries are 
-    missing or not checking-in properly; this function will automatically 
-    attempt to restart the services, and then "Rip & Replace" the agent to 
-    remediate the agent. 
-    
-    $AutoResults 
+
+    This function will qualify the if another Autoamte agent is already
+    installed on the computer. If the existing agent belongs to different
+    Automate server, it will automatically "Rip & Replace" the existing
+    agent. This comparison is based on the server's FQDN.
+
+    This function will also verify if the existing Automate agent is
+    checking-in. The Confirm-Automate Function will verify the Server
+    address, LocationID, and Heartbeat/Check-in. If these entries are
+    missing or not checking-in properly; this function will automatically
+    attempt to restart the services, and then "Rip & Replace" the agent to
+    remediate the agent.
+
+    $AutoResults
     $Global:AutoResults
     The output will be saved to $AutoResults as an object to be used in other functions.
-    
+
     Example:
     To push a single Automate Agent:
     Push-Automate -Computer 'Computername' -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token adb68881994ed93960346478303476f4 -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
-    
+
     For multiple computers, use a | "pipe" into Push-Automate function:
     $Computers | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token adb68881994ed93960346478303476f4 -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
-    - or - 
+    - or -
     Get-ADComputerNames | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token adb68881994ed93960346478303476f4 -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
-    - or - 
+    - or -
     "Computer1", "Computer2" | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token adb68881994ed93960346478303476f4 -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd'
-    
+
     When pushing to multiple computers, use the actual computer names. If you use IP Address, it will fail when using WINRM Protocols (and use WMI/RCP instead).
-                    
+
 .PARAMETER Server
     This is the URL to your Automate server.
-    
+
         Install-Automate -Server 'server.hostedrmm.com' -LocationID 2
 
 .PARAMETER LocationID
@@ -862,32 +862,32 @@ Function Push-Automate
 .PARAMETER Username
     Enter username with Domain Admin rights. When entering username, use 'DOMAIN\USERNAME'
 
-    The function will accept PSCredentials saved to $Credentials prior to running this function. 
-    
+    The function will accept PSCredentials saved to $Credentials prior to running this function.
+
 .PARAMETER Password
-    Enter Password for Domain Admin account. 
-    
-    The function will accept PSCredentials saved to $Credentials prior to running this function. 
+    Enter Password for Domain Admin account.
+
+    The function will accept PSCredentials saved to $Credentials prior to running this function.
 
 .PARAMETER Force
     >>> This Function Is Currently Disabled <<<
     This will force the Automate Uninstaller prior to installation.
     Essentually, this will be a fresh install and a fresh check-in to the Automate server.
-    
+
         Install-Automate -Server 'server.hostedrmm.com' -LocationID 2 -Token adb68881994ed93960346478303476f4 -Force
 
 .PARAMETER Silent
     >>> This Function Is Currently Disabled <<<
     This will hide all output (except a failed installation when Exit Code -ne 0)
     The function will exit once the installer has completed.
-        
+
         Install-Automate -Server 'server.hostedrmm.com' -LocationID 2 -Token adb68881994ed93960346478303476f4 -Silent
-    
+
 .PARAMETER Transcript
     >>> This Function Is Currently Disabled <<<
     This parameter will save the entire transcript and responsed to:
     $($env:windir)\Temp\AutomateLogon.txt
-        
+
         Install-Automate -Server 'server.hostedrmm.com' -LocationID 2 -Token adb68881994ed93960346478303476f4 -Transcript -Verbose
 
 .LINK
@@ -898,40 +898,40 @@ Function Push-Automate
     Author         : Chuck Fowler
     Creation Date  : 08/2019
     Purpose/Change : Initial script development
-    
+
     Version        : 1.1
     Date           : 11/15/2019
     Changes        : Add $Automate.InstFolder and $Automate.InstRegistry and check for both to be consdered for $Automate.Installed
                      It was found that the Automate Uninstaller EXE is leaving behind the LabTech registry keys and it was not being detected properly.
                      If the LTSVC Folder or Registry keys are found after the uninstaller runs, the script now performs a manual gutting via PowerShell.
-                     
-                     
+
+
 .EXAMPLE
     Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd' -Token adb68881994ed93960346478303476f4 -Computer COMPUTERNAME
-    
-    Use the -Computer parameter for single computers. 
-    
+
+    Use the -Computer parameter for single computers.
+
 .EXAMPLE
     $Computers | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd' -Token adb68881994ed93960346478303476f4
-    
-    Use Array to pipe multiple computers into Push=Automate function. 
-    
+
+    Use Array to pipe multiple computers into Push=Automate function.
+
 .EXAMPLE
     Get-ADComputerNames | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd' -Token adb68881994ed93960346478303476f4
-    
-    Use another function to pipe multiple computers into Push=Automate function. Select only computer names. 
+
+    Use another function to pipe multiple computers into Push=Automate function. Select only computer names.
 
 .EXAMPLE
     "Computer1", "Computer2" | Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Username 'DOMAIN\USERNAME' -Password 'Ch@ng3P@ssw0rd' -Token adb68881994ed93960346478303476f4
-    
+
     When pushing to multiple computers, use the actual computer names. If you use IP Address, it will fail when using WINRM Protocols (and use WMI/RCP instead).
     This will install the LabTech agent using the provided Server URL, and LocationID.
 
 .EXAMPLE
     $Credential = Get-Credential
     Push-Automate -Server 'YOURSERVER.DOMAIN.COM' -LocationID 2 -Token adb68881994ed93960346478303476f4
-    
-    You can proactivly load PSCredential, then use the Push-Automate function within the same Powershell session. 
+
+    You can proactivly load PSCredential, then use the Push-Automate function within the same Powershell session.
 
 
 #>
@@ -977,7 +977,7 @@ BEGIN
     $Verbose = If ($PSBoundParameters.Verbose -eq $True) { $True } Else { $False }
 
     $AutomateURL = "https://$($Server)"
-   
+
     Write-Verbose "Checking Operating System"
     If ([int]((Get-WmiObject Win32_OperatingSystem).BuildNumber) -lt 6000) {
         $OS = ((Get-WmiObject Win32_OperatingSystem).Caption)
@@ -986,7 +986,7 @@ BEGIN
         Write-Host ""
         $AutomateURL = "https://$($Server)"
     }
-    
+
     Try {
         Write-Verbose "Enabling downloads to use SSL/TLS v1.2"
         [Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072)
@@ -998,7 +998,7 @@ BEGIN
         Write-Host ""
         $AutomateURL = "https://$($Server)"
     }
-    
+
     Try {
         $AutomateURLTest = "$($AutomateURL)/LabTech/"
         $TestURL = (New-Object Net.WebClient).DownloadString($AutomateURLTest)
@@ -1008,7 +1008,7 @@ BEGIN
         Write-Verbose "Could not download from $($AutomateURL). Switching to http://$($Server)"
         $AutomateURL = "http://$($Server)"
     }
-    
+
     $DownloadPath = $null
     If ($Token -ne $null) {
         $DownloadPath = "$($AutomateURL)/Labtech/Deployment.aspx?InstallerToken=$Token"
@@ -1068,7 +1068,7 @@ PROCESS
     $WMIDeployed = $False
     Clear-Variable Automate, ProcessErrorWinRM, ProcessErrorWMIC
     # End Variables
-    # Now Trying WinRM 
+    # Now Trying WinRM
     If ($Computer -eq $env:COMPUTERNAME) {
         Write-Verbose "Installing Automate on Local Computer - $Computer"
         [Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072)
@@ -1133,7 +1133,7 @@ PROCESS
                     Write-Verbose "Installing Automate..."
                     Invoke-Command $COMPUTER -Credential $Credential -ScriptBlock $InstallAutomateWinRM -ArgumentList $Server, $LocationID, $Token, $Force, $Silent, $Transcript -ErrorAction SilentlyContinue
                     $Global:Automate = (Invoke-Command $COMPUTER -Credential $Credential -ScriptBlock $CheckAutomateWinRM -ErrorAction SilentlyContinue)
-                    Write-Verbose "Local Automate:  $($Automate)" 
+                    Write-Verbose "Local Automate:  $($Automate)"
                     Write-Verbose "Global Automate: $($Global:Automate)"
                     $WinRMDeployed = $True
                 }
@@ -1173,7 +1173,7 @@ PROCESS
                         4 = 'REG_DWORD'
                         7 = 'REG_MULTI_SZ'
                     }
-                    # Use a for loop to go through the values        
+                    # Use a for loop to go through the values
                     $Results = @(
                         for ($i = 0; $i -lt $Values.sNames.count; $i++) {
                             $Name = $Values.sNames[$i]
@@ -1189,9 +1189,9 @@ PROCESS
                                 Name = $Name
                                 Type = $Type
                                 Data = $Value
-                            }  
+                            }
                         }
-                    ) # $Results - Registry     
+                    ) # $Results - Registry
                     If ($Results) {
                         Write-Verbose "Confirm Install    - Automate Installed - Registry Keys Found"
                         $Global:Automate = New-Object -TypeName psobject
@@ -1202,14 +1202,14 @@ PROCESS
                         $Global:Automate | Add-Member -MemberType NoteProperty -Name LocationID -Value (($Results | Where-Object -Property Name -eq 'LocationID').Data)
                         $Global:Automate | Add-Member -MemberType NoteProperty -Name Version -Value (($Results | Where-Object -Property Name -eq 'Version').Data)
                         $Global:Automate | Add-Member -MemberType NoteProperty -Name InstFolder -Value (Test-Path "$($env:windir)\ltsvc")
-                        $Global:Automate | Add-Member -MemberType NoteProperty -Name InstRegistry -Value $True                        
+                        $Global:Automate | Add-Member -MemberType NoteProperty -Name InstRegistry -Value $True
                         $Global:Automate | Add-Member -MemberType NoteProperty -Name Installed -Value (Test-Path "$($env:windir)\ltsvc")
                         $Global:Automate | Add-Member -MemberType NoteProperty -Name Service -Value ((Get-WmiObject -ComputerName $Computer -Class Win32_Service -Filter "Name='LTService'" -Credential $Credential -ErrorAction SilentlyContinue -ErrorVariable ProcessErrorWMIC).State)
                         If ((Get-ItemProperty "HKLM:\SOFTWARE\LabTech\Service").HeartbeatLastSent) {
-                            $Global:Automate | Add-Member -MemberType NoteProperty -Name LastHeartbeat -Value ([int]((Get-Date) - (Get-Date (Get-ItemProperty "HKLM:\SOFTWARE\LabTech\Service").HeartbeatLastSent)).TotalSeconds)
+                            $Global:Automate | Add-Member -MemberType NoteProperty -Name LastHeartbeat -Value ([long](((Get-Date) - (Get-Date (Get-ItemProperty "HKLM:\SOFTWARE\LabTech\Service").HeartbeatLastSent)).TotalSeconds))
                         }
                         If ((Get-ItemProperty "HKLM:\SOFTWARE\LabTech\Service").LastSuccessStatus) {
-                            $Global:Automate | Add-Member -MemberType NoteProperty -Name LastStatus -Value    ([int]((Get-Date) - (Get-Date (Get-ItemProperty "HKLM:\SOFTWARE\LabTech\Service").LastSuccessStatus)).TotalSeconds)
+                            $Global:Automate | Add-Member -MemberType NoteProperty -Name LastStatus -Value    ([long](((Get-Date) - (Get-Date (Get-ItemProperty "HKLM:\SOFTWARE\LabTech\Service").LastSuccessStatus)).TotalSeconds))
                         }
                         $Global:Automate | Add-Member -MemberType NoteProperty -Name Online -Value ($Global:Automate.InstFolder -and ($Global:Automate.Service -eq "Running"))
                         Write-Verbose $Global:Automate
@@ -1247,7 +1247,7 @@ PROCESS
                             Write-Host "WMI Did NOT Execute Properly." -ForegroundColor Red
                             Write-Host "WMI Return Value: $($WMIExitCode.ReturnValue)" -ForegroundColor Red
                         }
-                    }                                
+                    }
                 } #End WMI Connectivity
                 If (!$WinRMConectivity -and !$WMICConectivity) {Write-Host "Could Ping, but all protocols are inaccessible on $Computer. Deployment and Confirmations Failed" -ForegroundColor Yellow}
             }
@@ -1255,7 +1255,7 @@ PROCESS
             Write-Verbose "Ping Connectivity  - Failed"
             Write-Host "                      Ping Connectivity  - Failed" -ForegroundColor Yellow
         $PingTest = $False
-        } # End Ping Test 
+        } # End Ping Test
     } # End Else Local Computer
         $Global:AutoChecks += New-Object psobject -Property @{
         Computer      = ($COMPUTER)
@@ -1275,13 +1275,13 @@ PROCESS
         If (!$Silent) {Write-Host " "}
 } # End Process
 
-END 
+END
 {
     Clear-Variable Username, Pass -ErrorAction SilentlyContinue | Out-Null
     $Global:AutoResults = ($Global:AutoChecks | Select-Object Computer, Online, ServerAddress, ComputerID, ClientID, Ping, WinRM, WMI, DeployedWinRM, DeployedWMI)
     Write-Verbose 'Results have been saved to $Global:AutoResults'
     $ErrorActionPreference = "Continue"
-} # End END 
+} # End END
 } # End Function Push-Automate
 ########################
 Set-Alias -Name LTP -Value Push-Automate -Description 'Push Automate Agent to Remote Computers'
@@ -1324,7 +1324,7 @@ If ($ImportError -like "*not loaded*") {
         $Computers = Get-ADComputer -Filter 'OperatingSystem -like "Windows*" -and LastLogonDate -ge $FilterLastLogonDate' | Select -ExpandProperty Name | Sort-Object -Unique
 #        Write-Verbose $Computers
     }
-    
+
 Write-Verbose "Computer Logons > Months:  -$Months"
 Write-Verbose "Computer Logins Since:     $FilterLastLogonDate"
 Write-Verbose "Server:                    $LogonSrv"
@@ -1350,31 +1350,31 @@ Function Scan-Network
         <#
         .SYNOPSIS
             Returns an array of IP Addresses based on a start and end address
-        
+
         .DESCRIPTION
             Returns an array of IP Addresses based on a start and end address
-        
+
         .PARAMETER Start
             Starting IP Address
-        
+
         .PARAMETER End
             Ending IP Address
-        
+
         .PARAMETER Exclude
             Exclude addresses with this final octet
-        
+
             Default excludes 0, 1, and 255
-        
+
             e.g. 5 excludes *.*.*.5
-        
+
         .EXAMPLE
             New-IPRange -Start 192.168.1.5 -End 192.168.20.254
-        
+
             Create an array from 192.168.1.5 to 192.168.20.254, excluding *.*.*.[0,1,255] (default exclusion)
-        
+
         .NOTES
             Source: Dr. Tobias Weltner, http://powershell.com/cs/media/p/9437.aspx
-        
+
         .FUNCTIONALITY
             Network
         #>
@@ -1383,26 +1383,26 @@ Function Scan-Network
             [parameter( Mandatory = $true,
                         Position = 0 )]
             [System.Net.IPAddress]$Start,
-        
+
             [parameter( Mandatory = $true,
                         Position = 1)]
             [System.Net.IPAddress]$End,
-        
+
             [int[]]$Exclude = @( 0, 1, 255 )
         )
-            
+
             #Provide verbose output.  Some oddities behind casting certain strings to IP.
             #Example: [ipaddress]"192.168.20500"
             Write-Verbose "Parsed Start as '$Start', End as '$End'"
-            
+
             $ip1 = $start.GetAddressBytes()
             [Array]::Reverse($ip1)
             $ip1 = ([System.Net.IPAddress]($ip1 -join '.')).Address
-        
+
             $ip2 = ($end).GetAddressBytes()
             [Array]::Reverse($ip2)
             $ip2 = ([System.Net.IPAddress]($ip2 -join '.')).Address
-        
+
             for ($x=$ip1; $x -le $ip2; $x++)
             {
                 $ip = ([System.Net.IPAddress]$x).GetAddressBytes()
@@ -1413,26 +1413,26 @@ Function Scan-Network
                 }
             }
         } # End New-IPRange
-        
-        Function Invoke-Ping 
+
+        Function Invoke-Ping
         {
         <#
         .SYNOPSIS
             Ping or test connectivity to systems in parallel
-            
+
         .DESCRIPTION
             Ping or test connectivity to systems in parallel
-        
+
             Default action will run a ping against systems
                 If Quiet parameter is specified, we return an array of systems that responded
                 If Detail parameter is specified, we test WSMan, RemoteReg, RPC, RDP and/or SMB
-        
+
         .PARAMETER ComputerName
             One or more computers to test
-        
+
         .PARAMETER Quiet
             If specified, only return addresses that responded to Test-Connection
-        
+
         .PARAMETER Detail
             Include one or more additional tests as specified:
                 WSMan      via Test-WSMan
@@ -1441,102 +1441,102 @@ Function Scan-Network
                 RDP        via port 3389
                 SMB        via \\ComputerName\C$
                 *          All tests
-        
+
         .PARAMETER Timeout
             Time in seconds before we attempt to dispose an individual query.  Default is 20
-        
+
         .PARAMETER Throttle
             Throttle query to this many parallel runspaces.  Default is 100.
-        
+
         .PARAMETER NoCloseOnTimeout
             Do not dispose of timed out tasks or attempt to close the runspace if threads have timed out
-        
+
             This will prevent the script from hanging in certain situations where threads become non-responsive, at the expense of leaking memory within the PowerShell host.
-        
+
         .EXAMPLE
             Invoke-Ping Server1, Server2, Server3 -Detail *
-        
+
             # Check for WSMan, Remote Registry, Remote RPC, RDP, and SMB (via C$) connectivity against 3 machines
-        
+
         .EXAMPLE
             $Computers | Invoke-Ping
-        
+
             # Ping computers in $Computers in parallel
-        
+
         .EXAMPLE
             $Responding = $Computers | Invoke-Ping -Quiet
-            
+
             # Create a list of computers that successfully responded to Test-Connection
-        
+
         .LINK
             https://gallery.technet.microsoft.com/scriptcenter/Invoke-Ping-Test-in-b553242a
-        
+
         .FUNCTIONALITY
             Computers
-        
+
         #>
             [cmdletbinding(DefaultParameterSetName='Ping')]
             param(
                 [Parameter( ValueFromPipeline=$true,
-                            ValueFromPipelineByPropertyName=$true, 
+                            ValueFromPipelineByPropertyName=$true,
                             Position=0)]
                 [string[]]$ComputerName,
-                
+
                 [Parameter( ParameterSetName='Detail')]
                 [validateset("*","WSMan","RemoteReg","RPC","RDP","SMB")]
                 [string[]]$Detail,
-                
+
                 [Parameter(ParameterSetName='Ping')]
                 [switch]$Quiet,
-                
+
                 [int]$Timeout = 20,
-                
+
                 [int]$Throttle = 100,
-        
+
                 [switch]$NoCloseOnTimeout
             )
             Begin
             {
-        
+
                 #http://gallery.technet.microsoft.com/Run-Parallel-Parallel-377fd430
                 function Invoke-Parallel {
                     [cmdletbinding(DefaultParameterSetName='ScriptBlock')]
-                    Param (   
+                    Param (
                         [Parameter(Mandatory=$false,position=0,ParameterSetName='ScriptBlock')]
                             [System.Management.Automation.ScriptBlock]$ScriptBlock,
-        
+
                         [Parameter(Mandatory=$false,ParameterSetName='ScriptFile')]
                         [ValidateScript({Test-Path $_ -pathtype leaf})]
                             $ScriptFile,
-        
+
                         [Parameter(Mandatory=$true,ValueFromPipeline=$true)]
-                        [Alias('CN','__Server','IPAddress','Server','ComputerName')]    
+                        [Alias('CN','__Server','IPAddress','Server','ComputerName')]
                             [PSObject]$InputObject,
-        
+
                             [PSObject]$Parameter,
-        
+
                             [switch]$ImportVariables,
-        
+
                             [switch]$ImportModules,
-        
+
                             [int]$Throttle = 20,
-        
+
                             [int]$SleepTimer = 200,
-        
+
                             [int]$RunspaceTimeout = 0,
-        
+
                             [switch]$NoCloseOnTimeout = $false,
-        
+
                             [int]$MaxQueue,
-        
+
                         [validatescript({Test-Path (Split-Path $_ -parent)})]
                             [string]$LogFile = "C:\temp\log.log",
-        
+
                             [switch] $Quiet = $false
                     )
-            
+
                     Begin {
-                        
+
                         #No max queue specified?  Estimate one.
                         #We use the script scope to resolve an odd PowerShell 2 issue where MaxQueue isn't seen later in the function
                         If( -not $PSBoundParameters.ContainsKey('MaxQueue') )
@@ -1548,22 +1548,22 @@ Function Scan-Network
                         {
                             $script:MaxQueue = $MaxQueue
                         }
-        
+
                         Write-Verbose "Throttle: '$throttle' SleepTimer '$sleepTimer' runSpaceTimeout '$runspaceTimeout' maxQueue '$maxQueue' logFile '$logFile'"
-        
+
                         #If they want to import variables or modules, create a clean runspace, get loaded items, use those to exclude items
                         If ($ImportVariables -or $ImportModules)
                         {
                             $StandardUserEnv = [powershell]::Create().addscript({
-        
+
                                 #Get modules and snapins in this clean runspace
                                 $Modules = Get-Module | Select -ExpandProperty Name
                                 $Snapins = Get-PSSnapin | Select -ExpandProperty Name
-        
+
                                 #Get variables in this clean runspace
                                 #Called last to get vars like $? into session
                                 $Variables = Get-Variable | Select -ExpandProperty Name
-                        
+
                                 #Return a hashtable where we can access each.
                                 @{
                                     Variables = $Variables
@@ -1571,71 +1571,71 @@ Function Scan-Network
                                     Snapins = $Snapins
                                 }
                             }).invoke()[0]
-                    
+
                             If ($ImportVariables) {
                                 #Exclude common parameters, bound parameters, and automatic variables
                                 Function _temp {[cmdletbinding()] param() }
                                 $VariablesToExclude = @( (Get-Command _temp | Select -ExpandProperty parameters).Keys + $PSBoundParameters.Keys + $StandardUserEnv.Variables )
                                 Write-Verbose "Excluding variables $( ($VariablesToExclude | sort ) -join ", ")"
-        
-                                # we don't use 'Get-Variable -Exclude', because it uses regexps. 
-                                # One of the veriables that we pass is '$?'. 
+
+                                # we don't use 'Get-Variable -Exclude', because it uses regexps.
+                                # One of the veriables that we pass is '$?'.
                                 # There could be other variables with such problems.
                                 # Scope 2 required if we move to a real module
-                                $UserVariables = @( Get-Variable | Where { -not ($VariablesToExclude -contains $_.Name) } ) 
+                                $UserVariables = @( Get-Variable | Where { -not ($VariablesToExclude -contains $_.Name) } )
                                 Write-Verbose "Found variables to import: $( ($UserVariables | Select -expandproperty Name | Sort ) -join ", " | Out-String).`n"
-        
+
                             }
-        
-                            If ($ImportModules) 
+
+                            If ($ImportModules)
                             {
                                 $UserModules = @( Get-Module | Where {$StandardUserEnv.Modules -notcontains $_.Name -and (Test-Path $_.Path -ErrorAction SilentlyContinue)} | Select -ExpandProperty Path )
-                                $UserSnapins = @( Get-PSSnapin | Select -ExpandProperty Name | Where {$StandardUserEnv.Snapins -notcontains $_ } ) 
+                                $UserSnapins = @( Get-PSSnapin | Select -ExpandProperty Name | Where {$StandardUserEnv.Snapins -notcontains $_ } )
                             }
                         }
-        
+
                         #region functions
-                    
+
                             Function Get-RunspaceData {
                                 [cmdletbinding()]
                                 param( [switch]$Wait )
-        
+
                                 #loop through runspaces
                                 #If $wait is specified, keep looping until all complete
                                 Do {
-        
+
                                     #set more to false for tracking completion
                                     $more = $false
-        
+
                                     #Progress bar if we have inputobject count (bound parameter)
                                     If (-not $Quiet) {
                                         Write-Progress  -Activity "Running Query" -Status "Starting threads"`
                                             -CurrentOperation "$startedCount threads defined - $totalCount input objects - $script:completedCount input objects processed"`
                                             -PercentComplete $( Try { $script:completedCount / $totalCount * 100 } Catch {0} )
                                     }
-        
-                                    #run through each runspace.           
+
+                                    #run through each runspace.
                                     Foreach($runspace in $runspaces) {
-                            
+
                                         #get the duration - inaccurate
                                         $currentdate = Get-Date
                                         $runtime = $currentdate - $runspace.startTime
                                         $runMin = [math]::Round( $runtime.totalminutes ,2 )
-        
+
                                         #set up log object
                                         $log = "" | select Date, Action, Runtime, Status, Details
                                         $log.Action = "Removing:'$($runspace.object)'"
                                         $log.Date = $currentdate
                                         $log.Runtime = "$runMin minutes"
-        
+
                                         #If runspace completed, end invoke, dispose, recycle, counter++
                                         If ($runspace.Runspace.isCompleted) {
-                                    
+
                                             $script:completedCount++
-                                
+
                                             #check if there were errors
                                             If($runspace.powershell.Streams.Error.Count -gt 0) {
-                                        
+
                                                 #set the logging info and move the file to completed
                                                 $log.status = "CompletedWithErrors"
                                                 Write-Verbose ($log | ConvertTo-Csv -Delimiter ";" -NoTypeInformation)[1]
@@ -1644,70 +1644,70 @@ Function Scan-Network
                                                 }
                                             }
                                             Else {
-                                        
+
                                                 #add logging details and cleanup
                                                 $log.status = "Completed"
                                                 Write-Verbose ($log | ConvertTo-Csv -Delimiter ";" -NoTypeInformation)[1]
                                             }
-        
+
                                             #everything is logged, clean up the runspace
                                             $runspace.powershell.EndInvoke($runspace.Runspace)
                                             $runspace.powershell.dispose()
                                             $runspace.Runspace = $null
                                             $runspace.powershell = $null
-        
+
                                         }
-        
+
                                         #If runtime exceeds max, dispose the runspace
                                         ElseIf ( $runspaceTimeout -ne 0 -and $runtime.totalseconds -gt $runspaceTimeout) {
-                                    
+
                                             $script:completedCount++
                                             $timedOutTasks = $true
-                                    
+
                                             #add logging details and cleanup
                                             $log.status = "TimedOut"
                                             Write-Verbose ($log | ConvertTo-Csv -Delimiter ";" -NoTypeInformation)[1]
                                             Write-Error "Runspace timed out at $($runtime.totalseconds) seconds for the object:`n$($runspace.object | out-string)"
-        
+
                                             #Depending on how it hangs, we could still get stuck here as dispose calls a synchronous method on the powershell instance
                                             If (!$noCloseOnTimeout) { $runspace.powershell.dispose() }
                                             $runspace.Runspace = $null
                                             $runspace.powershell = $null
                                             $completedCount++
-        
+
                                         }
-                           
-                                        #If runspace isn't null set more to true  
+
+                                        #If runspace isn't null set more to true
                                         ElseIf ($runspace.Runspace -ne $null ) {
                                             $log = $null
                                             $more = $true
                                         }
-        
+
                                         #log the results if a log file was indicated
                                         If($logFile -and $log){
                                             ($log | ConvertTo-Csv -Delimiter ";" -NoTypeInformation)[1] | out-file $LogFile -append
                                         }
                                     }
-        
+
                                     #Clean out unused runspace jobs
                                     $temphash = $runspaces.clone()
                                     $temphash | Where { $_.runspace -eq $Null } | ForEach {
                                         $Runspaces.remove($_)
                                     }
-        
+
                                     #sleep for a bit if we will loop again
                                     If($PSBoundParameters['Wait']){ Start-Sleep -milliseconds $SleepTimer }
-        
+
                                 #Loop again only if -wait parameter and there are more runspaces to process
                                 } while ($more -and $PSBoundParameters['Wait'])
-                        
+
                             #End of runspace function
                             }
-        
+
                         #endregion functions
-                
+
                         #region Init
-        
+
                             If($PSCmdlet.ParameterSetName -eq 'ScriptFile')
                             {
                                 $ScriptBlock = [scriptblock]::Create( $(Get-Content $ScriptFile | out-string) )
@@ -1720,18 +1720,18 @@ Function Scan-Network
                                 {
                                     $ParamsToAdd += '$Parameter'
                                 }
-        
+
                                 $UsingVariableData = $Null
-                        
-        
+
+
                                 # This code enables $Using support through the AST.
                                 # This is entirely from  Boe Prox, and his https://github.com/proxb/PoshRSJob module; all credit to Boe!
-                        
+
                                 If($PSVersionTable.PSVersion.Major -gt 2)
                                 {
                                     #Extract using references
-                                    $UsingVariables = $ScriptBlock.ast.FindAll({$args[0] -is [System.Management.Automation.Language.UsingExpressionAst]},$True)    
-        
+                                    $UsingVariables = $ScriptBlock.ast.FindAll({$args[0] -is [System.Management.Automation.Language.UsingExpressionAst]},$True)
+
                                     If ($UsingVariables)
                                     {
                                         $List = New-Object 'System.Collections.Generic.List`1[System.Management.Automation.Language.VariableExpressionAst]'
@@ -1739,9 +1739,9 @@ Function Scan-Network
                                         {
                                             [void]$list.Add($Ast.SubExpression)
                                         }
-        
+
                                         $UsingVar = $UsingVariables | Group Parent | ForEach {$_.Group | Select -First 1}
-                
+
                                         #Extract the name, value, and create replacements for each
                                         $UsingVariableData = ForEach ($Var in $UsingVar) {
                                             Try
@@ -1761,30 +1761,30 @@ Function Scan-Network
                                                 Write-Error "$($Var.SubExpression.Extent.Text) is not a valid Using: variable!"
                                             }
                                         }
-            
+
                                         $NewParams = $UsingVariableData.NewName -join ', '
                                         $Tuple = [Tuple]::Create($list, $NewParams)
                                         $bindingFlags = [Reflection.BindingFlags]"Default,NonPublic,Instance"
                                         $GetWithInputHandlingForInvokeCommandImpl = ($ScriptBlock.ast.gettype().GetMethod('GetWithInputHandlingForInvokeCommandImpl',$bindingFlags))
-                
+
                                         $StringScriptBlock = $GetWithInputHandlingForInvokeCommandImpl.Invoke($ScriptBlock.ast,@($Tuple))
-        
+
                                         $ScriptBlock = [scriptblock]::Create($StringScriptBlock)
-        
+
                                         Write-Verbose $StringScriptBlock
                                     }
                                 }
-                        
+
                                 $ScriptBlock = $ExecutionContext.InvokeCommand.NewScriptBlock("param($($ParamsToAdd -Join ", "))`r`n" + $Scriptblock.ToString())
                             }
                             Else
                             {
                                 Throw "Must provide ScriptBlock or ScriptFile"; Break
                             }
-        
+
                             Write-Debug "`$ScriptBlock: $($ScriptBlock | Out-String)"
                             Write-Verbose "Creating runspace pool and session states"
-        
+
                             #If specified, add variables and modules/snapins to session state
                             $sessionstate = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
                             If ($ImportVariables)
@@ -1814,27 +1814,27 @@ Function Scan-Network
                                     }
                                 }
                             }
-        
+
                             #Create runspace pool
                             $runspacepool = [runspacefactory]::CreateRunspacePool(1, $Throttle, $sessionstate, $Host)
-                            $runspacepool.Open() 
-        
+                            $runspacepool.Open()
+
                             Write-Verbose "Creating empty collection to hold runspace jobs"
-                            $Script:runspaces = New-Object System.Collections.ArrayList        
-                
+                            $Script:runspaces = New-Object System.Collections.ArrayList
+
                             #If inputObject is bound get a total count and set bound to true
                             $global:__bound = $false
                             $allObjects = @()
                             If( $PSBoundParameters.ContainsKey("inputObject") ){
                                 $global:__bound = $true
                             }
-        
+
                             #Set up log file if specified
                             If( $LogFile ){
                                 New-Item -ItemType file -path $logFile -force | Out-Null
                                 ("" | Select Date, Action, Runtime, Status, Details | ConvertTo-Csv -NoTypeInformation -Delimiter ";")[0] | Out-File $LogFile
                             }
-        
+
                             #write initial log entry
                             $log = "" | Select Date, Action, Runtime, Status, Details
                                 $log.Date = Get-Date
@@ -1845,14 +1845,14 @@ Function Scan-Network
                                 If($logFile) {
                                     ($log | convertto-csv -Delimiter ";" -NoTypeInformation)[1] | Out-File $LogFile -Append
                                 }
-        
+
                             $timedOutTasks = $false
-        
+
                         #endregion INIT
                     }
-        
+
                     Process {
-        
+
                         #add piped objects to all objects or set all objects to bound input object parameter
                         If( -not $global:__bound ){
                             $allObjects += $inputObject
@@ -1861,9 +1861,9 @@ Function Scan-Network
                             $allObjects = $InputObject
                         }
                     }
-        
+
                     End {
-                
+
                         #Use Try/Finally to catch Ctrl+C and clean up.
                         Try
                         {
@@ -1871,26 +1871,26 @@ Function Scan-Network
                             $totalCount = $allObjects.count
                             $script:completedCount = 0
                             $startedCount = 0
-        
+
                             foreach($object in $allObjects){
-                
+
                                 #region add scripts to runspace pool
-                            
+
                                     #Create the powershell instance, set verbose if needed, supply the scriptblock and parameters
                                     $powershell = [powershell]::Create()
-                            
+
                                     If ($VerbosePreference -eq 'Continue')
                                     {
                                         [void]$PowerShell.AddScript({$VerbosePreference = 'Continue'})
                                     }
-        
+
                                     [void]$PowerShell.AddScript($ScriptBlock).AddArgument($object)
-        
+
                                     If ($parameter)
                                     {
                                         [void]$PowerShell.AddArgument($parameter)
                                     }
-        
+
                                     # $Using support from Boe Prox
                                     If ($UsingVariableData)
                                     {
@@ -1899,54 +1899,54 @@ Function Scan-Network
                                             [void]$PowerShell.AddArgument($UsingVariable.Value)
                                         }
                                     }
-        
+
                                     #Add the runspace into the powershell instance
                                     $powershell.RunspacePool = $runspacepool
-            
+
                                     #Create a temporary collection for each runspace
                                     $temp = "" | Select-Object PowerShell, StartTime, object, Runspace
                                     $temp.PowerShell = $powershell
                                     $temp.StartTime = Get-Date
                                     $temp.object = $object
-            
+
                                     #Save the handle output when calling BeginInvoke() that will be used later to end the runspace
                                     $temp.Runspace = $powershell.BeginInvoke()
                                     $startedCount++
-        
+
                                     #Add the temp tracking info to $runspaces collection
                                     Write-Verbose ( "Adding {0} to collection at {1}" -f $temp.object, $temp.starttime.tostring() )
                                     $runspaces.Add($temp) | Out-Null
-                    
+
                                     #loop through existing runspaces one time
                                     Get-RunspaceData
-        
+
                                     #If we have more running than max queue (used to control timeout accuracy)
                                     #Script scope resolves odd PowerShell 2 issue
                                     $firstRun = $true
                                     while ($runspaces.count -ge $Script:MaxQueue) {
-        
+
                                         #give verbose output
                                         If($firstRun){
                                             Write-Verbose "$($runspaces.count) items running - exceeded $Script:MaxQueue limit."
                                         }
                                         $firstRun = $false
-                            
+
                                         #run get-runspace data and sleep for a short while
                                         Get-RunspaceData
                                         Start-Sleep -Milliseconds $sleepTimer
-                            
+
                                     }
-        
+
                                 #endregion add scripts to runspace pool
                             }
-                             
+
                             Write-Verbose ( "Finish processing the remaining runspace jobs: {0}" -f ( @($runspaces | Where {$_.Runspace -ne $Null}).Count) )
                             Get-RunspaceData -wait
-        
+
                             If (-not $quiet) {
                                 Write-Progress -Activity "Running Query" -Status "Starting threads" -Completed
                             }
-        
+
                         }
                         Finally
                         {
@@ -1955,15 +1955,15 @@ Function Scan-Network
                                 Write-Verbose "Closing the runspace pool"
                                 $runspacepool.close()
                             }
-        
+
                             #collect garbage
                             [gc]::Collect()
-                        }       
+                        }
                     }
                 }
-        
+
                 Write-Verbose "PSBoundParameters = $($PSBoundParameters | Out-String)"
-                
+
                 $bound = $PSBoundParameters.keys -contains "ComputerName"
                 If(-not $bound)
                 {
@@ -1972,7 +1972,7 @@ Function Scan-Network
             }
             Process
             {
-        
+
                 #Handle both pipeline and bound parameter.  We don't want to stream objects, defeats purpose of parallelizing work
                 If($bound)
                 {
@@ -1985,11 +1985,11 @@ Function Scan-Network
                         $AllComputers.add($Computer) | Out-Null
                     }
                 }
-        
+
             }
             End
             {
-        
+
                 #Built up the parameters and run everything in parallel
                 $params = @($Detail, $Quiet)
                 $splat = @{
@@ -2002,13 +2002,13 @@ Function Scan-Network
                 {
                     $splat.add('NoCloseOnTimeout',$True)
                 }
-        
+
                 Invoke-Parallel @splat -ScriptBlock {
-                
+
                     $computer = $_.trim()
                     $detail = $parameter[0]
                     $quiet = $parameter[1]
-        
+
                     #They want detail, define and run test-server
                     If($detail)
                     {
@@ -2041,16 +2041,16 @@ Function Scan-Network
                                         {
                                             Throw "Must supply Credentials with CredSSP test"
                                         }
-        
+
                                         [string[]]$props = write-output Name, IP, Domain, Ping, WSMAN, CredSSP, RemoteReg, RPC, RDP, SMB
-        
+
                                         #Hash table to create PSObjects later, compatible with ps2...
                                         $Hash = @{}
                                         foreach($prop in $props)
                                         {
                                             $Hash.Add($prop,$null)
                                         }
-        
+
                                         function Test-Port{
                                             [cmdletbinding()]
                                             Param(
@@ -2084,7 +2084,7 @@ Function Scan-Network
                                             }
                                         }
                                     }
-        
+
                                     process
                                     {
                                         foreach($name in $computername)
@@ -2113,12 +2113,12 @@ Function Scan-Network
                                             If($failed -eq 0){
                                                 foreach($ip in $ips)
                                                 {
-                
+
                                                     $rst = New-Object -TypeName PSObject -Property $Hash | Select -Property $props
                                                     $rst.name = $name
                                                     $rst.ip = $ip
                                                     $rst.domain = $domain
-                            
+
                                                     If($RDP -or $All)
                                                     {
                                                         ####RDP Check (firewall may block rest so do before ping
@@ -2146,7 +2146,7 @@ Function Scan-Network
                                                 {
                                                     Write-verbose "PING:  $((New-TimeSpan $dt ($dt = Get-Date)).totalseconds)"
                                                     $rst.ping = $true
-                        
+
                                                     If($WSMAN -or $All)
                                                     {
                                                         try{############wsman
@@ -2190,7 +2190,7 @@ Function Scan-Network
                                                     If($RPC -or $All)
                                                     {
                                                         try ######### wmi
-                                                        {    
+                                                        {
                                                             $w = [wmi] ''
                                                             $w.psbase.options.timeout = 15000000
                                                             $w.path = "\\$Name\root\cimv2:Win32_ComputerSystem.Name='$Name'"
@@ -2206,10 +2206,10 @@ Function Scan-Network
                                                     }
                                                     If($SMB -or $All)
                                                     {
-        
+
                                                         #Use set location and resulting errors.  push and pop current location
                                                         try ######### C$
-                                                        {    
+                                                        {
                                                             $path = "\\$name\c$"
                                                             Push-Location -Path $path -ErrorAction stop
                                                             $rst.SMB = $true
@@ -2221,7 +2221,7 @@ Function Scan-Network
                                                             Write-Verbose "Error testing SMB: $_"
                                                         }
                                                         Write-verbose "SMB:  $((New-TimeSpan $dt ($dt = Get-Date)).totalseconds)"
-        
+
                                                     }
                                                 }
                                                 Else
@@ -2233,7 +2233,7 @@ Function Scan-Network
                                                     $rst.rpc = $false
                                                     $rst.smb = $false
                                                 }
-                                                $results += $rst    
+                                                $results += $rst
                                             }
                                         }
                                         Write-Verbose "Time for $($Name): $((New-TimeSpan $cdt ($dt)).totalseconds)"
@@ -2247,17 +2247,17 @@ Function Scan-Network
                                         return $results
                                     }
                                 }
-                            
+
                             #Build up parameters for Test-Server and run it
                                 $TestServerParams = @{
                                     ComputerName = $Computer
                                     ErrorAction = "Stop"
                                 }
-        
+
                                 If($detail -eq "*"){
-                                    $detail = "WSMan","RemoteReg","RPC","RDP","SMB" 
+                                    $detail = "WSMan","RemoteReg","RPC","RDP","SMB"
                                 }
-        
+
                                 $detail | Select -Unique | Foreach-Object { $TestServerParams.add($_,$True) }
                                 Test-Server @TestServerParams | Select -Property $( "Name", "IP", "Domain", "Ping" + $detail )
                         }
@@ -2280,7 +2280,7 @@ Function Scan-Network
                                                                               IPV6Address,
                                                                               ResponseTime,
                                                                               @{ label = "STATUS"; expression = {"Responding"} }
-        
+
                                 If( $quiet )
                                 {
                                     $Output.address
@@ -2308,7 +2308,7 @@ Function Scan-Network
                                 {
                                     $status = "Error: $_"
                                 }
-        
+
                                 "" | Select -Property @{ label = "Address"; expression = {$computer} },
                                                       IPV4Address,
                                                       IPV6Address,
@@ -2327,7 +2327,7 @@ Function Scan-Network
             [IPAddress]$IPAddress='0.0.0.0'
           )
           $addressBytes=$IPAddress.GetAddressBytes()
-        
+
           $strBuilder=New-Object -TypeName Text.StringBuilder
           foreach($byte in $addressBytes){
             $8bitString=[Convert]::ToString($byte,2).PadRight(8,'0')
@@ -2335,7 +2335,7 @@ Function Scan-Network
           }
           Write-Output $strBuilder.ToString()
         }
-        
+
         Function ConvertIPv4ToInt {
           [CmdletBinding()]
           Param(
@@ -2343,17 +2343,17 @@ Function Scan-Network
           )
           Try{
             $ipAddress=[IPAddress]::Parse($IPv4Address)
-        
+
             $bytes=$ipAddress.GetAddressBytes()
             [Array]::Reverse($bytes)
-        
+
             [System.BitConverter]::ToUInt32($bytes,0)
           }Catch{
             Write-Error -Exception $_.Exception `
               -Category $_.CategoryInfo.Category
           }
         }
-        
+
         Function ConvertIntToIPv4 {
           [CmdletBinding()]
           Param(
@@ -2368,34 +2368,34 @@ Function Scan-Network
               -Category $_.CategoryInfo.Category
           }
         }
-        
+
         <#
         .SYNOPSIS
         Add an integer to an IP Address and get the new IP Address.
-        
+
         .DESCRIPTION
         Add an integer to an IP Address and get the new IP Address.
-        
+
         .PARAMETER IPv4Address
         The IP Address to add an integer to.
-        
+
         .PARAMETER Integer
         An integer to add to the IP Address. Can be a positive or negative number.
-        
+
         .EXAMPLE
         Add-IntToIPv4Address -IPv4Address 10.10.0.252 -Integer 10
-        
+
         10.10.1.6
-        
+
         Description
         -----------
         This command will add 10 to the IP Address 10.10.0.1 and return the new IP Address.
-        
+
         .EXAMPLE
         Add-IntToIPv4Address -IPv4Address 192.168.1.28 -Integer -100
-        
+
         192.168.0.184
-        
+
         Description
         -----------
         This command will subtract 100 from the IP Address 192.168.1.28 and return the new IP Address.
@@ -2403,21 +2403,21 @@ Function Scan-Network
         Function Add-IntToIPv4Address {
           Param(
             [String]$IPv4Address,
-        
+
             [int64]$Integer
           )
           Try{
             $ipInt=ConvertIPv4ToInt -IPv4Address $IPv4Address `
               -ErrorAction Stop
             $ipInt+=$Integer
-        
+
             ConvertIntToIPv4 -Integer $ipInt
           }Catch{
             Write-Error -Exception $_.Exception `
               -Category $_.CategoryInfo.Category
           }
         }
-        
+
         Function CIDRToNetMask {
           [CmdletBinding()]
           Param(
@@ -2425,17 +2425,17 @@ Function Scan-Network
             [int16]$PrefixLength=0
           )
           $bitString=('1' * $PrefixLength).PadRight(32,'0')
-        
+
           $strBuilder=New-Object -TypeName Text.StringBuilder
-        
+
           for($i=0;$i -lt 32;$i+=8){
             $8bitString=$bitString.Substring($i,8)
             [void]$strBuilder.Append("$([Convert]::ToInt32($8bitString,2)).")
           }
-        
+
           $strBuilder.ToString().TrimEnd('.')
         }
-        
+
         Function NetMaskToCIDR {
           [CmdletBinding()]
           Param(
@@ -2446,12 +2446,12 @@ Function Scan-Network
           Try{
             $netMaskIP=[IPAddress]$SubnetMask
             $addressBytes=$netMaskIP.GetAddressBytes()
-        
+
             $strBuilder=New-Object -TypeName Text.StringBuilder
-        
+
             $lastByte=255
             foreach($byte in $addressBytes){
-        
+
               # Validate byte matches net mask value
               If($byte -notmatch $byteRegex){
                 Write-Error -Message $invalidMaskMsg `
@@ -2462,37 +2462,37 @@ Function Scan-Network
                   -Category InvalidArgument `
                   -ErrorAction Stop
               }
-        
+
               [void]$strBuilder.Append([Convert]::ToString($byte,2))
               $lastByte=$byte
             }
-        
+
             ($strBuilder.ToString().TrimEnd('0')).Length
           }Catch{
             Write-Error -Exception $_.Exception `
               -Category $_.CategoryInfo.Category
           }
         }
-        
+
         <#
         .SYNOPSIS
         Get information about an IPv4 subnet based on an IP Address and a subnet mask or prefix length
-        
+
         .DESCRIPTION
         Get information about an IPv4 subnet based on an IP Address and a subnet mask or prefix length
-        
+
         .PARAMETER IPAddress
-        The IP Address to use for determining subnet information. 
-        
+        The IP Address to use for determining subnet information.
+
         .PARAMETER PrefixLength
         The prefix length of the subnet.
-        
+
         .PARAMETER SubnetMask
         The subnet mask of the subnet.
-        
+
         .EXAMPLE
         Get-IPv4Subnet -IPAddress 192.168.34.76 -SubnetMask 255.255.128.0
-        
+
         CidrID       : 192.168.0.0/17
         NetworkID    : 192.168.0.0
         SubnetMask   : 255.255.128.0
@@ -2501,14 +2501,14 @@ Function Scan-Network
         FirstHostIP  : 192.168.0.1
         LastHostIP   : 192.168.127.254
         Broadcast    : 192.168.127.255
-        
+
         Description
         -----------
         This command will get the subnet information about the IPAddress 192.168.34.76, with the subnet mask of 255.255.128.0
-        
+
         .EXAMPLE
         Get-IPv4Subnet -IPAddress 10.3.40.54 -PrefixLength 25
-        
+
         CidrID       : 10.3.40.0/25
         NetworkID    : 10.3.40.0
         SubnetMask   : 255.255.255.128
@@ -2517,21 +2517,21 @@ Function Scan-Network
         FirstHostIP  : 10.3.40.1
         LastHostIP   : 10.3.40.126
         Broadcast    : 10.3.40.127
-        
+
         Description
         -----------
         This command will get the subnet information about the IPAddress 10.3.40.54, with the subnet prefix length of 25.
-        
+
         #>
         Function Get-IPv4Subnet {
           [CmdletBinding(DefaultParameterSetName='PrefixLength')]
           Param(
             [Parameter(Mandatory=$true,Position=0)]
             [IPAddress]$IPAddress,
-        
+
             [Parameter(Position=1,ParameterSetName='PrefixLength')]
             [Int16]$PrefixLength=24,
-        
+
             [Parameter(Position=1,ParameterSetName='SubnetMask')]
             [IPAddress]$SubnetMask
           )
@@ -2545,28 +2545,28 @@ Function Scan-Network
                 $SubnetMask=CIDRToNetMask -PrefixLength $PrefixLength `
                   -ErrorAction Stop
               }
-              
-              $netMaskInt=ConvertIPv4ToInt -IPv4Address $SubnetMask     
+
+              $netMaskInt=ConvertIPv4ToInt -IPv4Address $SubnetMask
               $ipInt=ConvertIPv4ToInt -IPv4Address $IPAddress
-              
+
               $networkID=ConvertIntToIPv4 -Integer ($netMaskInt -band $ipInt)
-        
+
               $maxHosts=[math]::Pow(2,(32-$PrefixLength)) - 2
               $broadcast=Add-IntToIPv4Address -IPv4Address $networkID `
                 -Integer ($maxHosts+1)
-        
+
               $firstIP=Add-IntToIPv4Address -IPv4Address $networkID -Integer 1
               $lastIP=Add-IntToIPv4Address -IPv4Address $broadcast -Integer -1
-        
+
               If($PrefixLength -eq 32){
                 $broadcast=$networkID
                 $firstIP=$null
                 $lastIP=$null
                 $maxHosts=0
               }
-        
-              $outputObject=New-Object -TypeName PSObject 
-        
+
+              $outputObject=New-Object -TypeName PSObject
+
               $memberParam=@{
                 InputObject=$outputObject;
                 MemberType='NoteProperty';
@@ -2580,7 +2580,7 @@ Function Scan-Network
               Add-Member @memberParam -Name FirstHostIP -Value $firstIP
               Add-Member @memberParam -Name LastHostIP -Value $lastIP
               Add-Member @memberParam -Name Broadcast -Value $broadcast
-        
+
               Write-Output $outputObject
             }Catch{
               Write-Error -Exception $_.Exception `
@@ -2591,7 +2591,7 @@ Function Scan-Network
         }
 
   } # End Begin
-  
+
   Process
 {
   $NetworkScan = &{}
@@ -2618,7 +2618,7 @@ IF ($Subnet) {
                 If ($DeviceNetBIOS -eq $Null)
                 {
                     Write-Verbose "NetBIOS Name Did Not Exist"
-                    try 
+                    try
                     {
                        Write-Verbose "Trying DNS"
                         $Device | ForEach-Object {([system.net.dns]::GetHostByAddress($_)).hostname}
@@ -2641,38 +2641,38 @@ IF ($Subnet) {
   End{}
 }
 ########################
-						 
-													
-										
-																								
-															
-													
-																 
-							  
-																				 
-												
-															 
-																									
-			 
-																														   
-						   
-						
-						 
-												 
-								   
-																							 
-															
-													
-																 
-							  
-																				 
-												
-															 
-																									
-			 
-																														   
-						 
-						
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Function Show-LTErrors {Get-Content -Path 'C:\Windows\LTSVC\LTErrors.txt' -Tail 25 -Wait}
 ########################
 Function New-IPRange {
@@ -2719,11 +2719,11 @@ param (
 
     [int[]]$Exclude = @( 0, 1, 255 )
 )
-    
+
     #Provide verbose output.  Some oddities behind casting certain strings to IP.
     #Example: [ipaddress]"192.168.20500"
     Write-Verbose "Parsed Start as '$Start', End as '$End'"
-    
+
     $ip1 = $start.GetAddressBytes()
     [Array]::Reverse($ip1)
     $ip1 = ([System.Net.IPAddress]($ip1 -join '.')).Address
