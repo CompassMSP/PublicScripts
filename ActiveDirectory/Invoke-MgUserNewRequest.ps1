@@ -4944,7 +4944,7 @@ The user start date is $($userInput.employeeHireDate).<br>
                 return $headers
             }
 
-            $headers = Get-ConnectWiseManageToken -CompanyId $($config.ConnectWiseManage.CompanyId) -PublicKey $($config.ConnectWiseManage.PublicKey) -PrivateKey $($config.ConnectWiseManage.PrivateKey) -clientId $($config.ConnectWiseManage.ClientId)
+            $psaHeaders = Get-ConnectWiseManageToken -CompanyId $($config.ConnectWiseManage.CompanyId) -PublicKey $($config.ConnectWiseManage.PublicKey) -PrivateKey $($config.ConnectWiseManage.PrivateKey) -clientId $($config.ConnectWiseManage.ClientId)
 
             $emailSubject = "8x8 – New User"
             $callCenter = if ($MgUser.officeLocation -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
@@ -4986,7 +4986,7 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
             $8x8TicketResults = Invoke-RestMethod `
                 -Method Post `
                 -Uri "$baseUrl/service/tickets" `
-                -Headers $headers `
+                -Headers $psaHeaders `
                 -Body $body `
                 -ContentType "application/json"
 
