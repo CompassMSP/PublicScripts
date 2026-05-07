@@ -512,34 +512,34 @@ function Get-ScriptConfig {
 
         # Prompt for required values
         $config = @{
-            ExchangeOnline = @{
+            ExchangeOnline    = @{
                 AppId              = Read-Host "Enter Exchange Online AppId"
                 Organization       = Read-Host "Enter Organization (e.g., company.onmicrosoft.com)"
                 CertificateSubject = Read-Host "Enter Exchange Online certificate subject (e.g., CN=ExO PowerShell)"
             }
-            Graph          = @{
+            Graph             = @{
                 AppId              = Read-Host "Enter Graph AppId"
                 TenantId           = Read-Host "Enter TenantId"
                 CertificateSubject = Read-Host "Enter Graph certificate subject (e.g., CN=Graph PowerShell)"
             }
-            PnPSharePoint  = @{
+            PnPSharePoint     = @{
                 AppId              = Read-Host "Enter PnP SharePoint AppId"
                 Url                = Read-Host "Enter SharePoint Online URL"
                 CertificateSubject = Read-Host "Enter PnP certificate subject (e.g., CN=PnP PowerShell)"
             }
-            Paths          = @{
+            Paths             = @{
                 NewUserLogPath = "C:\Temp\NewUserCreation.log"
                 LogPath        = "C:\Temp\UserTermination.log"
                 TermExportPath = "C:\Temp\terminated_users_exports"
             }
-            Email          = @{
+            Email             = @{
                 NotificationFrom  = Read-Host "Enter notification from address"
                 SecurityTeamEmail = Read-Host "Enter security team email"
             }
-            TestMode       = @{
+            TestMode          = @{
                 Email = Read-Host "Enter test email address for development"
             }
-            Offboarding    = @{
+            Offboarding       = @{
                 FallbackOwnerId = Read-Host "Enter fallback owner object ID for group ownership transfer"
             }
             ConnectWiseManage = @{
@@ -1042,7 +1042,7 @@ function Get-UserTermination {
 <Window
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="User Termination Request" Height="780" Width="600"
+    Title="User Termination Request" Height="930" Width="650"
     WindowStartupLocation="CenterScreen">
 
     <Window.Resources>
@@ -1050,55 +1050,10 @@ function Get-UserTermination {
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
             </ResourceDictionary.MergedDictionaries>
-
-            <!-- TabControl Style -->
-            <Style TargetType="TabControl">
-                <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="BorderThickness" Value="0"/>
-                <Setter Property="Padding" Value="0"/>
-            </Style>
-
-            <!-- TabItem Style -->
-            <Style TargetType="TabItem">
-                <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="BorderThickness" Value="0"/>
-                <Setter Property="Padding" Value="20,10"/>
-                <Setter Property="Margin" Value="0,0,4,0"/>
-                <Setter Property="FontSize" Value="14"/>
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="TabItem">
-                            <Border x:Name="Border"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{DynamicResource TextControlBorderBrush}"
-                                    BorderThickness="0,0,0,2"
-                                    CornerRadius="4,4,0,0">
-                                <ContentPresenter x:Name="ContentSite"
-                                                ContentSource="Header"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource TextControlBackgroundPointerOver}"/>
-                                    <Setter Property="BorderThickness" Value="0,0,0,2"/>
-                                    <Setter Property="BorderBrush" Value="{DynamicResource SystemAccentColor}"/>
-                                    <Setter Property="TextElement.Foreground" Value="{DynamicResource SystemAccentColor}"/>
-                                </Trigger>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource TextControlBackgroundPointerOver}"/>
-                                    <Setter TargetName="Border" Property="BorderThickness" Value="0,0,0,2"/>
-                                    <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource SystemAccentColorLight1}"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
         </ResourceDictionary>
     </Window.Resources>
 
-    <Grid>
+    <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -1106,7 +1061,7 @@ function Get-UserTermination {
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="20,20,20,0">
+        <StackPanel Grid.Row="0">
             <TextBlock Text="User Termination Request" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,20"/>
             <Border Background="{DynamicResource TextControlBackgroundPointerOver}"
                     BorderBrush="{DynamicResource TextControlBorderBrush}"
@@ -1120,7 +1075,7 @@ function Get-UserTermination {
         </StackPanel>
 
         <!-- Main Content -->
-        <ScrollViewer Grid.Row="1" Margin="20,10,20,20" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="1" Margin="0,10,0,0" VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <!-- User Information Section -->
                 <GroupBox Header="User Information"
@@ -1260,13 +1215,17 @@ function Get-UserTermination {
                          BorderBrush="{DynamicResource TextControlBorderBrush}"
                          Background="{DynamicResource TextControlBackgroundPointerOver}">
                     <StackPanel Margin="15">
+                        <CheckBox x:Name="chkSetOOO"
+                                  Content="Set Out of Office Auto-Reply"
+                                  Margin="0,0,0,8"/>
                         <Label Content="Out of Office Message"/>
                         <TextBox x:Name="txtOutOfOffice"
                                Height="80"
                                TextWrapping="Wrap"
                                AcceptsReturn="True"
                                VerticalScrollBarVisibility="Auto"
-                               Padding="8,5,8,5"/>
+                               Padding="8,5,8,5"
+                               IsEnabled="False"/>
                     </StackPanel>
                 </GroupBox>
             </StackPanel>
@@ -1289,7 +1248,7 @@ function Get-UserTermination {
                 <TextBlock x:Name="tbStatus" Grid.Column="1" VerticalAlignment="Center" Margin="20,0"/>
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button x:Name="btnSubmit" Content="Submit" Style="{DynamicResource AccentButtonStyle}" Padding="20,5" Height="32" Margin="0,0,10,0"/>
-                    <Button x:Name="btnReset" Content="Reset Form" Padding="20,5" Height="32" Margin="0,0,10,0"/>
+                    <Button x:Name="btnReset" Content="Reset" Padding="20,5" Height="32" Margin="0,0,10,0"/>
                     <Button x:Name="btnCancel" Content="Cancel" Padding="20,5" Height="32"/>
                 </StackPanel>
             </Grid>
@@ -1349,12 +1308,14 @@ function Get-UserTermination {
         $txtOneDriveAccess.Text = ""
         $chkOneDriveReadOnly.IsChecked = $false
         $chkTestMode.IsChecked = $false
+        $chkSetOOO.IsChecked = $false
+        $txtOutOfOffice.Text = ""
+        $txtOutOfOffice.IsEnabled = $false
         Show-StatusMessage -Message "Form has been reset" -Type "Info"
     }
 
     # Function to get form data
     function Get-FormData {
-        $outOfOfficeMessage = $txtOutOfOffice.Text.Trim()
         return [PSCustomObject]@{
             InputUser               = $txtUserToTerminate.Text
             InputUserFullControl    = $txtMailboxControl.Text
@@ -1363,9 +1324,13 @@ function Get-UserTermination {
             SetOneDriveReadOnly     = $chkOneDriveReadOnly.IsChecked
             TestModeEnabled         = $chkTestMode.IsChecked
             OutOfOfficeMessage      = $txtOutOfOffice.Text.Trim()
-            SetOOO                  = [bool]$outOfOfficeMessage
+            SetOOO                  = [bool]$chkSetOOO.IsChecked
         }
     }
+
+    # Wire OOO checkbox to enable/disable message text box
+    $chkSetOOO.Add_Checked({ $txtOutOfOffice.IsEnabled = $true })
+    $chkSetOOO.Add_Unchecked({ $txtOutOfOffice.IsEnabled = $false; $txtOutOfOffice.Text = "" })
 
     # Add email validation to text boxes
     $emailTextBoxes = @($txtUserToTerminate, $txtMailboxControl, $txtForwardMailbox, $txtOneDriveAccess)
@@ -2793,6 +2758,10 @@ try {
 
     # Load configuration
     $config = Get-ScriptConfig
+
+    if (-not (Test-Path $config.Paths.TermExportPath)) {
+        New-Item -Path $config.Paths.TermExportPath -ItemType Directory -Force | Out-Null
+    }
 
     $script:TestEmailAddress = $config.TestMode.Email
 
