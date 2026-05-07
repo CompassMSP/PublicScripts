@@ -3116,6 +3116,7 @@ function New-UserProperties {
                     -Message "Please enter a different emailAddress: '$userPrincipalName' already exists." `
                     -AlertType "Warning"
 
+                #TODO! - Add loop to keep prompting until they enter a unique email or cancel
                 if ($formDuplicateEmail -ne $accountName) {
                     $accountName = $formDuplicateEmail
                     $userPrincipalName = ($accountName + $Domain).ToLower()
@@ -4566,9 +4567,6 @@ function Start-NewUserFinalize {
                     if (-not $ConnectwisePSAUserCreated.EngineerResult.Success) {
                         "- Error: $($ConnectwisePSAUserCreated.EngineerResult.Error)"
                     }
-                }
-                if ($ConnectwisePSAUserCreated.Success -eq $true) {
-                    "NOTE: Please create user in Connectwise Home and assign the SSO ID manually to complete the setup."
                 }
             } else {
                 "- Connectwise PSA user creation was not attempted."
