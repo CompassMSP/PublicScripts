@@ -32,12 +32,18 @@ $script:GraphHeaders = $null
 .NOTES
     Author: Chris Williams
     Created: 2021-12-20
-    Last Modified: 2026-05-06
+    Last Modified: 2026-05-07
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.2      2026-05-07   Bug Fixes and Code Quality:
+                               - Fixed ConvertTo-Json missing -Depth parameter in config save
+                               - Fixed incorrect comment on Remove-UserFromEntraGroups group filter (code was correct, comment was wrong)
+                               - Removed unnecessary 2-second sleep per license in Remove-UserLicenses
+                               - Improved OneDrive access validation failure message to prompt manual follow-up
+
     4.4.1      2026-05-06   Feature Update:
                                - Added Connectwise PSA user removal for offboarding process
 
@@ -62,7 +68,7 @@ $script:GraphHeaders = $null
                                 - Removed provisioning steps for Zoom Phone and Contact Center as we are moving to 8x8
 
     3.2.0      2025-02-03   Zoom Phone Offboarding:
-                                - Added removeal steps for Zoom Phone and Contact Cente
+                                - Added removal steps for Zoom Phone and Contact Center (removed in 3.3.0)
 
     3.0.0      2025-01-20   Major Rework:
                                 - Complete script reorganization and optimization
@@ -190,7 +196,8 @@ if (-not $PSBoundParameters['Verbose']) {
 # Initialize loading animation
 Clear-Host
 
-Write-Host "`n  Initializing User Termination Script v4.4.0..." -ForegroundColor Cyan
+$script:Version = (Select-String -Path $PSCommandPath -Pattern '^\s+(\d+\.\d+\.\d+)\s+\d{4}-\d{2}-\d{2}' | Select-Object -First 1).Matches.Groups[1].Value
+Write-Host "`n  Initializing User Termination Script v$script:Version..." -ForegroundColor Cyan
 $startTime = Get-Date
 Write-Host "  Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
 
@@ -523,7 +530,7 @@ function Get-ScriptConfig {
             Paths          = @{
                 NewUserLogPath = "C:\Temp\NewUserCreation.log"
                 LogPath        = "C:\Temp\UserTermination.log"
-                ExportPath     = "C:\Temp\terminated_users_exports"
+                TermExportPath = "C:\Temp\terminated_users_exports"
             }
             Email          = @{
                 NotificationFrom  = Read-Host "Enter notification from address"
@@ -532,10 +539,19 @@ function Get-ScriptConfig {
             TestMode       = @{
                 Email = Read-Host "Enter test email address for development"
             }
+            Offboarding    = @{
+                FallbackOwnerId = Read-Host "Enter fallback owner object ID for group ownership transfer"
+            }
+            ConnectWiseManage = @{
+                CompanyId  = Read-Host "Enter ConnectWise CompanyId"
+                PublicKey  = Read-Host "Enter ConnectWise PublicKey"
+                PrivateKey = Read-Host "Enter ConnectWise PrivateKey"
+                ClientId   = Read-Host "Enter ConnectWise ClientId"
+            }
         }
 
         # Save config
-        $config | ConvertTo-Json | Set-Content $ConfigPath
+        $config | ConvertTo-Json -Depth 5 | Set-Content $ConfigPath
 
         return $config
     } catch {
@@ -1657,7 +1673,7 @@ function Disable-ADUser {
                     'facsimileTelephoneNumber',
                     'l', # l is for Location because Microsoft AD attributes are stupid
                     'c', # c is for Country because Microsoft AD attributes are stupid
-                    'wWWHomePage'
+                    'wWWHomePage',
                     'mobile',
                     'telephoneNumber',
                     'extensionAttribute1',
@@ -2083,7 +2099,7 @@ function Remove-UserFromEntraGroups {
                 $memberOfUri = $response.'@odata.nextLink'
             } while ($memberOfUri)
 
-            # Filter out directory roles, dynamic groups, and cloud-only groups
+            # Filter out directory roles, dynamic groups, and on-prem synced groups (AD handles those)
             $filteredGroups = $groupObjects | Where-Object {
                 $_.'@odata.type' -ne '#microsoft.graph.directoryRole' -and
                 ($_.groupTypes -notcontains 'DynamicMembership') -and
@@ -2339,7 +2355,6 @@ function Remove-UserLicenses {
 
                     Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Ancillary License: $($license.skuPartNumber)" -Type OK
-                    Start-Sleep -Seconds 2
                 } catch {
                     Write-StatusMessage -Message "Failed to remove Ancillary License $($license.skuPartNumber) - will retry later" -Type WARN
                     $null = $failedLicenses.Add($license)
@@ -2356,7 +2371,6 @@ function Remove-UserLicenses {
 
                     Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Primary License: $($license.skuPartNumber)" -Type OK
-                    Start-Sleep -Seconds 2
                 } catch {
                     Write-StatusMessage -Message "Failed to remove Primary License $($license.skuPartNumber) - will retry later" -Type WARN
                     $null = $failedLicenses.Add($license)
@@ -2817,8 +2831,8 @@ try {
             Write-StatusMessage -Message "OneDrive access user validated" -Type 'OK'
         } catch {
             Write-StatusMessage -Message "Invalid OneDrive access user specified: $_" -Type 'ERROR'
-            Write-StatusMessage -Message "OneDrive access user validation failed. Skipping OneDrive access grant." -Type 'ERROR'
-            $GrantUserOneDriveAccess = $null  # Reset to null if validation fails
+            Write-StatusMessage -Message "OneDrive access grant will be skipped. Please assign OneDrive access manually after the script completes." -Type 'WARN'
+            $GrantUserOneDriveAccess = $null
         }
     }
 
