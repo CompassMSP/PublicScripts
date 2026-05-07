@@ -32,7 +32,7 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2026-04-27
+    Last Modified: 2026-05-06
 
     Version History:
     ------------------------------------------------------------------------------
@@ -4375,18 +4375,26 @@ function New-ConnectwisePSAMember {
     try {
 
         # 1. Get template member details
-        $templateMember = Invoke-ConnectWiseManageAPI -Method 'GET' -Headers $headers -Endpoint "system/members" -Conditions "officeemail='$TemplateUserEmail' AND inactiveFlag=false"
+        $getTemplateMemberParameters = @{
+            Method     = 'GET'
+            Headers    = $Headers
+            Endpoint   = "system/members"
+            Conditions = "officeemail='$TemplateUserEmail' AND inactiveFlag=false"
+        }
 
-        if (-not $templateMember.Success) {
+        $templateMember = Invoke-ConnectWiseManageAPI @getTemplateMemberParameters
+
+        if ($templateMember.Content.Count -gt 1) {
             return @{
                 Success = $false
-                Error   = $templateMember.Error
+                Error   = [System.Exception]::new("API returned multiple active members. Please ensure the template user is valid.")
             }
         }
 
         if (-not $templateMember.Content) {
             return @{
                 Success = $false
+                Reason  = 'NotFound'
                 Error   = [System.Exception]::new("No active template member found with email: $TemplateUserEmail")
             }
         }
@@ -4517,9 +4525,7 @@ function New-ConnectwisePSAMember {
             # Step 5: Send the PATCH request
             $engineerResult = Invoke-ConnectWiseManageAPI -Method 'PATCH' -Headers $headers -Endpoint "system/userDefinedFields/$($selectCustomField.Id)" -Body $customFieldsBody
 
-            if (-not $engineerResult.Success) {
-                Write-Warning "Failed to set as Primary Engineer: $($engineerResult.Error.Message)"
-            }
+            # EngineerResult attached to return; caller handles success/failure messaging
 
         }
 
@@ -4611,6 +4617,8 @@ function Start-NewUserFinalize {
                 if ($ConnectwisePSAUserCreated.Success -eq $true) {
                     "- Member ID: $($ConnectwisePSAUserCreated.Content.id)"
                     "- Member Username: $($ConnectwisePSAUserCreated.Content.identifier)"
+                } elseif ($ConnectwisePSAUserCreated.Reason -eq 'NotFound') {
+                    "- Skipped: Template user not found in Connectwise PSA"
                 } else {
                     "- Error: $($ConnectwisePSAUserCreated.Error)"
                 }
@@ -4620,13 +4628,13 @@ function Start-NewUserFinalize {
                         "- Error: $($ConnectwisePSAUserCreated.EngineerResult.Error)"
                     }
                 }
-            if ($ConnectwisePSAUserCreated.Success -eq $true) {
+                if ($ConnectwisePSAUserCreated.Success -eq $true) {
                     "NOTE: Please create user in Connectwise Home and assign the SSO ID manually to complete the setup."
                 }
             } else {
                 "- Connectwise PSA user creation was not attempted."
             }),
-        "",
+
         "Group Assignment Status:",
         "----------------------------------------",
         "- Total Groups Attempted: $AssignedGroupCount",
@@ -4764,6 +4772,7 @@ $progressSteps = @(
     @{ Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
     @{ Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
     @{ Name = "Managed Service Mailbox Assignment"; Description = "Assigning access rights for managedservices mailbox" }
+    @{ Name = "Connectwise PSA Member Creation"; Description = "Creating Connectwise PSA member" }
     @{ Name = "Notifications"; Description = "Sending email notifications" }
     @{ Name = "OneDrive Provisioning"; Description = "Provisioning new users OneDrive" }
     @{ Name = "Configuring BookWithMeId"; Description = "Configuring BookWithMeId" }
@@ -5223,9 +5232,18 @@ try {
 
         if ($newPSAMemberResults.Success -and $newPSAMemberResults.Content.id) {
             Write-StatusMessage -Message "Successfully created Connectwise PSA user: $($newPSAMemberResults.Content.id) - $($newPSAMemberResults.Content.identifier)" -Type OK
+
+            if ($newPSAMemberResults.EngineerResult) {
+                if ($newPSAMemberResults.EngineerResult.Success) {
+                    Write-StatusMessage -Message "Successfully set as Primary Engineer." -Type OK
+                } else {
+                    Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error.Message)" -Type WARNING
+                }
+            }
         } else {
-            Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error)" -Type ERROR
+            Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error.Message)" -Type ERROR
         }
+
 
     } else {
         Write-StatusMessage -Message "Create Connectwise User option not selected. Skipping..." -Type INFO

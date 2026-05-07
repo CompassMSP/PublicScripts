@@ -32,12 +32,15 @@ $script:GraphHeaders = $null
 .NOTES
     Author: Chris Williams
     Created: 2021-12-20
-    Last Modified: 2025-06-25
+    Last Modified: 2026-05-06
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.1      2026-05-06   Feature Update:
+                               - Added Connectwise PSA user removal for offboarding process
+
     4.4.0      2026-04-27   Refactor:
                                - Migrated all Graph calls from Microsoft.Graph module to Invoke-RestMethod
                                - Replaced Connect-MgGraph/Disconnect-MgGraph with Get-GraphToken certificate auth
@@ -454,9 +457,9 @@ function Get-GraphToken {
 function Get-ServiceCert {
     param([string]$Subject)
     $cert = Get-ChildItem Cert:\LocalMachine\My |
-        Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now } |
-        Sort-Object NotAfter -Descending |
-        Select-Object -First 1
+    Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now } |
+    Sort-Object NotAfter -Descending |
+    Select-Object -First 1
     if (-not $cert) { Exit-Script -Message "No valid certificate found matching '$Subject'" -ExitCode ConfigError }
     $cert
 }
@@ -660,9 +663,9 @@ function Connect-ServiceEndpoints {
 
             Write-StatusMessage -Message "Connecting to Exchange Online..." -Type 'INFO'
             $ExOCert = Get-ChildItem Cert:\LocalMachine\My |
-                Where-Object { ($_.Subject -like "*$($ExOCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) } |
-                Sort-Object NotAfter -Descending |
-                Select-Object -First 1
+            Where-Object { ($_.Subject -like "*$($ExOCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) } |
+            Sort-Object NotAfter -Descending |
+            Select-Object -First 1
 
             if ($null -eq $ExOCert) {
                 Exit-Script -Message "No valid ExO PowerShell certificates found in the LocalMachine\My store" -ExitCode ConfigError
@@ -691,9 +694,9 @@ function Connect-ServiceEndpoints {
 
             Write-StatusMessage -Message "Connecting to SharePoint Online..." -Type 'INFO'
             $PnPCert = Get-ChildItem Cert:\LocalMachine\My |
-                Where-Object { ($_.Subject -like "*$($PnPCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) } |
-                Sort-Object NotAfter -Descending |
-                Select-Object -First 1
+            Where-Object { ($_.Subject -like "*$($PnPCertSubject)*") -and ($_.NotAfter -gt $([DateTime]::Now)) } |
+            Sort-Object NotAfter -Descending |
+            Select-Object -First 1
 
             if ($null -eq $PnPCert) {
                 Exit-Script -Message "No valid PnP PowerShell certificates found in the LocalMachine\My store." -ExitCode ConfigError
@@ -2496,6 +2499,161 @@ function Set-TerminatedOneDrive {
     }
 }
 
+function Get-ConnectWiseManageToken {
+    param (
+        [string]$CompanyId,
+        [string]$PublicKey,
+        [string]$PrivateKey,
+        [string]$clientId
+    )
+
+    # Encode companyId+publicKey:privateKey in Base64
+    $pair = "$CompanyId+$PublicKey`:$PrivateKey"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+    $base64 = [Convert]::ToBase64String($bytes)
+
+    # Create headers with Basic authentication
+    $headers = @{
+        "Authorization" = "Basic $base64"
+        "Content-Type"  = "application/json"
+        "ClientId"      = $clientId
+    }
+
+    return $headers
+}
+
+function Invoke-ConnectWiseManageAPI {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Method,
+
+        [Parameter(Mandatory)]
+        [string]$Endpoint,
+        [string]$Conditions,
+        [Parameter(Mandatory)]
+        [hashtable]$Headers,
+
+        [object]$Body,
+
+        [string]$BaseUrl = "https://service.mycompass.cloud",
+        [string]$Version = "v4_6_release/apis/3.0",
+        [string]$ContentType = 'application/json',
+
+        [switch]$NoPagination,
+        [int]$PageSize = 1000
+    )
+
+    try {
+        $Endpoint = $Endpoint.Trim('/')
+        if ($Conditions) {
+            $encodedConditions = [Uri]::EscapeDataString($Conditions)
+            $uri = "$BaseUrl/$Version/$Endpoint`?conditions=$encodedConditions"
+        } else {
+            $uri = "$BaseUrl/$Version/$Endpoint"
+        }
+
+        $bodyJson = $null
+        if ($Body) {
+            if ($Method -eq 'PATCH') { $Body = , $Body }
+            $bodyJson = $Body | ConvertTo-Json -Depth 10 -Compress
+        }
+
+        if ($Method -eq 'GET' -and -not $NoPagination) {
+            $allResults = @()
+            $page = 1
+            $hasMore = $true
+
+            while ($hasMore) {
+                $separator = if ($uri -match '\?') { '&' } else { '?' }
+                $pageUri = "$uri${separator}page=$page&pageSize=$PageSize"
+                Write-Verbose "Fetching page $($page): $pageUri"
+
+                $response = Invoke-RestMethod -Method $Method -Uri $pageUri -Headers $Headers -ErrorAction Stop
+
+                if ($response) { $allResults += $response }
+
+                if ($response.Count -lt $PageSize) { $hasMore = $false } else { $page++ }
+            }
+
+            return @{
+                Success = $true
+                Content = $allResults
+                JSON    = $allResults | ConvertTo-Json -Depth 10
+            }
+        } else {
+            $response = Invoke-RestMethod -Method $Method -Uri $uri -Headers $Headers -ContentType $ContentType -Body $bodyJson -ErrorAction Stop
+            return @{
+                Success = $true
+                Content = $response
+                JSON    = if ($response) { $response | ConvertTo-Json -Depth 10 } else { $null }
+            }
+        }
+    } catch {
+        return @{
+            Success = $false
+            Error   = $_.Exception
+        }
+    }
+}
+
+function Disable-ConnectwisePSAMember {
+    param (
+        [Parameter(Mandatory)]
+        [hashtable]$TermUser,
+        [Parameter(Mandatory)]
+        [hashtable]$headers
+    )
+
+    try {
+
+        # 1. Get term member details
+        $getTermMemberParameters = @{
+            Method     = 'GET'
+            Headers    = $Headers
+            Endpoint   = "system/members"
+            Conditions = "officeemail='$($TermUser.Mail)' AND inactiveFlag=false"
+        }
+
+        $getTermMember = Invoke-ConnectWiseManageAPI @getTermMemberParameters
+
+        if ($getTermMember.Content.Count -gt 1) {
+            return @{
+                Success = $false
+                Error   = [System.Exception]::new("API returned multiple active members. Please ensure the term user is valid.")
+            }
+        }
+
+        if (-not $getTermMember.Content) {
+            return @{
+                Success = $false
+                Reason  = 'NotFound'
+                Error   = [System.Exception]::new("No active member found with email: $($TermUser.Mail)")
+            }
+        }
+
+        # 2. Disable term member
+        $termEndpoint = "system/members/$($getTermMember.content.id)/deactivate"
+        $termResult = Invoke-ConnectWiseManageAPI -Method 'POST' -Headers $headers -Endpoint $termEndpoint
+
+        # 3. Return result
+        if ($termResult.Success) {
+            return @{ Success = $true }
+        } else {
+            return @{
+                Success = $false
+                Error   = $termResult.Error
+            }
+        }
+
+    } catch {
+        return @{
+            Success = $false
+            Error   = $_.Exception
+        }
+    }
+}
+
 function Start-Finalize {
     [CmdletBinding()]
     param(
@@ -2518,7 +2676,9 @@ function Start-Finalize {
 
         [Parameter()]
         [array]
-        $FallbackOwnerGroups
+        $FallbackOwnerGroups,
+        [Parameter()]
+        [hashtable]$PSAMemberDisableResults
     )
 
     # Build summary parts
@@ -2533,47 +2693,60 @@ function Start-Finalize {
         "- Email Address: $($User.mail)"
     )
 
-    if ($GrantUserFullControl) {
-        $summaryParts += "- Mailbox access granted to: $GrantUserFullControl"
-    }
-    if ($SetUserMailFWD) {
-        $summaryParts += "- Mail forwarded to: $SetUserMailFWD"
-    }
-    if ($GrantUserOneDriveAccess) {
-        $summaryParts += "- OneDrive access granted to: $GrantUserOneDriveAccess"
-    }
-    if ($ExportPath) {
-        $summaryParts += "- Attributes, Groups and licenses exported to: $ExportPath"
-    }
-
-    # Add fallback owner group info
-    if ($FallbackOwnerGroups) {
-        $summaryParts += ""
-        $summaryParts += "Groups where fallback owner was added:"
-        $summaryParts += "----------------------------------------"
-
-        foreach ($g in $FallbackOwnerGroups) {
-            if ($g.DisplayName) {
-                $summaryParts += "- $($g.DisplayName) ($($g.Id))"
+    if ($PSAMemberDisableResults) {
+        if ($PSAMemberDisableResults.Success) {
+            $summaryParts += "- ConnectWise PSA Member: Successfully disabled"
+        } else {
+            $msg = "- ConnectWise PSA Member: $($PSAMemberDisableResults.Error.Message)"
+            if ($PSAMemberDisableResults.Reason -eq 'NotFound') {
+                $summaryParts += "$msg (skipped - not in PSA)"
             } else {
-                $summaryParts += "- $g"
+                $summaryParts += "Failed to disable - $msg"
             }
         }
+
+        if ($GrantUserFullControl) {
+            $summaryParts += "- Mailbox access granted to: $GrantUserFullControl"
+        }
+        if ($SetUserMailFWD) {
+            $summaryParts += "- Mail forwarded to: $SetUserMailFWD"
+        }
+        if ($GrantUserOneDriveAccess) {
+            $summaryParts += "- OneDrive access granted to: $GrantUserOneDriveAccess"
+        }
+        if ($ExportPath) {
+            $summaryParts += "- Attributes, Groups and licenses exported to: $ExportPath"
+        }
+
+        # Add fallback owner group info
+        if ($FallbackOwnerGroups) {
+            $summaryParts += ""
+            $summaryParts += "Groups where fallback owner was added:"
+            $summaryParts += "----------------------------------------"
+
+            foreach ($g in $FallbackOwnerGroups) {
+                if ($g.DisplayName) {
+                    $summaryParts += "- $($g.DisplayName) ($($g.Id))"
+                } else {
+                    $summaryParts += "- $g"
+                }
+            }
+        }
+
+        $summaryParts += "----------------------------------------"
+        $summaryMessage = $summaryParts -join "`n"
+
+        Write-StatusMessage -Message $summaryMessage -Type SUMMARY
+
+        # Show duration
+        $endTime = Get-Date
+        $duration = $endTime - $startTime
+        Write-StatusMessage "Script completed in $($duration.TotalMinutes.ToString('F2')) minutes" -Type INFO
+
+        # Give user time to read/copy the summary
+        Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
+        Read-Host | Out-Null
     }
-
-    $summaryParts += "----------------------------------------"
-    $summaryMessage = $summaryParts -join "`n"
-
-    Write-StatusMessage -Message $summaryMessage -Type SUMMARY
-
-    # Show duration
-    $endTime = Get-Date
-    $duration = $endTime - $startTime
-    Write-StatusMessage "Script completed in $($duration.TotalMinutes.ToString('F2')) minutes" -Type INFO
-
-    # Give user time to read/copy the summary
-    Write-Host "`nPress Enter to exit..." -ForegroundColor Cyan
-    Read-Host | Out-Null
 }
 
 Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
@@ -2589,7 +2762,9 @@ $progressSteps = @(
     @{ Name = "Exchange Tasks"; Description = "Convert to SharedMailbox and setting forwarding/grant acces" }
     @{ Name = "Directory Roles"; Description = "Removing from directory roles" }
     @{ Name = "Group Removal"; Description = "Removing and exporting Entra/Exchange groups" }
+    @{ Name = "Group Ownership"; Description = "Removing group ownership and assigning fallback owner if needed" }
     @{ Name = "License Removal"; Description = "Removing and exporting Entra licenses" }
+    @{ Name = "Disable ConnectWise PSA Member"; Description = "Disabling ConnectWise PSA member" }
     @{ Name = "Notifications"; Description = "Sending email notifications" }
     @{ Name = "Disconnecting from Exchange and Graph"; Description = "Disconnecting from Exchange and Graph" }
     @{ Name = "OneDrive Setup"; Description = "Configuring OneDrive access" }
@@ -2760,6 +2935,7 @@ try {
     $groupExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_Groups_Id.csv"
     Remove-UserFromEntraGroups -User $userInfo.selectMgUser -ExportPath $groupExportPath
 
+    Write-ProgressStep -StepName 'Group Ownership'
     $groupOwnerExportPath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_GroupsOwnership_Id.csv"
     $ownershipResults = Remove-UserGroupOwnership `
         -User $userInfo.selectMgUser `
@@ -2771,6 +2947,25 @@ try {
     Write-ProgressStep -StepName 'License Removal'
     $licensePath = Join-Path $config.Paths.TermExportPath "$($result.InputUser)_License_Id.csv"
     Remove-UserLicenses -User $userInfo.selectMgUser -ExportPath $licensePath
+
+    # Step: Connect to Disable Connectwise PSA member
+    Write-ProgressStep -StepName 'Disable ConnectWise PSA Member'
+    $psaTokenParameters = @{
+        CompanyId  = $config.ConnectWiseManage.CompanyId
+        PublicKey  = $config.ConnectWiseManage.PublicKey
+        PrivateKey = $config.ConnectWiseManage.PrivateKey
+        ClientId   = $config.ConnectWiseManage.ClientId
+    }
+
+    $psaHeaders = Get-ConnectWiseManageToken @psaTokenParameters
+
+    $PSAMemberDisableResults = Disable-ConnectwisePSAMember -Headers $psaHeaders -TermUser $MgUser
+
+    if ($PSAMemberDisableResults.Success) {
+        Write-StatusMessage -Message "Successfully disabled $($MgUser.DisplayName) in Connectwise Manage." -Type OK
+    } else {
+        Write-StatusMessage -Message "Failed to disable $($MgUser.DisplayName) in Connectwise Manage: $($PSAMemberDisableResults.Error)" -Type ERROR
+    }
 
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
@@ -2793,31 +2988,6 @@ The following user need to be removed from Salesforce. <p> $($userInfo.selectMgU
 
         # Email Compass West for 8x8
         try {
-
-            function Get-ConnectWiseManageToken {
-                param (
-                    [string]$CompanyId,
-                    [string]$PublicKey,
-                    [string]$PrivateKey,
-                    [string]$clientId
-                )
-
-                # Encode companyId+publicKey:privateKey in Base64
-                $pair = "$CompanyId+$PublicKey`:$PrivateKey"
-                $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
-                $base64 = [Convert]::ToBase64String($bytes)
-
-                # Create headers with Basic authentication
-                $headers = @{
-                    "Authorization" = "Basic $base64"
-                    "Content-Type"  = "application/json"
-                    "ClientId"      = $clientId
-                }
-
-                return $headers
-            }
-
-            $headers = Get-ConnectWiseManageToken -CompanyId $config.ConnectWiseManage.CompanyId -PublicKey $config.ConnectWiseManage.PublicKey -PrivateKey $config.ConnectWiseManage.PrivateKey -clientId $config.ConnectWiseManage.ClientId
 
             $emailSubject = "8x8 – Remove User"
             $emailContent = @"
@@ -2845,7 +3015,7 @@ $($userInfo.selectMgUser.DisplayName) - $($userInfo.selectMgUser.Mail)
             $8x8TicketResults = Invoke-RestMethod `
                 -Method Post `
                 -Uri "$baseUrl/service/tickets" `
-                -Headers $headers `
+                -Headers $psaHeaders `
                 -Body $body `
                 -ContentType "application/json"
 
@@ -2897,7 +3067,8 @@ $($userInfo.selectMgUser.DisplayName) - $($userInfo.selectMgUser.Mail)
         -SetUserMailFWD $SetUserMailFWD `
         -GrantUserOneDriveAccess $GrantUserOneDriveAccess `
         -ExportPath $config.Paths.TermExportPath `
-        -FallbackOwnerGroups $ownershipResults.FallbackOwnerGroups
+        -FallbackOwnerGroups $ownershipResults.FallbackOwnerGroups `
+        -PSAMemberDisableResults $PSAMemberDisableResults
 
     # Clear the progress bar
     Write-Progress -Activity "User Termination" -Completed
