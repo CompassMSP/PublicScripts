@@ -37,6 +37,16 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.3      2026-05-07   Feature Updates:
+                            - Added ConnectWise Home SSO user linking step after PSA member creation
+                            UI Refactoring:
+                            - Merged New-DuplicatePromptForm into Show-CustomAlert via optional -DefaultValue parameter (input mode returns entered string or $null)
+                            - Removed New-DuplicatePromptForm function; updated caller to use Show-CustomAlert
+                            - Fixed Show-CustomAlert window drag: replaced non-functional 5px Top_Bar with DragArea border using Add_MouseLeftButtonDown and GetWindow()
+                            - Added -Owner parameter to Show-CustomAlert for centering child popups over parent window
+                            - Fixed WindowStartupLocation: defaults to CenterScreen, switches to CenterOwner when -Owner is provided
+                            - Removed [System.Windows.Window] type annotation from $Owner parameter (PresentationFramework not loaded at param binding time)
+
     4.4.2      2026-05-07   Bug Fixes and Code Quality:
                             - Fixed progress step name mismatch for Connectwise PSA Member Creation step
                             - Fixed progress step list order to match execution order (Mailbox Provisioning before Set Timezone)
@@ -270,7 +280,7 @@ function Write-ProgressStep {
     $script:currentStep += 1
 }
 
-#Region Standard Functions
+#region Standard Functions
 
 function Write-StatusMessage {
     [CmdletBinding()]
@@ -765,7 +775,7 @@ function Send-GraphMailMessage {
     }
 }
 
-#Region Custom Functions
+#region Custom Functions
 
 # License Helper Functions
 function Get-LicenseDisplayName {
@@ -874,12 +884,14 @@ function Show-CustomAlert {
         [string]$Message,
         [ValidateSet("Error", "Warning", "Info", "Success")]
         [string]$AlertType = "Error",
-        [string]$Title
+        [string]$Title,
+        [string]$DefaultValue,
+        $Owner
     )
 
-    if (-not $Title) {
-        $Title = $AlertType
-    }
+    if (-not $Title) { $Title = $AlertType }
+
+    Add-Type -AssemblyName PresentationFramework
 
     switch ($AlertType) {
         "Error" { $color = "#E81123"; $sound = [System.Media.SystemSounds]::Hand }
@@ -888,7 +900,96 @@ function Show-CustomAlert {
         "Success" { $color = "#107C10"; $sound = [System.Media.SystemSounds]::Beep }
     }
 
-    $XAML = @"
+    $inputMode = $PSBoundParameters.ContainsKey('DefaultValue')
+
+    if ($inputMode) {
+        [xml]$XAML = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="$Title" Height="190" Width="530"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontSize" Value="14"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Border Name="DragArea" CornerRadius="12" Background="#2D2D30" Padding="10" BorderBrush="$color" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="1" Margin="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Viewbox Grid.Row="0" Grid.RowSpan="3" Margin="0,0,15,0" Width="40" Height="40" VerticalAlignment="Top">
+                    <Canvas Width="48" Height="48">
+                        <Ellipse Width="48" Height="48" Fill="$color"/>
+                        <Rectangle Width="6" Height="20" Fill="White" Canvas.Left="21" Canvas.Top="10"/>
+                        <Rectangle Width="6" Height="6" Fill="White" Canvas.Left="21" Canvas.Top="34"/>
+                    </Canvas>
+                </Viewbox>
+                <TextBlock x:Name="PromptLabel" Grid.Column="1" Grid.Row="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,0,0,5"/>
+                <TextBox x:Name="InputBox" Grid.Column="1" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,5,0,10"/>
+                <Button x:Name="OkButton" Grid.Column="1" Grid.Row="2" Width="75" Margin="5" IsDefault="True" Content="OK" HorizontalAlignment="Right"/>
+                <Button x:Name="CancelButton" Grid.Column="2" Grid.Row="2" Width="75" Margin="5" IsCancel="True" Content="Cancel" HorizontalAlignment="Left"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
+"@
+        $window = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $XAML))
+        $window.Title = $Title
+        if ($Owner) { $window.Owner = $Owner; $window.WindowStartupLocation = [System.Windows.WindowStartupLocation]::CenterOwner }
+
+        $promptLabel = $window.FindName("PromptLabel")
+        $inputBox = $window.FindName("InputBox")
+        $okButton = $window.FindName("OkButton")
+        $cancelButton = $window.FindName("CancelButton")
+
+        $promptLabel.Text = $Message
+        $inputBox.Text = $DefaultValue
+
+        $okButton.Add_Click({
+                if ($inputBox.Text -eq $DefaultValue) {
+                    Show-CustomAlert -Message "You must change the existing value: '$DefaultValue'" -Owner $window
+                    return
+                }
+                $window.DialogResult = $true
+                $window.Close()
+            })
+        $cancelButton.Add_Click({
+                $window.DialogResult = $false
+                $window.Close()
+            })
+
+        $dragArea = $window.FindName("DragArea")
+        $dragArea.Add_MouseLeftButtonDown({
+                param($s, $e)
+                [System.Windows.Window]::GetWindow($s).DragMove()
+            })
+
+        $sound.Play()
+        if ($window.ShowDialog() -eq $true) { return $inputBox.Text }
+        return $null
+
+    } else {
+        $XAML = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="$Title" Height="110" Width="400"
@@ -908,18 +1009,12 @@ function Show-CustomAlert {
             </Style>
         </ResourceDictionary>
     </Window.Resources>
-
-    <Border CornerRadius="12" Background="#2D2D30" Padding="15" BorderBrush="$color" BorderThickness="2">
+    <Border Name="DragArea" CornerRadius="12" Background="#2D2D30" Padding="15" BorderBrush="$color" BorderThickness="2">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-
-            <!-- Top Bar for Dragging -->
-            <Border Name="Top_Bar" Background="Transparent" Height="5" Grid.Row="0" />
-
-            <!-- Content -->
             <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -929,8 +1024,6 @@ function Show-CustomAlert {
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-
-                <!-- Icon -->
                 <Viewbox Grid.Row="0" Grid.RowSpan="2" Margin="0,0,15,0" Width="40" Height="40" VerticalAlignment="Top">
                     <Canvas Width="48" Height="48">
                         <Ellipse Width="48" Height="48" Fill="$color"/>
@@ -938,40 +1031,30 @@ function Show-CustomAlert {
                         <Rectangle Width="6" Height="6" Fill="White" Canvas.Left="21" Canvas.Top="34"/>
                     </Canvas>
                 </Viewbox>
-
-                <!-- Message -->
                 <TextBlock Grid.Column="1" Grid.Row="0" TextWrapping="Wrap" Text="$Message" Margin="0,0,0,10"/>
-
-                <!-- Button -->
                 <Button Name="OkButton" Grid.Column="1" Grid.Row="1" Content="OK" Width="80" HorizontalAlignment="Right" IsDefault="True"/>
             </Grid>
         </Grid>
     </Border>
 </Window>
 "@
+        $stringReader = New-Object System.IO.StringReader $XAML
+        $xmlReader = [System.Xml.XmlReader]::Create($stringReader)
+        $window = [Windows.Markup.XamlReader]::Load($xmlReader)
+        if ($Owner) { $window.Owner = $Owner; $window.WindowStartupLocation = [System.Windows.WindowStartupLocation]::CenterOwner }
 
-    Add-Type -AssemblyName PresentationFramework
+        $okButton = $window.FindName("OkButton")
+        $okButton.Add_Click({ $window.Close() })
 
-    $stringReader = New-Object System.IO.StringReader $xaml
-    $xmlReader = [System.Xml.XmlReader]::Create($stringReader)
-    $alertWindow = [Windows.Markup.XamlReader]::Load($xmlReader)
+        $dragArea = $window.FindName("DragArea")
+        $dragArea.Add_MouseLeftButtonDown({
+                param($s, $e)
+                [System.Windows.Window]::GetWindow($s).DragMove()
+            })
 
-    $okButton = $alertWindow.FindName("OkButton")
-    $okButton.Add_Click({ $alertWindow.Close() })
-
-    # Find the top bar and add the MouseDown event
-    $topBar = $alertWindow.FindName("Top_Bar")
-    $topBar.Add_MouseDown({
-            param($e)
-            if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
-                $alertWindow.DragMove()
-            }
-        })
-
-    # Play the appropriate sound
-    $sound.Play()
-
-    $alertWindow.ShowDialog() | Out-Null
+        $sound.Play()
+        $window.ShowDialog() | Out-Null
+    }
 }
 
 function Get-NewUserRequest {
@@ -1703,9 +1786,9 @@ function Get-NewUserRequest {
                     }
                 }
 
-                Show-CustomAlert -Message "JSON file loaded successfully" -AlertType "Success" -Title "Success"
+                Show-CustomAlert -Message "JSON file loaded successfully" -AlertType "Success" -Title "Success" -Owner $window
             } catch {
-                Show-CustomAlert -Message "Error loading JSON file: $_" -AlertType "Error" -Title "Error"
+                Show-CustomAlert -Message "Error loading JSON file: $_" -AlertType "Error" -Title "Error" -Owner $window
             }
         }
     }
@@ -1748,9 +1831,9 @@ function Get-NewUserRequest {
         if ($saveFileDialog.ShowDialog() -eq "OK") {
             try {
                 $formDataJSON | ConvertTo-Json -Depth 5 | Set-Content -Path $saveFileDialog.FileName
-                Show-CustomAlert -Message "JSON file saved successfully" -AlertType "Success" -Title "Success"
+                Show-CustomAlert -Message "JSON file saved successfully" -AlertType "Success" -Title "Success" -Owner $window
             } catch {
-                Show-CustomAlert -Message "Error saving JSON file: $_" -AlertType "Error" -Title "Error"
+                Show-CustomAlert -Message "Error saving JSON file: $_" -AlertType "Error" -Title "Error" -Owner $window
             }
         }
     }
@@ -2057,9 +2140,9 @@ function Get-NewUserRequest {
                 $cboUsageLocation.SelectedItem = $UserData.usageLocation
             }
 
-            Show-CustomAlert -Message "HiBob data loaded successfully" -AlertType "Success" -Title "Success"
+            Show-CustomAlert -Message "HiBob data loaded successfully" -AlertType "Success" -Title "Success" -Owner $window
         } catch {
-            Show-CustomAlert -Message "Error populating form from HiBob data: $_" -AlertType "Error" -Title "Error"
+            Show-CustomAlert -Message "Error populating form from HiBob data: $_" -AlertType "Error" -Title "Error" -Owner $window
         }
     }
 
@@ -2273,7 +2356,7 @@ function Get-NewUserRequest {
             Write-StatusMessage "Licenses refreshed successfully" -Type OK
         } catch {
             Write-StatusMessage "Error retrieving licenses: $($_.Exception.Message)" -Type ERROR
-            Show-CustomAlert -Message "Error retrieving licenses: $($_.Exception.Message)" -AlertType "Error" -Title "Error"
+            Show-CustomAlert -Message "Error retrieving licenses: $($_.Exception.Message)" -AlertType "Error" -Title "Error" -Owner $window
         } finally {
             $btnRefreshLicenses.IsEnabled = $true
         }
@@ -2294,14 +2377,14 @@ function Get-NewUserRequest {
 
         if (-not $DisplayName -or $DisplayName -notmatch $namePattern) {
             # Invalid format or empty
-            Show-CustomAlert -Message "Please enter a valid full name (First Last)"
+            Show-CustomAlert -Message "Please enter a valid full name (First Last)" -Owner $window
             return $false
         }
 
         # Check if an item is selected in the ComboBox
         if (-not $RequiredLicense -or -not $cboRequiredLicense.SelectedItem) {
             # No item selected
-            Show-CustomAlert -Message "Please select a required license."
+            Show-CustomAlert -Message "Please select a required license." -Owner $window
             return $false
         }
 
@@ -2311,7 +2394,7 @@ function Get-NewUserRequest {
             $availableLicenses = [int]$Matches[1]
             if ($availableLicenses -le 0) {
                 $licenseName = $requiredLicenseText -replace '\s*\(Available:.*\)', ''
-                Show-CustomAlert -Message "The selected required license '$licenseName' has no available licenses."
+                Show-CustomAlert -Message "The selected required license '$licenseName' has no available licenses." -Owner $window
                 return $false
             }
         }
@@ -2323,7 +2406,7 @@ function Get-NewUserRequest {
                 $availableLicenses = [int]$Matches[1]
                 if ($availableLicenses -le 0) {
                     $licenseName = $licenseText -replace '\s*\(Available:.*\)', ''
-                    Show-CustomAlert -Message "The selected ancillary license '$licenseName' has no available licenses."
+                    Show-CustomAlert -Message "The selected ancillary license '$licenseName' has no available licenses." -Owner $window
                     return $false
                 }
             }
@@ -2374,7 +2457,7 @@ function Get-NewUserRequest {
             Write-StatusMessage "Retrieved $($domains.Count) domains" -Type OK
         } catch {
             Write-StatusMessage "Error retrieving domains: $($_.Exception.Message)" -Type ERROR
-            Show-CustomAlert -Message "Error retrieving domains: $($_.Exception.Message)" -AlertType "Error" -Title "Error"
+            Show-CustomAlert -Message "Error retrieving domains: $($_.Exception.Message)" -AlertType "Error" -Title "Error" -Owner $window
         } finally {
             $btnRefreshDomains.IsEnabled = $true
         }
@@ -2458,7 +2541,7 @@ function Get-NewUserRequest {
             Write-StatusMessage "Department groups initialized successfully" -Type OK
         } catch {
             Write-StatusMessage "Error initializing department groups: $($_.Exception.Message)" -Type ERROR
-            Show-CustomAlert -Message "Error initializing department groups: $($_.Exception.Message)" -AlertType "Error" -Title "Error"
+            Show-CustomAlert -Message "Error initializing department groups: $($_.Exception.Message)" -AlertType "Error" -Title "Error" -Owner $window
         }
     }
 
@@ -2852,146 +2935,6 @@ function Get-NewUserRequest {
     return Get-FormData
 }
 
-function New-DuplicatePromptForm {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Title,
-
-        [Parameter(Mandatory)]
-        [string]$ExistingValue,
-
-        [Parameter(Mandatory)]
-        [string]$PromptText,
-
-        [ValidateSet("Error", "Warning", "Info", "Success")]
-        [string]$AlertType = "Info"  # Default to "Info" if not specified
-    )
-
-    Add-Type -AssemblyName PresentationFramework
-
-    # Determine the color and sound based on the AlertType
-    switch ($AlertType) {
-        "Error" { $color = "#E81123"; $sound = [System.Media.SystemSounds]::Hand }
-        "Warning" { $color = "#FFB900"; $sound = [System.Media.SystemSounds]::Exclamation }
-        "Info" { $color = "#0078D7"; $sound = [System.Media.SystemSounds]::Asterisk }
-        "Success" { $color = "#107C10"; $sound = [System.Media.SystemSounds]::Beep }
-    }
-
-    [xml]$XAML = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="DuplicatePromptForm" Height="190" Width="530"
-        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
-        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
-
-    <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-            <Style TargetType="TextBlock">
-                <Setter Property="Foreground" Value="White"/>
-                <Setter Property="FontSize" Value="14"/>
-            </Style>
-        </ResourceDictionary>
-    </Window.Resources>
-
-    <Border CornerRadius="12" Background="#2D2D30" Padding="10" BorderBrush="$color" BorderThickness="2">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <!-- Top Bar for Dragging -->
-            <Border Name="Top_Bar" Background="Transparent" Height="5" Grid.Row="0" />
-
-            <!-- Content -->
-            <Grid Grid.Row="1" Margin="10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- Icon -->
-                <Viewbox Grid.Row="0" Grid.RowSpan="3" Margin="0,0,15,0" Width="40" Height="40" VerticalAlignment="Top">
-                    <Canvas Width="48" Height="48">
-                        <Ellipse Width="48" Height="48" Fill="$color"/>
-                        <Rectangle Width="6" Height="20" Fill="White" Canvas.Left="21" Canvas.Top="10"/>
-                        <Rectangle Width="6" Height="6" Fill="White" Canvas.Left="21" Canvas.Top="34"/>
-                    </Canvas>
-                </Viewbox>
-
-                <!-- Message -->
-                <TextBlock x:Name="PromptLabel" Grid.Column="1" Grid.Row="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,0,0,5"/>
-
-                <!-- Input Box -->
-                <TextBox x:Name="InputBox" Grid.Column="1" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,5,0,10"/>
-
-                <!-- Buttons -->
-                <Button x:Name="OkButton" Grid.Column="1" Grid.Row="2" Width="75" Margin="5" IsDefault="True" Content="OK" HorizontalAlignment="Right"/>
-                <Button x:Name="CancelButton" Grid.Column="2" Grid.Row="2" Width="75" Margin="5" IsCancel="True" Content="Cancel" HorizontalAlignment="Left"/>
-            </Grid>
-        </Grid>
-    </Border>
-</Window>
-"@
-
-    $reader = (New-Object System.Xml.XmlNodeReader $XAML)
-    $form = [Windows.Markup.XamlReader]::Load($reader)
-
-    $PromptLabel = $form.FindName("PromptLabel")
-    $InputBox = $form.FindName("InputBox")
-    $OkButton = $form.FindName("OkButton")
-    $CancelButton = $form.FindName("CancelButton")
-
-    # Set values
-    $form.Title = $Title
-    $PromptLabel.Text = $PromptText
-    $InputBox.Text = $ExistingValue
-
-    # Add event handlers
-    $OkButton.Add_Click({
-            if ($InputBox.Text -eq $ExistingValue) {
-                Show-CustomAlert -Message "You must change duplicate value: '$($ExistingValue)'"
-                return
-            }
-            $form.DialogResult = $true
-            $form.Close()
-        })
-    $CancelButton.Add_Click({
-            $form.DialogResult = $false
-            $form.Close()
-        })
-
-    # Find the top bar and add the MouseDown event
-    $topBar = $form.FindName("Top_Bar")
-    $topBar.Add_MouseDown({
-            param($e)
-            if ($e.ChangedButton -eq [System.Windows.Input.MouseButton]::Left) {
-                $form.DragMove()
-            }
-        })
-
-    # Play the appropriate sound
-    $sound.Play()
-
-    $result = $form.ShowDialog()
-
-    if ($result -eq $true) {
-        return $InputBox.Text
-    } else {
-        return $null
-    }
-}
-
 # Main Exection Functions
 function Test-EntraUserIsDisabled {
     param (
@@ -3167,17 +3110,18 @@ function New-UserProperties {
             if ($mailbox.value.Count -gt 0) {
                 Write-StatusMessage -Message "Email address $userPrincipalName (or similar) already exists for mailbox: $($mailbox.value[0].userPrincipalName)" -Type WARN
 
-                $formDuplicateEmail = New-DuplicatePromptForm `
+                $formDuplicateEmail = Show-CustomAlert `
                     -Title "Duplicate Email Address" `
-                    -ExistingValue $accountName `
-                    -PromptText "Please enter a different emailAddress: '$userPrincipalName' already exists."
+                    -DefaultValue $accountName `
+                    -Message "Please enter a different emailAddress: '$userPrincipalName' already exists." `
+                    -AlertType "Warning"
 
                 if ($formDuplicateEmail -ne $accountName) {
                     $accountName = $formDuplicateEmail
                     $userPrincipalName = ($accountName + $Domain).ToLower()
 
                     # Verify the new email is unique
-                    $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
+                    $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or proxyAddresses/any(x:x eq 'SMTP:$userPrincipalName') or proxyAddresses/any(x:x eq 'smtp:$userPrincipalName')"
                     $checkMailbox = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
                     if ($checkMailbox.value.Count -gt 0) {
@@ -4754,7 +4698,7 @@ function Start-NewUserFinalize {
 
 Write-Host "`r  [✓] Functions loaded" -ForegroundColor Green
 
-#Region Main Execution
+#region Main Execution
 
 Write-Host "  [ ] Initializing progress tracking..." -NoNewline -ForegroundColor Yellow
 $progressSteps = @(
@@ -5232,17 +5176,42 @@ try {
                     if ($newPSAMemberResults.EngineerResult.Success) {
                         Write-StatusMessage -Message "Successfully set as Primary Engineer." -Type OK
                     } else {
-                        Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error.Message)" -Type WARNING
+                        Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error.Message)" -Type WARN
+                    }
+                }
+
+                Write-StatusMessage -Message "Linking Connectwise Home SSO user to Connectwise PSA user..." -Type INFO
+
+                $ssoUserIdValue = Show-CustomAlert `
+                    -Title "Connectwise Home SSO Linking" `
+                    -DefaultValue "sso_user_id_value" `
+                    -Message "Please enter the Connectwise Home SSO user ID:" `
+                    -AlertType "Info"
+
+                if (-not $ssoUserIdValue) {
+                    Write-StatusMessage -Message "No SSO user ID provided. Cannot link SSO user to Connectwise PSA user." -Type WARN
+                } else {
+                    $linkSsoBody = @{
+                        ssoUserId = $ssoUserIdValue
+                    }
+
+                    $linkSsoResult = Invoke-ConnectWiseManageAPI -Method 'PATCH' -Headers $psaHeaders -Endpoint "/system/members/$($newPSAMemberResults.Content.id)/linkSsoUser" -Body $linkSsoBody
+
+                    if (-not $linkSsoResult.Success) {
+                        Write-StatusMessage -Message "Failed to link SSO user to ConnectWise PSA user." -Type ERROR
+                    } else {
+                        Write-StatusMessage -Message "Successfully linked SSO user to ConnectWise PSA user." -Type OK
                     }
                 }
             } else {
                 Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error.Message)" -Type ERROR
             }
-        }
 
+        }
     } else {
         Write-StatusMessage -Message "Create Connectwise User option not selected. Skipping..." -Type INFO
     }
+
 
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
