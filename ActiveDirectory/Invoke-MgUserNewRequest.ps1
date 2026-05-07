@@ -38,6 +38,9 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.1      2026-05-06   Feature Updates:
+                                - Added ConnectWise Manage API integration for automatic creation of PSA members based on new users
+
     4.4.0      2026-04-27   Refactor:
                                - Migrated all Graph calls from Microsoft.Graph module to Invoke-RestMethod
                                - Replaced Connect-MgGraph/Disconnect-MgGraph with Get-GraphToken certificate auth
@@ -566,9 +569,9 @@ function Get-GraphToken {
 function Get-ServiceCert {
     param([string]$Subject)
     $cert = Get-ChildItem Cert:\LocalMachine\My |
-        Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now } |
-        Sort-Object NotAfter -Descending |
-        Select-Object -First 1
+    Where-Object { $_.Subject -like "*$Subject*" -and $_.NotAfter -gt [DateTime]::Now } |
+    Sort-Object NotAfter -Descending |
+    Select-Object -First 1
     if (-not $cert) { Exit-Script -Message "No valid certificate found matching '$Subject'" -ExitCode ConfigError }
     $cert
 }
@@ -1008,7 +1011,7 @@ function Get-NewUserRequest {
                 <Button x:Name="btnLocalFromHibob" Content="Load from HiBob" Style="{DynamicResource AccentButtonStyle}" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnRefreshLicenses" Content="Refresh Licenses" Width="120" Height="32" Margin="0,0,10,0"/>
                 <CheckBox x:Name="cbInstallSapience" Content="Install Sapience" VerticalAlignment="Center" Margin="10,0,0,0"/>
-
+                <CheckBox x:Name="cbCreateConnectwisePSAMember" Content="Create Connectwise PSA Member" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </WrapPanel>
         </StackPanel>
 
@@ -1676,6 +1679,7 @@ function Get-NewUserRequest {
                 $txtPostalCode.Text = $jsonContent.postalCode
                 $txtCountry.Text = $jsonContent.country
                 $cbInstallSapience.IsChecked = [bool]$jsonContent.installSapience
+                $cbCreateConnectwisePSAMember.IsChecked = [bool]$jsonContent.createConnectwisePSAMember
 
                 # Set department groups (multi-select) - DISABLED
                 if ($jsonContent.departmentGroupsDISABLED) {
@@ -2037,6 +2041,7 @@ function Get-NewUserRequest {
             $txtPostalCode.Text = $UserData.postalCode
             $txtCountry.Text = $UserData.country
             $cbInstallSapience.IsChecked = [bool]$UserData.installSapience
+            $cbCreateConnectwisePSAMember.IsChecked = [bool]$UserData.createConnectwisePSAMember
 
             # Set usage location
             if ($UserData.usageLocation) {
@@ -2076,6 +2081,7 @@ function Get-NewUserRequest {
         $txtPostalCode.Text = ""
         $txtCountry.Text = ""
         $cbInstallSapience.IsChecked = $false
+        $cbCreateConnectwisePSAMember.IsChecked = $false
         #$lstDepartmentGroups.SelectedItems.Clear()
         Show-StatusMessage -Message "Form has been reset" -Type "Info"
     }
@@ -2108,38 +2114,39 @@ function Get-NewUserRequest {
 
         # Store form data in a custom object
         $formData = [PSCustomObject]@{
-            requiredLicense           = @()
-            displayName               = Get-ValueOrNull $txtDisplayName.Text
-            samAccountName            = Get-ValueOrNull $txtSamAccountName.Text
-            domain                    = if ($cboDomain.SelectedItem) { $cboDomain.SelectedItem.ToString() } else { "" }
-            userPrincipalName         = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
-            mobilePhone               = Get-ValueOrNull $txtMobilePhone.Text
-            timeZone                  = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
-            usageLocation             = $usageLocation
-            copyUserOperations        = if ($cboCopyUserOperations.SelectedItem -eq 'None') { $null } elseif ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
-            userToCopy                = Get-ValueOrNull $txtUserToCopy.Text
-            ancillaryLicense          = @()
-            givenName                 = Get-ValueOrNull $txtGivenName.Text
-            surname                   = Get-ValueOrNull $txtSurname.Text
-            jobTitle                  = Get-ValueOrNull $txtJobTitle.Text
-            department                = Get-ValueOrNull $txtDepartment.Text
-            companyName               = Get-ValueOrNull $txtCompanyName.Text
-            officeLocation            = Get-ValueOrNull $txtOfficeLocation.Text
-            employeeHireDate          = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
-            manager                   = Get-ValueOrNull $txtManager.Text
-            employeeId                = Get-ValueOrNull $txtEmployeeId.Text
-            businessPhone             = Get-ValueOrNull $txtBusinessPhone.Text
-            faxNumber                 = Get-ValueOrNull $txtFaxNumber.Text
-            streetAddress             = Get-ValueOrNull $txtStreetAddress.Text
-            city                      = Get-ValueOrNull $txtCity.Text
-            state                     = Get-ValueOrNull $txtState.Text
-            postalCode                = Get-ValueOrNull $txtPostalCode.Text
-            country                   = Get-ValueOrNull $txtCountry.Text
-            departmentGroupOptions    = @()
-            testModeEnabled           = $false
-            Send8x8ProvisioningTicket = $false
-            InstallSapience           = $false
-            cloudOnly                 = $true
+            requiredLicense            = @()
+            displayName                = Get-ValueOrNull $txtDisplayName.Text
+            samAccountName             = Get-ValueOrNull $txtSamAccountName.Text
+            domain                     = if ($cboDomain.SelectedItem) { $cboDomain.SelectedItem.ToString() } else { "" }
+            userPrincipalName          = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
+            mobilePhone                = Get-ValueOrNull $txtMobilePhone.Text
+            timeZone                   = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
+            usageLocation              = $usageLocation
+            copyUserOperations         = if ($cboCopyUserOperations.SelectedItem -eq 'None') { $null } elseif ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
+            userToCopy                 = Get-ValueOrNull $txtUserToCopy.Text
+            ancillaryLicense           = @()
+            givenName                  = Get-ValueOrNull $txtGivenName.Text
+            surname                    = Get-ValueOrNull $txtSurname.Text
+            jobTitle                   = Get-ValueOrNull $txtJobTitle.Text
+            department                 = Get-ValueOrNull $txtDepartment.Text
+            companyName                = Get-ValueOrNull $txtCompanyName.Text
+            officeLocation             = Get-ValueOrNull $txtOfficeLocation.Text
+            employeeHireDate           = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
+            manager                    = Get-ValueOrNull $txtManager.Text
+            employeeId                 = Get-ValueOrNull $txtEmployeeId.Text
+            businessPhone              = Get-ValueOrNull $txtBusinessPhone.Text
+            faxNumber                  = Get-ValueOrNull $txtFaxNumber.Text
+            streetAddress              = Get-ValueOrNull $txtStreetAddress.Text
+            city                       = Get-ValueOrNull $txtCity.Text
+            state                      = Get-ValueOrNull $txtState.Text
+            postalCode                 = Get-ValueOrNull $txtPostalCode.Text
+            country                    = Get-ValueOrNull $txtCountry.Text
+            departmentGroupOptions     = @()
+            testModeEnabled            = $false
+            Send8x8ProvisioningTicket  = $false
+            InstallSapience            = $false
+            createConnectwisePSAMember = $false
+            cloudOnly                  = $true
         }
 
         # Store required licenses in an array of objects with DisplayName and SkuId
@@ -2182,6 +2189,12 @@ function Get-NewUserRequest {
             $formData.installSapience = $true
         } else {
             $formData.installSapience = $false
+        }
+
+        if ($cbCreateConnectwisePSAMember.IsChecked -eq $true) {
+            $formData.createConnectwisePSAMember = $true
+        } else {
+            $formData.createConnectwisePSAMember = $false
         }
 
         return $formData
@@ -4247,6 +4260,283 @@ function Set-UserBookWithMeId {
     }
 }
 
+function Get-ConnectWiseManageToken {
+    param (
+        [string]$CompanyId,
+        [string]$PublicKey,
+        [string]$PrivateKey,
+        [string]$clientId
+    )
+
+    # Encode companyId+publicKey:privateKey in Base64
+    $pair = "$CompanyId+$PublicKey`:$PrivateKey"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
+    $base64 = [Convert]::ToBase64String($bytes)
+
+    # Create headers with Basic authentication
+    $headers = @{
+        "Authorization" = "Basic $base64"
+        "Content-Type"  = "application/json"
+        "ClientId"      = $clientId
+    }
+
+    return $headers
+}
+
+function Invoke-ConnectWiseManageAPI {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [string]$Method,
+
+        [Parameter(Mandatory)]
+        [string]$Endpoint,
+        [string]$Conditions,
+        [Parameter(Mandatory)]
+        [hashtable]$Headers,
+
+        [object]$Body,
+
+        [string]$BaseUrl = "https://service.mycompass.cloud",
+        [string]$Version = "v4_6_release/apis/3.0",
+        [string]$ContentType = 'application/json',
+
+        [switch]$NoPagination,
+        [int]$PageSize = 1000
+    )
+
+    try {
+        $Endpoint = $Endpoint.Trim('/')
+        if ($Conditions) {
+            $encodedConditions = [Uri]::EscapeDataString($Conditions)
+            $uri = "$BaseUrl/$Version/$Endpoint`?conditions=$encodedConditions"
+        } else {
+            $uri = "$BaseUrl/$Version/$Endpoint"
+        }
+
+        $bodyJson = $null
+        if ($Body) {
+            if ($Method -eq 'PATCH') { $Body = , $Body }
+            $bodyJson = $Body | ConvertTo-Json -Depth 10 -Compress
+        }
+
+        if ($Method -eq 'GET' -and -not $NoPagination) {
+            $allResults = @()
+            $page = 1
+            $hasMore = $true
+
+            while ($hasMore) {
+                $separator = if ($uri -match '\?') { '&' } else { '?' }
+                $pageUri = "$uri${separator}page=$page&pageSize=$PageSize"
+                Write-Verbose "Fetching page $($page): $pageUri"
+
+                $response = Invoke-RestMethod -Method $Method -Uri $pageUri -Headers $Headers -ErrorAction Stop
+
+                if ($response) { $allResults += $response }
+
+                if ($response.Count -lt $PageSize) { $hasMore = $false } else { $page++ }
+            }
+
+            return @{
+                Success = $true
+                Content = $allResults
+                JSON    = $allResults | ConvertTo-Json -Depth 10
+            }
+        } else {
+            $response = Invoke-RestMethod -Method $Method -Uri $uri -Headers $Headers -ContentType $ContentType -Body $bodyJson -ErrorAction Stop
+            return @{
+                Success = $true
+                Content = $response
+                JSON    = if ($response) { $response | ConvertTo-Json -Depth 10 } else { $null }
+            }
+        }
+    } catch {
+        return @{
+            Success = $false
+            Error   = $_.Exception
+        }
+    }
+}
+
+function New-ConnectwisePSAMember {
+    param (
+        [Parameter(Mandatory)]
+        [string]$TemplateUserEmail,
+        [Parameter(Mandatory)]
+        [hashtable]$NewUser, # Expecting properties: GivenName, Surname, Mail, JobTitle, MobilePhone, officeLocation
+        [Parameter(Mandatory)]
+        [DateTime]$NewUserHireDate,
+        [Parameter(Mandatory)]
+        [string]$NewUserPassword,
+        [Parameter(Mandatory)]
+        [hashtable]$Headers
+    )
+
+    try {
+
+        # 1. Get template member details
+        $templateMember = Invoke-ConnectWiseManageAPI -Method 'GET' -Headers $headers -Endpoint "system/members" -Conditions "officeemail='$TemplateUserEmail' AND inactiveFlag=false"
+
+        if (-not $templateMember.Success) {
+            return @{
+                Success = $false
+                Error   = $templateMember.Error
+            }
+        }
+
+        if (-not $templateMember.Content) {
+            return @{
+                Success = $false
+                Error   = [System.Exception]::new("No active template member found with email: $TemplateUserEmail")
+            }
+        }
+
+        # 3. Check if user is in Professional Services department
+        if ($newUser.officeLocation -eq "Professional Services") {
+            $IsProfessionalServices = $true
+        }
+
+        # 4. Format hire date for ConnectWise
+        $formattedDate = (Get-Date $NewUserHireDate -Format "yyyy-MM-dd")
+
+        $newUserIdentifier = (($newUser.mail -split '@')[0]).ToLower()
+
+        # 5. Create new member properties
+        $newMember = @{
+            identifier                       = $newUserIdentifier
+            firstName                        = $newUser.GivenName
+            lastName                         = $newUser.Surname
+            hireDate                         = $formattedDate
+            timeSheetStartDate               = $formattedDate
+            officeEmail                      = $newUser.Mail
+            primaryEmail                     = $newUser.Mail
+            title                            = $newUser.JobTitle
+            mobilePhone                      = $newUser.MobilePhone
+            Password                         = $NewUserPassword
+            defaultPhone                     = 'Office'
+            defaultEmail                     = 'Office'
+            licenseClass                     = 'F' # F is for regular user license
+            # Required Properties
+            mapiName                         = $newUser.Mail
+            calendarSyncIntegrationFlag      = $templatemember.Content.calendarSyncIntegrationFlag
+            companyActivityTabFormat         = $templateMember.Content.companyActivityTabFormat
+            invoiceTimeTabFormat             = $templateMember.Content.invoiceTimeTabFormat
+            invoiceScreenDefaultTabFormat    = $templateMember.Content.invoiceScreenDefaultTabFormat
+            invoicingDisplayOptions          = $templateMember.Content.invoicingDisplayOptions
+            agreementInvoicingDisplayOptions = $templateMember.Content.agreementInvoicingDisplayOptions
+            #ssoSettings                      = @{
+            #    ssoUserId = $CWHomeSSOID
+            #}
+        }
+
+        # Function to add properties only if they exist
+        function Add-IfExists {
+            param ($HashTable, $Key, $Value)
+
+            if ($null -eq $Value -or $Value -eq '') {
+                return
+            }
+
+            # Fields that MUST be arrays
+            $arrayFields = @(
+                'serviceBoardTeamIds',
+                'excludedServiceBoardIds',
+                'excludedProjectBoardIds',
+                'teams',
+                'memberPersonas'
+            )
+
+            if ($arrayFields -contains $Key) {
+                $HashTable[$Key] = @($Value)
+            } else {
+                $HashTable[$Key] = $Value
+            }
+        }
+
+        # Copy properties from the template if they exist
+        $templateProperties = @(
+            "country", "officePhone", "securityRole", "enableMobileFlag", "type",
+            "timeZone", "partnerPortalFlag", "toastNotificationFlag", "memberPersonas",
+            "adminFlag", "structureLevel", "securityLocation", "defaultLocation",
+            "defaultDepartment", "reportsTo", "restrictLocationFlag", "restrictDepartmentFlag",
+            "workRole", "timeApprover", "expenseApprover", "includeInUtilizationReportingFlag",
+            "requireExpenseEntryFlag", "requireTimeSheetEntryFlag", "requireStartAndEndTimeOnTimeEntryFlag",
+            "allowInCellEntryOnTimeSheet", "enterTimeAgainstCompanyFlag",
+            "allowExpensesEnteredAgainstCompaniesFlag", "timeReminderEmailFlag",
+            "serviceDefaultLocation", "serviceDefaultDepartment", "serviceDefaultBoard",
+            "excludedServiceBoardIds", "teams", "serviceBoardTeamIds",
+            "projectDefaultLocation", "projectDefaultDepartment", "projectDefaultBoard",
+            "excludedProjectBoardIds", "scheduleDefaultLocation", "scheduleDefaultDepartment",
+            "scheduleCapacity", "serviceLocation", "calendar", "salesDefaultLocation",
+            "warehouse", "warehouseBin"
+        )
+
+        foreach ($prop in $templateProperties) {
+            Add-IfExists -HashTable $newMember -Key $prop -Value $templateMember.Content.$prop
+        }
+
+        # 6. Create new member
+        $createResult = Invoke-ConnectWiseManageAPI -Method 'POST' -Headers $headers -Endpoint "system/members" -Body $newMember
+        if (-not $createResult.Success) {
+            return @{
+                Success = $false
+                Error   = $createResult.Error
+            }
+        }
+
+        # 7. Set as Professional Services (Primary Engineer) if needed
+        if ($IsProfessionalServices) {
+
+            # Step 1: Fetch the current options
+            $getCustomFields = Invoke-ConnectWiseManageAPI -Method 'GET' -Headers $headers -Endpoint "system/userDefinedFields"
+            $selectCustomField = $getCustomFields.Content | Where-Object { $_.caption -eq 'Primary Engineer' }
+            $getUserDefinedFields = Invoke-ConnectWiseManageAPI -Method 'GET' -Headers $headers -Endpoint "system/userDefinedFields/$($selectCustomField.Id)"
+
+            # Step 2: Get the highest existing ID in the current options
+            $sortOrder = ([int]($getUserDefinedFields.Content.options.sortOrder | Measure-Object -Maximum).Maximum)
+
+            # Step 3: Define new options, ensuring their IDs are unique
+            $newCustomFieldsOption = @(
+                [PSCustomObject]@{
+                    optionValue  = $($NewUser.DisplayName)
+                    defaultFlag  = $false
+                    inactiveFlag = $false
+                    sortOrder    = $sortOrder + 1
+                }
+            )
+
+            # Step 4: Create the body for the PATCH request
+            $customFieldsBody = @(
+                [PSCustomObject]@{
+                    op    = "replace"
+                    path  = "options"  # Append to the array
+                    value = $newCustomFieldsOption
+                }
+            )
+
+            # Step 5: Send the PATCH request
+            $engineerResult = Invoke-ConnectWiseManageAPI -Method 'PATCH' -Headers $headers -Endpoint "system/userDefinedFields/$($selectCustomField.Id)" -Body $customFieldsBody
+
+            if (-not $engineerResult.Success) {
+                Write-Warning "Failed to set as Primary Engineer: $($engineerResult.Error.Message)"
+            }
+
+        }
+
+        # 8. Attach engineerResult onto createResult if it was set
+        if ($engineerResult) {
+            $createResult['EngineerResult'] = $engineerResult
+        }
+        return $createResult
+
+    } catch {
+        return @{
+            Success = $false
+            Error   = $_.Exception
+        }
+    }
+}
+
 function Start-NewUserFinalize {
     [CmdletBinding()]
     param(
@@ -4287,7 +4577,9 @@ function Start-NewUserFinalize {
                 Failed = @()
             }
             TotalFailed      = 0
-        }
+        },
+        [Parameter()]
+        [hashtable]$ConnectwisePSAUserCreated
     )
 
     Write-StatusMessage -Message "Preparing final summary" -Type INFO
@@ -4311,6 +4603,29 @@ function Start-NewUserFinalize {
         "- Email Address: $($User.mail)",
         "- Password: $Password",
         "- Template User: $(if ($TemplateUserCheck) {$UserInput.userToCopy} else {'No template user selected.'})",
+        "",
+        "Connectwise PSA Member Creation Status:",
+        "----------------------------------------",
+        $(if ($ConnectwisePSAUserCreated) {
+                "- Member Creation: $($ConnectwisePSAUserCreated.Success)"
+                if ($ConnectwisePSAUserCreated.Success -eq $true) {
+                    "- Member ID: $($ConnectwisePSAUserCreated.Content.id)"
+                    "- Member Username: $($ConnectwisePSAUserCreated.Content.identifier)"
+                } else {
+                    "- Error: $($ConnectwisePSAUserCreated.Error)"
+                }
+                if ($ConnectwisePSAUserCreated.EngineerResult) {
+                    "- Primary Engineer Update: $($ConnectwisePSAUserCreated.EngineerResult.Success)"
+                    if (-not $ConnectwisePSAUserCreated.EngineerResult.Success) {
+                        "- Error: $($ConnectwisePSAUserCreated.EngineerResult.Error)"
+                    }
+                }
+            if ($ConnectwisePSAUserCreated.Success -eq $true) {
+                    "NOTE: Please create user in Connectwise Home and assign the SSO ID manually to complete the setup."
+                }
+            } else {
+                "- Connectwise PSA user creation was not attempted."
+            }),
         "",
         "Group Assignment Status:",
         "----------------------------------------",
@@ -4396,6 +4711,7 @@ function Start-NewUserFinalize {
         "3. Check the user's mailbox status in Exchange Online.",
         "4. Review any warnings above and take appropriate action.",
         "5. If any group assignments failed, manual remediation may be required."
+        "6. If Connectwise PSA member creation failed, please create the member manually and assign the SSO ID to complete setup."
     )
 
     if ($UserInput.InstallSapience -eq $true) {
@@ -4629,7 +4945,7 @@ try {
 
     # Get Created User object from Graph to retrieve properties for downstream operations (like group assignment and Sapience provisioning)
     $properties = 'Id', 'Mail', 'DisplayName', 'GivenName', 'Surname',
-    'JobTitle', 'Department', 'OfficeLocation', 'City', 'EmployeeId'
+    'MobilePhone', 'JobTitle', 'Department', 'OfficeLocation', 'City', 'EmployeeId'
 
     $uri = "https://graph.microsoft.com/v1.0/users/$($newUserProperties.Email)?`$select=$($properties -join ',')"
 
@@ -4645,23 +4961,12 @@ try {
     # Get Manager of new user (for summary and Sapience provisioning)
     try {
         $managerResponse = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.Id)/manager" -Headers $script:GraphHeaders
+        $MgUser['Manager'] = $managerResponse
     } catch {
         $managerResponse = $null
+        $MgUser['Manager'] = $null
         if ($_.Exception.Response.StatusCode -ne 404) {
             Write-StatusMessage -Message "Manager lookup failed: $($_.Exception.Message)" -Type WARN
-        }
-    }
-
-    if (-not $managerResponse) {
-        $searchManager = if ($userInput.manager) { $userInput.manager }
-        elseif ($copyUserAttributes) { $templateUserManager }
-
-        if ($searchManager) {
-            try {
-                $managerResponse = Invoke-RestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/users/$searchManager" -Headers $script:GraphHeaders
-            } catch {
-                Write-StatusMessage -Message "Failed to find manager '$searchManager': $($_.Exception.Message)" -Type WARN
-            }
         }
     }
 
@@ -4887,17 +5192,57 @@ try {
         Write-StatusMessage -Message "User's office location does not require managedservices mailbox access. Skipping..." -Type INFO
     }
 
+    # Step: Create Connectwise PSA User
+
+    $psaTokenParameters = @{
+        CompanyId  = $config.ConnectWiseManage.CompanyId
+        PublicKey  = $config.ConnectWiseManage.PublicKey
+        PrivateKey = $config.ConnectWiseManage.PrivateKey
+        ClientId   = $config.ConnectWiseManage.ClientId
+    }
+
+    $psaHeaders = Get-ConnectWiseManageToken @psaTokenParameters
+
+    if ($userInput.createConnectwisePSAMember -eq $true) {
+        Write-ProgressStep -StepName 'Create Connectwise PSA User'
+
+        if (-not $templateData.TemplateUser) {
+            Write-StatusMessage -Message "No template user selected for Connectwise PSA user creation. Cannot proceed with PSA user creation." -Type ERROR
+            return
+        }
+
+        $newPSAMemberParams = @{
+            TemplateUserEmail = $templateData.TemplateUser
+            NewUser           = $MgUser
+            NewUserHireDate   = $userInput.employeeHireDate
+            NewUserPassword   = $passwordResult.PlainPassword
+            Headers           = $psaHeaders
+        }
+
+        $newPSAMemberResults = New-ConnectwisePSAMember @newPSAMemberParams
+
+        if ($newPSAMemberResults.Success -and $newPSAMemberResults.Content.id) {
+            Write-StatusMessage -Message "Successfully created Connectwise PSA user: $($newPSAMemberResults.Content.id) - $($newPSAMemberResults.Content.identifier)" -Type OK
+        } else {
+            Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error)" -Type ERROR
+        }
+
+    } else {
+        Write-StatusMessage -Message "Create Connectwise User option not selected. Skipping..." -Type INFO
+    }
+
+
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
 
     if ($($script:TestMode) -eq $false) {
-            # Email for Salesforce
-    if ($MgUser.department -in @('Sales')) {
-        Write-StatusMessage -Message "User is in Sales department. Sending notification for Salesforce provisioning..." -Type INFO
-        try {
+        # Email for Salesforce
+        if ($MgUser.department -in @('Sales')) {
+            Write-StatusMessage -Message "User is in Sales department. Sending notification for Salesforce provisioning..." -Type INFO
+            try {
 
-            $emailSubject = "Salesforce – New User"
-            $emailContent = @"
+                $emailSubject = "Salesforce – New User"
+                $emailContent = @"
 Please set up the following user with an Salesforce account.<br><br>
 Display Name: $($MgUser.displayName)<br>
 Mail: $($MgUser.Mail)<br>
@@ -4909,47 +5254,22 @@ Manager Display Name: $($managerResponse.displayName)<br>
 The user start date is $($userInput.employeeHireDate).<br>
 "@
 
-            Send-GraphMailMessage -FromAddress $($config.Email.NotificationFrom) -ToAddress $($config.Email.NotificationForSalesForceRequests) -CcAddress $($config.Email.NotificationCcAddress) -Subject $emailSubject -Content $emailContent
-            Write-StatusMessage -Message "Salesforce request email sent successfully" -Type OK
-        } catch {
-            Write-StatusMessage -Message "Failed to send Salesforce request email: $($_.Exception.Message)" -Type ERROR
-        }
-    }
-
-    # Create ticket for 8x8 provisioning on the Telcom Board
-    if ($userInput.Send8x8ProvisioningTicket -eq $true) {
-        Write-StatusMessage -Message "Creating ticket for 8x8 provisioning..." -Type INFO
-        try {
-
-            function Get-ConnectWiseManageToken {
-                param (
-                    [string]$CompanyId,
-                    [string]$PublicKey,
-                    [string]$PrivateKey,
-                    [string]$clientId
-                )
-
-                # Encode companyId+publicKey:privateKey in Base64
-                $pair = "$CompanyId+$PublicKey`:$PrivateKey"
-                $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
-                $base64 = [Convert]::ToBase64String($bytes)
-
-                # Create headers with Basic authentication
-                $headers = @{
-                    "Authorization" = "Basic $base64"
-                    "Content-Type"  = "application/json"
-                    "ClientId"      = $clientId
-                }
-
-                return $headers
+                Send-GraphMailMessage -FromAddress $($config.Email.NotificationFrom) -ToAddress $($config.Email.NotificationForSalesForceRequests) -CcAddress $($config.Email.NotificationCcAddress) -Subject $emailSubject -Content $emailContent
+                Write-StatusMessage -Message "Salesforce request email sent successfully" -Type OK
+            } catch {
+                Write-StatusMessage -Message "Failed to send Salesforce request email: $($_.Exception.Message)" -Type ERROR
             }
+        }
 
-            $psaHeaders = Get-ConnectWiseManageToken -CompanyId $($config.ConnectWiseManage.CompanyId) -PublicKey $($config.ConnectWiseManage.PublicKey) -PrivateKey $($config.ConnectWiseManage.PrivateKey) -clientId $($config.ConnectWiseManage.ClientId)
+        # Create ticket for 8x8 provisioning on the Telcom Board
+        if ($userInput.Send8x8ProvisioningTicket -eq $true) {
+            Write-StatusMessage -Message "Creating ticket for 8x8 provisioning..." -Type INFO
+            try {
 
-            $emailSubject = "8x8 – New User"
-            $callCenter = if ($MgUser.officeLocation -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
+                $emailSubject = "8x8 – New User"
+                $callCenter = if ($MgUser.officeLocation -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
 
-            $emailContent = @"
+                $emailContent = @"
 Please set up the following user with an 8x8 account.
 
 Display Name: $($MgUser.displayName)
@@ -4967,39 +5287,39 @@ Please do not send the welcome email with the account setup.
 The user start date is $($userInput.employeeHireDate), so please send the welcome email the day prior to their start.
 "@
 
-            $body = @{
-                summary            = $emailSubject
-                initialDescription = $emailContent
-                company            = @{
-                    identifier = 'CompassMSP'
-                }
-                board              = @{
-                    name = "Telecom Managed Services"
-                }
-                status             = @{
-                    name = "+New"
-                }
-            } | ConvertTo-Json -Depth 10
+                $body = @{
+                    summary            = $emailSubject
+                    initialDescription = $emailContent
+                    company            = @{
+                        identifier = 'CompassMSP'
+                    }
+                    board              = @{
+                        name = "Telecom Managed Services"
+                    }
+                    status             = @{
+                        name = "+New"
+                    }
+                } | ConvertTo-Json -Depth 10
 
-            $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
+                $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
 
-            $8x8TicketResults = Invoke-RestMethod `
-                -Method Post `
-                -Uri "$baseUrl/service/tickets" `
-                -Headers $psaHeaders `
-                -Body $body `
-                -ContentType "application/json"
+                $8x8TicketResults = Invoke-RestMethod `
+                    -Method Post `
+                    -Uri "$baseUrl/service/tickets" `
+                    -Headers $psaHeaders `
+                    -Body $body `
+                    -ContentType "application/json"
 
-            if ($8x8TicketResults) {
-                Write-StatusMessage -Message "Successfully created 8x8 provisioning ticket: $($8x8TicketResults.id)" -Type OK
-            } else {
-                Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: No response from API" -Type ERROR
+                if ($8x8TicketResults) {
+                    Write-StatusMessage -Message "Successfully created 8x8 provisioning ticket: $($8x8TicketResults.id)" -Type OK
+                } else {
+                    Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: No response from API" -Type ERROR
+                }
+
+            } catch {
+                Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: $($_.Exception.Message)" -Type ERROR
             }
-
-        } catch {
-            Write-StatusMessage -Message "Failed to create 8x8 provisioning ticket: $($_.Exception.Message)" -Type ERROR
         }
-    }
 
     } else {
         Write-StatusMessage -Message "Test mode is enabled. Skipping Salesforce notification and 8x8 ticket creation." -Type INFO
@@ -5030,7 +5350,8 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
         -SkippedTemplateUserGroups ([bool]$skippedTemplateUserGroups) `
         -Password $passwordResult.PlainPassword `
         -AssignedGroupCount $groupAddResults.SuccessCount `
-        -GroupOperationSummary $groupOperationSummary
+        -GroupOperationSummary $groupOperationSummary `
+        -ConnectwisePSAUserCreated $newPSAMemberResults
 
     # Show duration
     $endTime = Get-Date
