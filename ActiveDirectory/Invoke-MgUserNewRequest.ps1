@@ -32,12 +32,24 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
 .NOTES
     Author: Chris Williams
     Created: 2022-03-02
-    Last Modified: 2026-05-06
 
     Version History:
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.2      2026-05-07   Bug Fixes and Code Quality:
+                            - Fixed progress step name mismatch for Connectwise PSA Member Creation step
+                            - Fixed progress step list order to match execution order (Mailbox Provisioning before Set Timezone)
+                            - Fixed Set-FormFromHiBobData copy operations not correctly clearing ComboBox selection
+                            - Fixed missing -Message parameter in Get-ScriptConfig status output
+                            - Fixed mailNickname generation to use First.Last format consistent with UPN prefix
+                            - Fixed $IsProfessionalServices uninitialized variable in New-ConnectwisePSAMember
+                            - Fixed ConvertTo-Json missing -Depth parameter in Get-ScriptConfig
+                            - Fixed word list null handling in New-ReadablePassword for missing word length buckets
+                            - Removed duplicate Show-CustomAlert definition inside Get-NewUserRequest
+                            - Removed stale help text referencing Microsoft.Graph module from Send-GraphMailMessage
+                            - Updated duplicate email check to use proxyAddresses with client-side verification to prevent false positives from eventual consistency index
+
     4.4.1      2026-05-06   Feature Updates:
                                 - Added ConnectWise Manage API integration for automatic creation of PSA members based on new users
 
@@ -222,7 +234,8 @@ if (-not $PSBoundParameters['Verbose']) {
 
 Clear-Host
 
-Write-Host "`n  Initializing New User Creation Script v4.4.0..." -ForegroundColor Cyan
+$script:Version = (Select-String -Path $PSCommandPath -Pattern '^\s+(\d+\.\d+\.\d+)\s+\d{4}-\d{2}-\d{2}' | Select-Object -First 1).Matches.Groups[1].Value
+Write-Host "`n  Initializing New User Creation Script v$script:Version..." -ForegroundColor Cyan
 $startTime = Get-Date
 Write-Host "  Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor Gray
 
@@ -403,7 +416,7 @@ function Get-ScriptConfig {
         }
 
         # If no config exists, create template with prompt
-        Write-StatusMessage "No configuration file found. Creating template at $ConfigPath"
+        Write-StatusMessage -Message "No configuration file found. Creating template at $ConfigPath"
 
         # Ensure directory exists
         $configDir = Split-Path $ConfigPath -Parent
@@ -443,7 +456,7 @@ function Get-ScriptConfig {
         }
 
         # Save config
-        $config | ConvertTo-Json | Set-Content $ConfigPath
+        $config | ConvertTo-Json -Depth 5 | Set-Content $ConfigPath
 
         return $config
     } catch {
@@ -640,10 +653,6 @@ function Send-GraphMailMessage {
                 -AttachmentPath "C:\Logs\setup.log" `
                 -AttachmentName "SetupLog.txt"
             Example usage with attachment
-
-        .NOTES
-            Requires Microsoft.Graph PowerShell module and appropriate permissions.
-            Uses Write-StatusMessage function for logging.
         #>
     [CmdletBinding()]
     param(
@@ -1992,7 +2001,7 @@ function Get-NewUserRequest {
                 }
             } else {
                 foreach ($item in $cboCopyUserOperations.Items) {
-                    $cboCopyUserOperations.SelectedItem = -1
+                    $cboCopyUserOperations.SelectedIndex = -1
                     break
                 }
             }
@@ -2479,23 +2488,6 @@ function Get-NewUserRequest {
             "Warning" { $tbStatus.Foreground = "#FFB900" }
             "Error" { $tbStatus.Foreground = "#E81123" }
         }
-    }
-
-    function Show-CustomAlert {
-        param (
-            [string]$Message,
-            [string]$AlertType = "Info",
-            [string]$Title = "Alert"
-        )
-
-        $icon = switch ($AlertType) {
-            "Success" { "Information" }
-            "Error" { "Error" }
-            "Warning" { "Warning" }
-            default { "Information" }
-        }
-
-        [void][System.Windows.MessageBox]::Show($Message, $Title, "OK", $icon)
     }
 
     # Add event handlers
@@ -3161,7 +3153,7 @@ function New-UserProperties {
 
         # Generate account name based on mode
         if (-not $userPrincipalName) {
-            $accountName = (($FirstName.Substring(0, 1) + $LastName).ToLower())
+            $accountName = ($FirstName + '.' + $LastName).ToLower()
             $userPrincipalName = ($accountName + $Domain).ToLower()
         } else {
             $accountName = ($userPrincipalName -split '@')[0]
@@ -3169,7 +3161,7 @@ function New-UserProperties {
 
         # Check Microsoft 365 for duplicates
         try {
-            $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or otherMails/any(m:m eq '$userPrincipalName')"
+            $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or proxyAddresses/any(x:x eq 'SMTP:$userPrincipalName') or proxyAddresses/any(x:x eq 'smtp:$userPrincipalName')"
             $mailbox = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
             if ($mailbox.value.Count -gt 0) {
@@ -3280,10 +3272,10 @@ function New-ReadablePassword {
 
             # Select appropriate word lengths based on count
             $WordList = switch ($WordCount) {
-                { $_ -le 3 } { $WordsByLength[7] + $WordsByLength[8] + $WordsByLength[9] }
-                4 { $WordsByLength[4..7] | ForEach-Object { $_ } }
-                5 { $WordsByLength[4..6] | ForEach-Object { $_ } }
-                default { $WordsByLength[3..5] | ForEach-Object { $_ } }
+                { $_ -le 3 } { @($WordsByLength[7]) + @($WordsByLength[8]) + @($WordsByLength[9]) | Where-Object { $_ } }
+                4 { 4..7 | ForEach-Object { $WordsByLength[$_] } | Where-Object { $_ } }
+                5 { 4..6 | ForEach-Object { $WordsByLength[$_] } | Where-Object { $_ } }
+                default { 3..5 | ForEach-Object { $WordsByLength[$_] } | Where-Object { $_ } }
             }
 
             # Generate password
@@ -4097,7 +4089,7 @@ function Add-UserToGroups {
                         $failureCount++
                         $failedGroups += $group.DisplayName
                         Write-StatusMessage -Message "Failed to add user to Exchange group '$($group.DisplayName)' after $MaxRetries attempts: $($_.Exception.Message)" -Type ERROR
-                        $success = $true
+                        break
                     }
                 }
             } while (-not $success -and $retryCount -lt $MaxRetries)
@@ -4400,6 +4392,8 @@ function New-ConnectwisePSAMember {
         }
 
         # 3. Check if user is in Professional Services department
+        $IsProfessionalServices = $false
+
         if ($newUser.officeLocation -eq "Professional Services") {
             $IsProfessionalServices = $true
         }
@@ -4768,8 +4762,8 @@ $progressSteps = @(
     @{ Name = "Validation"; Description = "Validating inputs and building user creation prerequisites" }
     @{ Name = "New User Creation"; Description = "Creating user in Entra" }
     @{ Name = "License Assignment"; Description = "Assigning licenses" }
-    @{ Name = "Set Timezone"; Description = "Setting Timezone for new user" }
     @{ Name = "Mailbox Provisioning"; Description = "Waiting for Exchange to provision mailbox" }
+    @{ Name = "Set Timezone"; Description = "Setting Timezone for new user" }
     @{ Name = "Entra Group Assignment"; Description = "Assigning Entra Groups" }
     @{ Name = "Managed Service Mailbox Assignment"; Description = "Assigning access rights for managedservices mailbox" }
     @{ Name = "Connectwise PSA Member Creation"; Description = "Creating Connectwise PSA member" }
@@ -5213,7 +5207,7 @@ try {
     $psaHeaders = Get-ConnectWiseManageToken @psaTokenParameters
 
     if ($userInput.createConnectwisePSAMember -eq $true) {
-        Write-ProgressStep -StepName 'Create Connectwise PSA User'
+        Write-ProgressStep -StepName 'Connectwise PSA Member Creation'
 
         if (-not $templateData.TemplateUser) {
             Write-StatusMessage -Message "No template user selected for Connectwise PSA user creation. Cannot proceed with PSA user creation." -Type ERROR
