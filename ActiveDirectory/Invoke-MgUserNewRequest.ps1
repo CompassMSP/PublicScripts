@@ -4612,7 +4612,8 @@ function Start-NewUserFinalize {
                     "- Member ID: $($ConnectwisePSAUserCreated.Content.id)"
                     "- Member Username: $($ConnectwisePSAUserCreated.Content.identifier)"
                 } elseif ($ConnectwisePSAUserCreated.Reason -eq 'NotFound') {
-                    "- Skipped: Template user not found in Connectwise PSA"
+                    "- Skipped: Template user not found in Connectwise PSA. This is expected if the template user does not have a Connectwise PSA account.",
+                    "Note: If a PSA account was intended, verify the template user email is correct and that the user exists as an active member in Connectwise PSA."
                 } else {
                     "- Error: $($ConnectwisePSAUserCreated.Error)"
                 }
@@ -5211,38 +5212,37 @@ try {
 
         if (-not $templateData.TemplateUser) {
             Write-StatusMessage -Message "No template user selected for Connectwise PSA user creation. Cannot proceed with PSA user creation." -Type ERROR
-            return
-        }
-
-        $newPSAMemberParams = @{
-            TemplateUserEmail = $templateData.TemplateUser
-            NewUser           = $MgUser
-            NewUserHireDate   = $userInput.employeeHireDate
-            NewUserPassword   = $passwordResult.PlainPassword
-            Headers           = $psaHeaders
-        }
-
-        $newPSAMemberResults = New-ConnectwisePSAMember @newPSAMemberParams
-
-        if ($newPSAMemberResults.Success -and $newPSAMemberResults.Content.id) {
-            Write-StatusMessage -Message "Successfully created Connectwise PSA user: $($newPSAMemberResults.Content.id) - $($newPSAMemberResults.Content.identifier)" -Type OK
-
-            if ($newPSAMemberResults.EngineerResult) {
-                if ($newPSAMemberResults.EngineerResult.Success) {
-                    Write-StatusMessage -Message "Successfully set as Primary Engineer." -Type OK
-                } else {
-                    Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error.Message)" -Type WARNING
-                }
-            }
         } else {
-            Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error.Message)" -Type ERROR
-        }
+            Write-StatusMessage -Message "Creating Connectwise PSA member based on template user: $($templateData.TemplateUser)" -Type INFO
 
+            $newPSAMemberParams = @{
+                TemplateUserEmail = $templateData.TemplateUser
+                NewUser           = $MgUser
+                NewUserHireDate   = $userInput.employeeHireDate
+                NewUserPassword   = $passwordResult.PlainPassword
+                Headers           = $psaHeaders
+            }
+
+            $newPSAMemberResults = New-ConnectwisePSAMember @newPSAMemberParams
+
+            if ($newPSAMemberResults.Success -and $newPSAMemberResults.Content.id) {
+                Write-StatusMessage -Message "Successfully created Connectwise PSA user: $($newPSAMemberResults.Content.id) - $($newPSAMemberResults.Content.identifier)" -Type OK
+
+                if ($newPSAMemberResults.EngineerResult) {
+                    if ($newPSAMemberResults.EngineerResult.Success) {
+                        Write-StatusMessage -Message "Successfully set as Primary Engineer." -Type OK
+                    } else {
+                        Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error.Message)" -Type WARNING
+                    }
+                }
+            } else {
+                Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error.Message)" -Type ERROR
+            }
+        }
 
     } else {
         Write-StatusMessage -Message "Create Connectwise User option not selected. Skipping..." -Type INFO
     }
-
 
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
