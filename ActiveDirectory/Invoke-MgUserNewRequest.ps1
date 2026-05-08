@@ -3154,7 +3154,7 @@ function New-UserProperties {
             $mailbox = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
             if ($mailbox.value.Count -gt 0) {
-                Write-StatusMessage -Message "Email address $userPrincipalName (or similar) already exists for mailbox: $($mailbox.value[0].userPrincipalName)" -Type WARN
+                Write-StatusMessage -Message "Email address $userPrincipalName already exists for mailbox: $($mailbox.value[0].displayName). Please try again." -Type WARN
 
                 $isDuplicate = $true
                 while ($isDuplicate) {
