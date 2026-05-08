@@ -44,6 +44,7 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
                             - Added email notification to Users hiring manager and People Ops Partner with account details and instructions to share credentials directly with new hire
                             - People Ops Partner is now CC'd on new hire notification email when resolved
                             - Reordered right column fields: Fax Number → Manager → People Ops Partner
+                            - Replaced single-prompt duplicate email check with a loop that re-prompts until a unique address is confirmed or the user cancels
 
     4.4.3      2026-05-07   Feature Updates:
                             - Added ConnectWise Home SSO user linking step after PSA member creation
@@ -3155,29 +3156,31 @@ function New-UserProperties {
             if ($mailbox.value.Count -gt 0) {
                 Write-StatusMessage -Message "Email address $userPrincipalName (or similar) already exists for mailbox: $($mailbox.value[0].userPrincipalName)" -Type WARN
 
-                $formDuplicateEmail = Show-CustomAlert `
-                    -Title "Duplicate Email Address" `
-                    -DefaultValue $accountName `
-                    -Message "Please enter a different emailAddress: '$userPrincipalName' already exists." `
-                    -AlertType "Warning"
+                $isDuplicate = $true
+                while ($isDuplicate) {
+                    $formDuplicateEmail = Show-CustomAlert `
+                        -Title "Duplicate Email Address" `
+                        -DefaultValue $accountName `
+                        -Message "Please enter a different email address: '$userPrincipalName' already exists." `
+                        -AlertType "Warning"
 
-                #TODO! - Add loop to keep prompting until they enter a unique email or cancel
-                if ($formDuplicateEmail -ne $accountName) {
+                    if ([string]::IsNullOrWhiteSpace($formDuplicateEmail) -or $formDuplicateEmail -eq $accountName) {
+                        Write-StatusMessage -Message "User cancelled email address selection" -Type WARN
+                        Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
+                    }
+
                     $accountName = $formDuplicateEmail
                     $userPrincipalName = ($accountName + $Domain).ToLower()
 
-                    # Verify the new email is unique
                     $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$userPrincipalName' or mail eq '$userPrincipalName' or proxyAddresses/any(x:x eq 'SMTP:$userPrincipalName') or proxyAddresses/any(x:x eq 'smtp:$userPrincipalName')"
                     $checkMailbox = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
 
-                    if ($checkMailbox.value.Count -gt 0) {
-                        Write-StatusMessage -Message "New email address $userPrincipalName is also in use by: $($checkMailbox.value[0].displayName)" -Type ERROR
-                        Exit-Script -Message "Unable to generate unique email address" -ExitCode DuplicateUser
+                    if ($checkMailbox.value.Count -eq 0) {
+                        $isDuplicate = $false
+                        Write-StatusMessage -Message "Using custom email address: $userPrincipalName" -Type OK
+                    } else {
+                        Write-StatusMessage -Message "Email address $userPrincipalName is also in use by: $($checkMailbox.value[0].displayName). Please try again." -Type WARN
                     }
-                    Write-StatusMessage -Message "Using custom email address: $userPrincipalName" -Type OK
-                } else {
-                    Write-StatusMessage -Message "User cancelled email address selection" -Type WARN
-                    Exit-Script -Message "Operation cancelled by user" -ExitCode Cancelled
                 }
             }
         } catch {
