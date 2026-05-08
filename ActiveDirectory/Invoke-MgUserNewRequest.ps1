@@ -37,6 +37,14 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.4      2026-05-07   Feature Updates:
+                            - Added People Ops Partner extraction from HiBob import footer ("This email was sent by [Name].")
+                            - Added People Ops Partner form field (txtPeopleOpsPartner) in right column below Manager
+                            - Added Graph API lookup to resolve People Ops Partner display name to email address
+                            - Added email notification to Users hiring manager and People Ops Partner with account details and instructions to share credentials directly with new hire
+                            - People Ops Partner is now CC'd on new hire notification email when resolved
+                            - Reordered right column fields: Fax Number → Manager → People Ops Partner
+
     4.4.3      2026-05-07   Feature Updates:
                             - Added ConnectWise Home SSO user linking step after PSA member creation
                             UI Refactoring:
@@ -251,68 +259,7 @@ Write-Host "  Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Foreground
 
 Write-Host "  [ ] Loading functions..." -NoNewline -ForegroundColor Yellow
 
-function Write-ProgressStep {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$StepName
-    )
-
-    # Find the step object by name
-    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
-
-    if (-not $step) {
-        Write-Warning "Progress step '$StepName' not found."
-        return
-    }
-
-    $stepNumber = $script:currentStep
-    $status = $step.Description
-
-    # Guard against division by zero or missing values
-    if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
-        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
-        Write-Progress -Activity "New User Creation" -Status $status
-    } else {
-        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
-        Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
-    }
-    $script:currentStep += 1
-}
-
 #region Standard Functions
-
-function Write-StatusMessage {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-
-        [Parameter(Mandatory = $false)]
-        [ValidateSet('INFO', 'OK', 'ERROR', 'WARN', 'SUMMARY')]
-        [string]$Type = 'INFO'
-    )
-
-    $config = @{
-        'INFO'    = @{ Status = 'INFO'; Color = 'White' }
-        'OK'      = @{ Status = 'OK'; Color = 'Green' }
-        'ERROR'   = @{ Status = 'ERROR'; Color = 'Red' }
-        'WARN'    = @{ Status = 'WARN'; Color = 'Yellow' }
-        'SUMMARY' = @{ Status = ''; Color = 'Cyan' }
-    }
-
-    try {
-        if ($Type -eq 'SUMMARY') {
-            Write-Host $Message -ForegroundColor $config[$Type].Color
-        } else {
-            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            $statusPadded = $config[$Type].Status.PadRight(7)
-            Write-Host "[$timestamp] [$statusPadded] $Message" -ForegroundColor $config[$Type].Color
-        }
-    } catch {
-        Write-Host "Failed to write status message: $_" -ForegroundColor Red
-    }
-}
 
 function Exit-Script {
     [CmdletBinding()]
@@ -775,6 +722,68 @@ function Send-GraphMailMessage {
     }
 }
 
+function Write-ProgressStep {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$StepName
+    )
+
+    # Find the step object by name
+    $step = $progressSteps | Where-Object { $_.Name -eq $StepName }
+
+    if (-not $step) {
+        Write-Warning "Progress step '$StepName' not found."
+        return
+    }
+
+    $stepNumber = $script:currentStep
+    $status = $step.Description
+
+    # Guard against division by zero or missing values
+    if ($null -eq $stepNumber -or $script:totalSteps -eq 0) {
+        Write-StatusMessage -Message "Step $StepName - $status" -Type INFO
+        Write-Progress -Activity "New User Creation" -Status $status
+    } else {
+        Write-StatusMessage -Message "Step $stepNumber of $script:totalSteps : $StepName - $status" -Type INFO
+        Write-Progress -Activity "New User Creation" -Status $status -PercentComplete (($stepNumber / $script:totalSteps) * 100)
+    }
+    $script:currentStep += 1
+}
+
+function Write-StatusMessage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('INFO', 'OK', 'ERROR', 'WARN', 'SUMMARY')]
+        [string]$Type = 'INFO'
+    )
+
+    $config = @{
+        'INFO'    = @{ Status = 'INFO'; Color = 'White' }
+        'OK'      = @{ Status = 'OK'; Color = 'Green' }
+        'ERROR'   = @{ Status = 'ERROR'; Color = 'Red' }
+        'WARN'    = @{ Status = 'WARN'; Color = 'Yellow' }
+        'SUMMARY' = @{ Status = ''; Color = 'Cyan' }
+    }
+
+    try {
+        if ($Type -eq 'SUMMARY') {
+            Write-Host $Message -ForegroundColor $config[$Type].Color
+        } else {
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $statusPadded = $config[$Type].Status.PadRight(7)
+            Write-Host "[$timestamp] [$statusPadded] $Message" -ForegroundColor $config[$Type].Color
+        }
+    } catch {
+        Write-Host "Failed to write status message: $_" -ForegroundColor Red
+    }
+}
+
+
 #region Custom Functions
 
 # License Helper Functions
@@ -857,7 +866,9 @@ function Get-FormattedLicenseInfo {
             "Microsoft_Teams_Exploratory_Dept",
             "Windows Store for Business",
             "Microsoft_Teams_Rooms_Pro_without_Audio_Conferencing",
-            "Power_Automate_per_process"
+            "Power_Automate_per_process",
+            "MICROSOFT_AGENT_FRONTIER_NO_TEAMS",
+            "Power_Pages_vTrial_for_Makers"
         )
     )
     return $Skus | ForEach-Object {
@@ -1435,6 +1446,27 @@ function Get-NewUserRequest {
                                     </TextBlock>
                                 </Grid>
 
+                                <Label Content="Fax Number"/>
+                                <Grid Margin="0,0,0,15">
+                                    <TextBox x:Name="txtFaxNumber" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBlock IsHitTestVisible="False"
+                                             Text="Enter fax number"
+                                             VerticalAlignment="Center"
+                                             Margin="8,0,0,0"
+                                             Foreground="{DynamicResource TextControlPlaceholderForeground}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="{x:Type TextBlock}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtFaxNumber}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+
                                 <Label Content="Manager"/>
                                 <Grid Margin="0,0,0,15">
                                     <TextBox x:Name="txtManager" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
@@ -1456,11 +1488,11 @@ function Get-NewUserRequest {
                                     </TextBlock>
                                 </Grid>
 
-                                <Label Content="Fax Number"/>
+                                <Label Content="People Ops Partner"/>
                                 <Grid Margin="0,0,0,15">
-                                    <TextBox x:Name="txtFaxNumber" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
+                                    <TextBox x:Name="txtPeopleOpsPartner" Height="32" Padding="8,5,8,5" VerticalContentAlignment="Center"/>
                                     <TextBlock IsHitTestVisible="False"
-                                             Text="Enter fax number"
+                                             Text="Enter People Ops Partner name"
                                              VerticalAlignment="Center"
                                              Margin="8,0,0,0"
                                              Foreground="{DynamicResource TextControlPlaceholderForeground}">
@@ -1468,7 +1500,7 @@ function Get-NewUserRequest {
                                             <Style TargetType="{x:Type TextBlock}">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Text, ElementName=txtFaxNumber}" Value="">
+                                                    <DataTrigger Binding="{Binding Text, ElementName=txtPeopleOpsPartner}" Value="">
                                                         <Setter Property="Visibility" Value="Visible"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
@@ -1855,6 +1887,15 @@ function Get-NewUserRequest {
             }
         }
 
+        # Extract People Ops Partner name from HiBob footer line
+        $peopleOpsPartner = $null
+        foreach ($line in $lines) {
+            if ($line -match 'This email was sent by\s+(.+?)\.') {
+                $peopleOpsPartner = $matches[1].Trim()
+                break
+            }
+        }
+
         # Fixed domain
         $domain = "compassmsp.com"
 
@@ -1906,6 +1947,7 @@ function Get-NewUserRequest {
             InstallSapience        = $data['Sapience'] -eq 'Yes'
             testModeEnabled        = $false
             cloudOnly              = $true
+            peopleOpsPartner       = $peopleOpsPartner
         }
 
         # Convert to JSON
@@ -2123,10 +2165,11 @@ function Get-NewUserRequest {
             $txtDepartment.Text = $UserData.department
             $txtCompanyName.Text = $UserData.companyName
             $txtOfficeLocation.Text = $UserData.officeLocation
+            $txtFaxNumber.Text = $UserData.faxNumber
             $txtManager.Text = $UserData.manager
+            $txtPeopleOpsPartner.Text = $UserData.peopleOpsPartner
             $txtEmployeeId.Text = $UserData.employeeId
             $txtBusinessPhone.Text = $UserData.businessPhone
-            $txtFaxNumber.Text = $UserData.faxNumber
             $txtStreetAddress.Text = $UserData.streetAddress
             $txtCity.Text = $UserData.city
             $txtState.Text = $UserData.state
@@ -2162,6 +2205,7 @@ function Get-NewUserRequest {
         $txtDepartment.Text = ""
         $txtOfficeLocation.Text = ""
         $txtManager.Text = ""
+        $txtPeopleOpsPartner.Text = ""
         $dateEmployeeHireDate.SelectedDate = $null
         $txtCompanyName.Text = ""
         $txtEmployeeId.Text = ""
@@ -2225,6 +2269,7 @@ function Get-NewUserRequest {
             officeLocation             = Get-ValueOrNull $txtOfficeLocation.Text
             employeeHireDate           = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
             manager                    = Get-ValueOrNull $txtManager.Text
+            peopleOpsPartner           = Get-ValueOrNull $txtPeopleOpsPartner.Text
             employeeId                 = Get-ValueOrNull $txtEmployeeId.Text
             businessPhone              = Get-ValueOrNull $txtBusinessPhone.Text
             faxNumber                  = Get-ValueOrNull $txtFaxNumber.Text
@@ -5215,6 +5260,66 @@ try {
     Write-ProgressStep -StepName 'Notifications'
 
     if ($($script:TestMode) -eq $false) {
+        # Email hiring manager and People Ops partner about new user creation
+        Write-StatusMessage -Message "Sending new user notification email..." -Type INFO
+        try {
+
+            $emailSubject = "New Account Ready – $($MgUser.displayName)"
+            $emailContent = @"
+Hi,<br><br>
+A new account has been provisioned and is ready for $($MgUser.displayName). Please share the credentials below with them directly - they will be prompted to set a new password upon first sign-in.<br><br>
+<strong>Account Details</strong><br>
+Display Name: $($MgUser.displayName)<br>
+Email Address: $($MgUser.Mail)<br>
+Temporary Password: $($passwordResult.PlainPassword)<br>
+$($newPSAMemberResults.Content.identifier ? "ConnectWise Manage Username: $($newPSAMemberResults.Content.identifier)<br>`n" : "")
+If you have any questions or need assistance getting them set up, please reach out to Internal IT for assistance.<br><br>
+Thank you,<br>
+"@
+
+            $newHireNotificationParameters = @{
+                FromAddress = $config.Email.NotificationFrom
+                Subject     = $emailSubject
+                Content     = $emailContent
+            }
+
+            if ($managerResponse.mail) {
+                $newHireNotificationParameters.ToAddress = $managerResponse.mail
+            } else {
+                Write-StatusMessage -Message "Manager email not found. Sending new user notification to default email address." -Type WARN
+                $newHireNotificationParameters.ToAddress = $($config.Email.NotificationCcAddress)
+            }
+
+            # Look up People Ops Partner email by display name
+            $PeopleOpsPartnerEmail = $null
+            if ($userInput.peopleOpsPartner) {
+                try {
+                    $peopleOpsUri = "https://graph.microsoft.com/v1.0/users?`$filter=displayName eq '$($userInput.peopleOpsPartner)'&`$select=mail"
+                    $peopleOpsResponse = Invoke-RestMethod -Method GET -Uri $peopleOpsUri -Headers $script:GraphHeaders
+                    if ($peopleOpsResponse.value.Count -gt 0) {
+                        $PeopleOpsPartnerEmail = $peopleOpsResponse.value[0].mail
+                        Write-StatusMessage -Message "People Ops Partner email resolved: $PeopleOpsPartnerEmail" -Type INFO
+                    } else {
+                        Write-StatusMessage -Message "People Ops Partner '$($userInput.peopleOpsPartner)' not found in directory." -Type WARN
+                    }
+                } catch {
+                    Write-StatusMessage -Message "Failed to look up People Ops Partner email: $($_.Exception.Message)" -Type WARN
+                }
+            }
+
+            if ($PeopleOpsPartnerEmail) {
+                $newHireNotificationParameters.CcAddress = $PeopleOpsPartnerEmail
+            } else {
+                Write-StatusMessage -Message "People Ops Partner email not found. Sending new user notification without CC." -Type WARN
+            }
+
+            Send-GraphMailMessage @newHireNotificationParameters
+            Write-StatusMessage -Message "New user notification email sent successfully" -Type OK
+        } catch {
+            Write-StatusMessage -Message "Failed to send new user notification email: $($_.Exception.Message)" -Type ERROR
+        }
+
+
         # Email for Salesforce
         if ($MgUser.department -in @('Sales')) {
             Write-StatusMessage -Message "User is in Sales department. Sending notification for Salesforce provisioning..." -Type INFO
