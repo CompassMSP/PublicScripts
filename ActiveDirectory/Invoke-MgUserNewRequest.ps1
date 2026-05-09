@@ -716,7 +716,7 @@ function Send-GraphMailMessage {
 
         # Use Graph API directly
         $graphUri = "https://graph.microsoft.com/v1.0/users/$FromAddress/sendMail"
-        Invoke-RestMethod -Method POST -Uri $graphUri -Headers $script:GraphHeaders -Body $jsonBody -ContentType "application/json"
+        Invoke-RestMethod -Method POST -Uri $graphUri -Headers $script:GraphHeaders -Body $jsonBody -ContentType "application/json" | Out-Null
         Write-StatusMessage -Message "Email notification sent successfully" -Type OK
     } catch {
         Write-StatusMessage -Message "Failed to send email notification: $_" -Type ERROR
@@ -1067,6 +1067,155 @@ function Show-CustomAlert {
         $sound.Play()
         $window.ShowDialog() | Out-Null
     }
+}
+
+function Show-ConfirmDialog {
+    param (
+        [string]$Message
+    )
+
+    Add-Type -AssemblyName PresentationFramework
+
+    [xml]$XAML = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ConnectWise SSO Confirmation" Height="200" Width="530"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontSize" Value="14"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Border Name="DragArea" CornerRadius="12" Background="#2D2D30" Padding="15" BorderBrush="#0078D7" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Viewbox Margin="0,0,15,0" Width="40" Height="40" VerticalAlignment="Top">
+                    <Canvas Width="48" Height="48">
+                        <Ellipse Width="48" Height="48" Fill="#0078D7"/>
+                        <Rectangle Width="6" Height="20" Fill="White" Canvas.Left="21" Canvas.Top="10"/>
+                        <Rectangle Width="6" Height="6" Fill="White" Canvas.Left="21" Canvas.Top="34"/>
+                    </Canvas>
+                </Viewbox>
+                <TextBlock x:Name="MessageText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </Grid>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                <Button x:Name="AcceptButton" Content="Accept" Width="85" Margin="5" IsDefault="True"/>
+                <Button x:Name="RetryButton" Content="Retry" Width="85" Margin="5"/>
+                <Button x:Name="CancelButton" Content="Cancel" Width="85" Margin="5" IsCancel="True"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
+"@
+
+    $window = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $XAML))
+    $window.FindName("MessageText").Text = $Message
+
+    $window.FindName("AcceptButton").Add_Click({ $script:ssoDialogResult = 'Accept'; $window.Close() })
+    $window.FindName("RetryButton").Add_Click({ $script:ssoDialogResult = 'Retry'; $window.Close() })
+    $window.FindName("CancelButton").Add_Click({ $script:ssoDialogResult = 'Cancel'; $window.Close() })
+
+    $window.FindName("DragArea").Add_MouseLeftButtonDown({
+            param($s, $e)
+            [System.Windows.Window]::GetWindow($s).DragMove()
+        })
+
+    [System.Media.SystemSounds]::Asterisk.Play()
+    $script:ssoDialogResult = 'Cancel'
+    $window.ShowDialog() | Out-Null
+    return $script:ssoDialogResult
+}
+
+function Show-OkCancelDialog {
+    param (
+        [string]$Title = "Confirm",
+        [string]$Message,
+        [string]$Note
+    )
+
+    Add-Type -AssemblyName PresentationFramework
+
+    [xml]$XAML = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="$Title" Height="220" Width="530"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Border Name="DragArea" CornerRadius="12" Background="#2D2D30" Padding="15" BorderBrush="#0078D7" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Viewbox Margin="0,0,15,0" Width="40" Height="40" VerticalAlignment="Top">
+                    <Canvas Width="48" Height="48">
+                        <Ellipse Width="48" Height="48" Fill="#0078D7"/>
+                        <Rectangle Width="6" Height="20" Fill="White" Canvas.Left="21" Canvas.Top="10"/>
+                        <Rectangle Width="6" Height="6" Fill="White" Canvas.Left="21" Canvas.Top="34"/>
+                    </Canvas>
+                </Viewbox>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="MessageText" TextWrapping="Wrap" Foreground="White" FontSize="14"/>
+                    <Rectangle Height="1" Fill="#444444" Margin="0,10,0,10" x:Name="NoteSeparator" Visibility="Collapsed"/>
+                    <TextBlock x:Name="NoteText" TextWrapping="Wrap" Foreground="#FFB900" FontSize="12" Visibility="Collapsed"/>
+                </StackPanel>
+            </Grid>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                <Button x:Name="OkButton" Content="Ok" Width="85" Margin="5" IsDefault="True"/>
+                <Button x:Name="CancelButton" Content="Cancel" Width="85" Margin="5" IsCancel="True"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
+"@
+
+    $window = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $XAML))
+    $window.FindName("MessageText").Text = $Message
+
+    if ($Note) {
+        $window.FindName("NoteText").Text = $Note
+        $window.FindName("NoteText").Visibility = 'Visible'
+        $window.FindName("NoteSeparator").Visibility = 'Visible'
+    }
+
+    $script:okCancelResult = $false
+    $window.FindName("OkButton").Add_Click({ $script:okCancelResult = $true; $window.Close() })
+    $window.FindName("CancelButton").Add_Click({ $script:okCancelResult = $false; $window.Close() })
+    $window.FindName("DragArea").Add_MouseLeftButtonDown({
+            param($s, $e)
+            [System.Windows.Window]::GetWindow($s).DragMove()
+        })
+
+    [System.Media.SystemSounds]::Asterisk.Play()
+    $window.ShowDialog() | Out-Null
+    return $script:okCancelResult
 }
 
 function Get-NewUserRequest {
@@ -3528,9 +3677,8 @@ function Set-UserOptionalFields {
             }
 
             $userId = $user.value[0].id
-            Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$userId" -Headers $script:GraphHeaders -Body ($updateBody | ConvertTo-Json -Depth 10) -ContentType "application/json"
+            Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$userId" -Headers $script:GraphHeaders -Body ($updateBody | ConvertTo-Json -Depth 10) -ContentType "application/json" | Out-Null
         }
-
 
         Write-StatusMessage -Message "Successfully set optional fields for user: $Identity" -Type OK
     } catch {
@@ -3570,7 +3718,7 @@ function Set-UserManager {
                     "@odata.id" = "https://graph.microsoft.com/v1.0/users/$managerId"
                 }
 
-                Invoke-RestMethod -Method PUT -Uri "https://graph.microsoft.com/v1.0/users/$userId/manager/`$ref" -Headers $script:GraphHeaders -Body ($updateBody | ConvertTo-Json) -ContentType "application/json"
+                Invoke-RestMethod -Method PUT -Uri "https://graph.microsoft.com/v1.0/users/$userId/manager/`$ref" -Headers $script:GraphHeaders -Body ($updateBody | ConvertTo-Json) -ContentType "application/json" | Out-Null
                 Write-StatusMessage -Message "Successfully set manager for user: $Identity" -Type OK
             } else {
                 Write-StatusMessage -Message "User '$Identity' not found in Microsoft Graph." -Type WARN
@@ -4301,8 +4449,11 @@ function Invoke-ConnectWiseManageAPI {
 
         $bodyJson = $null
         if ($Body) {
-            if ($Method -eq 'PATCH') { $Body = , $Body }
-            $bodyJson = $Body | ConvertTo-Json -Depth 10 -Compress
+            if ($Method -eq 'PATCH') {
+                $bodyJson = ConvertTo-Json -InputObject $Body -Depth 10 -Compress -AsArray
+            } else {
+                $bodyJson = ConvertTo-Json -InputObject $Body -Depth 10 -Compress
+            }
         }
 
         if ($Method -eq 'GET' -and -not $NoPagination) {
@@ -4336,9 +4487,16 @@ function Invoke-ConnectWiseManageAPI {
             }
         }
     } catch {
+        $responseBody = $_.ErrorDetails.Message
+        $errorMessage = if ($responseBody) {
+            try { ($responseBody | ConvertFrom-Json).message } catch { $_.Exception.Message }
+        } else {
+            $_.Exception.Message
+        }
         return @{
-            Success = $false
-            Error   = $_.Exception
+            Success      = $false
+            Error        = $errorMessage
+            ResponseBody = $responseBody
         }
     }
 }
@@ -4394,7 +4552,13 @@ function New-ConnectwisePSAMember {
         # 4. Format hire date for ConnectWise
         $formattedDate = (Get-Date $NewUserHireDate -Format "yyyy-MM-dd")
 
-        $newUserIdentifier = (($newUser.mail -split '@')[0]).ToLower()
+        $emailPrefix = (($newUser.mail -split '@')[0]).ToLower()
+        $newUserIdentifier = if ($emailPrefix.Length -le 15) {
+            $emailPrefix
+        } else {
+            $initialsFormat = "$($newUser.GivenName[0].ToString().ToLower())$($newUser.Surname.ToLower())"
+            $initialsFormat.Substring(0, [Math]::Min(15, $initialsFormat.Length))
+        }
 
         # 5. Create new member properties
         $newMember = @{
@@ -4406,7 +4570,6 @@ function New-ConnectwisePSAMember {
             officeEmail                      = $newUser.Mail
             primaryEmail                     = $newUser.Mail
             title                            = $newUser.JobTitle
-            mobilePhone                      = $newUser.MobilePhone
             Password                         = $NewUserPassword
             defaultPhone                     = 'Office'
             defaultEmail                     = 'Office'
@@ -4419,9 +4582,6 @@ function New-ConnectwisePSAMember {
             invoiceScreenDefaultTabFormat    = $templateMember.Content.invoiceScreenDefaultTabFormat
             invoicingDisplayOptions          = $templateMember.Content.invoicingDisplayOptions
             agreementInvoicingDisplayOptions = $templateMember.Content.agreementInvoicingDisplayOptions
-            #ssoSettings                      = @{
-            #    ssoUserId = $CWHomeSSOID
-            #}
         }
 
         # Function to add properties only if they exist
@@ -4474,8 +4634,9 @@ function New-ConnectwisePSAMember {
         $createResult = Invoke-ConnectWiseManageAPI -Method 'POST' -Headers $headers -Endpoint "system/members" -Body $newMember
         if (-not $createResult.Success) {
             return @{
-                Success = $false
-                Error   = $createResult.Error
+                Success      = $false
+                Error        = $createResult.Error
+                ResponseBody = $createResult.ResponseBody
             }
         }
 
@@ -4527,6 +4688,165 @@ function New-ConnectwisePSAMember {
             Success = $false
             Error   = $_.Exception
         }
+    }
+}
+
+function Invoke-ConnectWiseHomeActivation {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [hashtable]
+        $User,
+
+
+        [Parameter(Mandatory)]
+        [hashtable]$Headers,
+
+        [Parameter()]
+        [int]$MaxGraphPages = 5,
+
+        [Parameter()]
+        [int]$MaxRetries = 3,
+
+        [Parameter()]
+        [int]$RetryDelaySec = 3
+    )
+
+    function Invoke-WithRetry {
+        param(
+            [scriptblock]$ScriptBlock,
+            [int]$Retries = 3,
+            [int]$DelaySec = 2,
+            [string]$ActionName = "Operation"
+        )
+
+        for ($i = 1; $i -le $Retries; $i++) {
+            try {
+                return & $ScriptBlock
+            }
+            catch {
+                if ($i -eq $Retries) {
+                    throw "$ActionName failed after $Retries attempts. Last error: $($_.Exception.Message)"
+                }
+                Start-Sleep -Seconds $DelaySec
+            }
+        }
+    }
+
+    $confirmCWHome = Show-OkCancelDialog `
+        -Message 'Log in to ConnectWise Home and create the user to trigger the activation email. Click OK when completed.'
+
+    if (-not $confirmCWHome) {
+        Write-StatusMessage -Message "Cancelled. Skipping ConnectWise activation flow." -Type WARN
+        return $false
+    }
+
+    try {
+        Write-StatusMessage -Message "Searching for ConnectWise activation email in $($User.DisplayName) mailbox..." -Type INFO
+
+        $allMessages = @()
+        $nextLink = "https://graph.microsoft.com/v1.0/users/$($User.Id)/messages?`$top=25&`$orderby=receivedDateTime desc"
+
+        for ($page = 0; $page -lt $MaxGraphPages -and $nextLink; $page++) {
+
+            $response = Invoke-WithRetry -ActionName "Graph message fetch" -Retries $MaxRetries -DelaySec $RetryDelaySec -ScriptBlock {
+                Invoke-RestMethod -Method GET -Uri $nextLink -Headers $GraphHeaders
+            }
+
+            if ($response.value) {
+                $allMessages += $response.value
+            }
+
+            $nextLink = $response.'@odata.nextLink'
+        }
+
+        $message = $allMessages |
+            Where-Object {
+                $_.subject -match "ConnectWise|activation|SSO"
+            } |
+            Sort-Object receivedDateTime -Descending |
+            Select-Object -First 1
+
+        if (-not $message) {
+            throw "No ConnectWise activation email found."
+        }
+
+        if (-not $message.body.content) {
+            throw "Email body is empty."
+        }
+
+        $body = [System.Net.WebUtility]::HtmlDecode($message.body.content)
+
+        $link = $null
+
+        # Primary: anchor tag
+        $anchorMatch = [regex]::Match(
+            $body,
+            '<a[^>]+href\s*=\s*["''](?<url>https?[^"''>]+)["'']',
+            'IgnoreCase'
+        )
+
+        if ($anchorMatch.Success) {
+            $link = $anchorMatch.Groups["url"].Value
+        }
+
+        # Fallback: originalsrc
+        if (-not $link) {
+            $fallbackMatch = [regex]::Match(
+                $body,
+                'originalsrc\s*=\s*["'']([^"''>]+)',
+                'IgnoreCase'
+            )
+
+            if ($fallbackMatch.Success) {
+                $link = $fallbackMatch.Groups[1].Value
+            }
+        }
+
+        if (-not $link) {
+            throw "SSO activation link not found in email body."
+        }
+
+        $link = [System.Net.WebUtility]::HtmlDecode($link)
+
+        Write-StatusMessage -Message "Activation link extracted. Attempting ConnectWise activation..." -Type INFO
+
+        $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+
+        $activationResponse = Invoke-WithRetry -ActionName "ConnectWise activation" -Retries $MaxRetries -DelaySec $RetryDelaySec -ScriptBlock {
+            Invoke-WebRequest -Uri $link -MaximumRedirection 10 -WebSession $session -UseBasicParsing
+        }
+
+        if (-not $activationResponse) {
+            throw "No response from activation endpoint."
+        }
+
+        $content = $activationResponse.Content
+
+        $successPatterns = @(
+            "Email successfully confirmed",
+            "confirmed successfully",
+            "activation complete",
+            "you may now sign in"
+        )
+
+        $isSuccess = $successPatterns | ForEach-Object {
+            if ($content -match $_) { $true }
+        } | Where-Object { $_ -eq $true }
+
+        if ($isSuccess) {
+            Write-StatusMessage -Message "ConnectWise Home SSO activation confirmed" -Type OK
+            return $true
+        }
+        else {
+            Write-StatusMessage -Message "Activation response received but success not confirmed" -Type WARN
+            Write-StatusMessage -Message "Manual verification may be required in ConnectWise Home" -Type WARN
+            return $false
+        }
+    }
+    catch {
+        Write-StatusMessage -Message "ConnectWise activation process failed: $($_.Exception.Message)" -Type ERROR
+        return $false
     }
 }
 
@@ -4597,35 +4917,35 @@ function Start-NewUserFinalize {
         "- Password: $Password",
         "- Template User: $(if ($TemplateUserCheck) {$UserInput.userToCopy} else {'No template user selected.'})",
         "",
-        "Connectwise PSA Member Creation Status:",
-        "----------------------------------------",
-        $(if ($ConnectwisePSAUserCreated) {
-                "- Member Creation: $($ConnectwisePSAUserCreated.Success)"
-                if ($ConnectwisePSAUserCreated.Success -eq $true) {
-                    "- Member ID: $($ConnectwisePSAUserCreated.Content.id)"
-                    "- Member Username: $($ConnectwisePSAUserCreated.Content.identifier)"
-                } elseif ($ConnectwisePSAUserCreated.Reason -eq 'NotFound') {
-                    "- Skipped: Template user not found in Connectwise PSA. This is expected if the template user does not have a Connectwise PSA account.",
-                    "Note: If a PSA account was intended, verify the template user email is correct and that the user exists as an active member in Connectwise PSA."
-                } else {
-                    "- Error: $($ConnectwisePSAUserCreated.Error)"
-                }
-                if ($ConnectwisePSAUserCreated.EngineerResult) {
-                    "- Primary Engineer Update: $($ConnectwisePSAUserCreated.EngineerResult.Success)"
-                    if (-not $ConnectwisePSAUserCreated.EngineerResult.Success) {
-                        "- Error: $($ConnectwisePSAUserCreated.EngineerResult.Error)"
-                    }
-                }
-            } else {
-                "- Connectwise PSA user creation was not attempted."
-            }),
-
         "Group Assignment Status:",
         "----------------------------------------",
         "- Total Groups Attempted: $AssignedGroupCount",
         "- Successfully Added: $totalSuccessful",
         "- Failed Additions: $($GroupOperationSummary.TotalFailed)"
     )
+
+    # ConnectWise PSA section
+    $summaryParts += @("", "Connectwise PSA Member Creation Status:", "----------------------------------------")
+    if ($ConnectwisePSAUserCreated) {
+        $summaryParts += "- Member Creation: $($ConnectwisePSAUserCreated.Success)"
+        if ($ConnectwisePSAUserCreated.Success -eq $true) {
+            $summaryParts += "- Member ID: $($ConnectwisePSAUserCreated.Content.id)"
+            $summaryParts += "- Member Username: $($ConnectwisePSAUserCreated.Content.identifier)"
+        } elseif ($ConnectwisePSAUserCreated.Reason -eq 'NotFound') {
+            $summaryParts += "- Skipped: Template user not found in Connectwise PSA. This is expected if the template user does not have a Connectwise PSA account."
+            $summaryParts += "Note: If a PSA account was intended, verify the template user email is correct and that the user exists as an active member in Connectwise PSA."
+        } else {
+            $summaryParts += "- Error: $($ConnectwisePSAUserCreated.Error)"
+        }
+        if ($ConnectwisePSAUserCreated.EngineerResult) {
+            $summaryParts += "- Primary Engineer Update: $($ConnectwisePSAUserCreated.EngineerResult.Success)"
+            if (-not $ConnectwisePSAUserCreated.EngineerResult.Success) {
+                $summaryParts += "- Error: $($ConnectwisePSAUserCreated.EngineerResult.Error)"
+            }
+        }
+    } else {
+        $summaryParts += "- Connectwise PSA user creation was not attempted."
+    }
 
     # Add group operation details
     if ($GroupOperationSummary.CopyUserGroups.Count -gt 0) {
@@ -4973,7 +5293,7 @@ try {
         usageLocation = if ($userInput.usageLocation) { $userInput.usageLocation } else { 'US' }
     }
 
-    Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.id)" -Headers $script:GraphHeaders -Body ($updateUsageLocationBody | ConvertTo-Json) -ContentType "application/json"
+    Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$($MgUser.id)" -Headers $script:GraphHeaders -Body ($updateUsageLocationBody | ConvertTo-Json) -ContentType "application/json" | Out-Null
 
     # Sleep to allow usageLocation to propagate
     Write-StatusMessage -Message "Waiting for Usage Location to propagate..." -Type INFO
@@ -5178,7 +5498,8 @@ try {
                 ErrorAction     = 'Stop'
             }
 
-            Add-MailboxPermission @mailboxPermissionParams
+            Add-MailboxPermission @mailboxPermissionParams | Out-Null
+            Write-StatusMessage -Message "Successfully granted full access to managedservices@compassmsp.com mailbox." -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to add mailbox permission: $_" -Type ERROR
         }
@@ -5222,35 +5543,15 @@ try {
                     if ($newPSAMemberResults.EngineerResult.Success) {
                         Write-StatusMessage -Message "Successfully set as Primary Engineer." -Type OK
                     } else {
-                        Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error.Message)" -Type WARN
+                        Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error)" -Type WARN
                     }
                 }
 
-                Write-StatusMessage -Message "Linking Connectwise Home SSO user to Connectwise PSA user..." -Type INFO
+                Invoke-ConnectWiseHomeActivation -User $MgUser -Headers $Script:GraphHeaders
 
-                $ssoUserIdValue = Show-CustomAlert `
-                    -Title "Connectwise Home SSO Linking" `
-                    -DefaultValue "sso_user_id_value" `
-                    -Message "Please enter the Connectwise Home SSO user ID:" `
-                    -AlertType "Info"
-
-                if (-not $ssoUserIdValue) {
-                    Write-StatusMessage -Message "No SSO user ID provided. Cannot link SSO user to Connectwise PSA user." -Type WARN
-                } else {
-                    $linkSsoBody = @{
-                        ssoUserId = $ssoUserIdValue
-                    }
-
-                    $linkSsoResult = Invoke-ConnectWiseManageAPI -Method 'PATCH' -Headers $psaHeaders -Endpoint "/system/members/$($newPSAMemberResults.Content.id)/linkSsoUser" -Body $linkSsoBody
-
-                    if (-not $linkSsoResult.Success) {
-                        Write-StatusMessage -Message "Failed to link SSO user to ConnectWise PSA user." -Type ERROR
-                    } else {
-                        Write-StatusMessage -Message "Successfully linked SSO user to ConnectWise PSA user." -Type OK
-                    }
-                }
             } else {
-                Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error.Message)" -Type ERROR
+                $cwErrorDetail = if ($newPSAMemberResults.ResponseBody) { " | $($newPSAMemberResults.ResponseBody)" } else { '' }
+                Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error)$cwErrorDetail" -Type ERROR
             }
 
         }
@@ -5432,7 +5733,7 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
 
     Start-NewUserFinalize -User $MgUser `
         -ManagerDisplayName $($managerResponse.displayName) `
-        -TemplateUserCheck $TemplateUserCheck `
+        #-TemplateUserCheck $TemplateUserCheck `
         -UserInput $userInput `
         -SkippedTemplateUserGroups ([bool]$skippedTemplateUserGroups) `
         -Password $passwordResult.PlainPassword `
