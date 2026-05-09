@@ -46,9 +46,7 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
                             - Reordered right column fields: Fax Number → Manager → People Ops Partner
                             - Replaced single-prompt duplicate email check with a loop that re-prompts until a unique address is confirmed or the user cancels
 
-    4.4.3      2026-05-07   Feature Updates:
-                            - Added ConnectWise Home SSO user linking step after PSA member creation
-                            UI Refactoring:
+    4.4.3      2026-05-07   UI Refactoring:
                             - Merged New-DuplicatePromptForm into Show-CustomAlert via optional -DefaultValue parameter (input mode returns entered string or $null)
                             - Removed New-DuplicatePromptForm function; updated caller to use Show-CustomAlert
                             - Fixed Show-CustomAlert window drag: replaced non-functional 5px Top_Bar with DragArea border using Add_MouseLeftButtonDown and GetWindow()
