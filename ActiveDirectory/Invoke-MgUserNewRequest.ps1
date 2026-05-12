@@ -4515,7 +4515,7 @@ function New-ConnectwisePSAMember {
 
     try {
 
-        # 1. Get template member details
+        # Get template member details
         $getTemplateMemberParameters = @{
             Method     = 'GET'
             Headers    = $Headers
@@ -4540,16 +4540,17 @@ function New-ConnectwisePSAMember {
             }
         }
 
-        # 3. Check if user is in Professional Services department
+        # Check if user is in Professional Services department
         $IsProfessionalServices = $false
 
         if ($newUser.officeLocation -eq "Professional Services") {
             $IsProfessionalServices = $true
         }
 
-        # 4. Format hire date for ConnectWise
+        # Format hire date for ConnectWise
         $formattedDate = (Get-Date $NewUserHireDate -Format "yyyy-MM-dd")
 
+        # Format PSA Member Identifier based on 15 char limit
         $emailPrefix = (($newUser.mail -split '@')[0]).ToLower()
         $newUserIdentifier = if ($emailPrefix.Length -le 15) {
             $emailPrefix
@@ -4558,7 +4559,7 @@ function New-ConnectwisePSAMember {
             $initialsFormat.Substring(0, [Math]::Min(15, $initialsFormat.Length))
         }
 
-        # 5. Create new member properties
+        # Create new member properties
         $newMember = @{
             identifier                       = $newUserIdentifier
             firstName                        = $newUser.GivenName
@@ -4628,7 +4629,7 @@ function New-ConnectwisePSAMember {
             Add-IfExists -HashTable $newMember -Key $prop -Value $templateMember.Content.$prop
         }
 
-        # 6. Create new member
+        # Create new member
         $createResult = Invoke-ConnectWiseManageAPI -Method 'POST' -Headers $headers -Endpoint "system/members" -Body $newMember
         if (-not $createResult.Success) {
             return @{
@@ -4638,18 +4639,18 @@ function New-ConnectwisePSAMember {
             }
         }
 
-        # 7. Set as Professional Services (Primary Engineer) if needed
+        # Set as Professional Services (Primary Engineer) if needed
         if ($IsProfessionalServices) {
 
-            # Step 1: Fetch the current options
+            # Fetch the current options
             $getCustomFields = Invoke-ConnectWiseManageAPI -Method 'GET' -Headers $headers -Endpoint "system/userDefinedFields"
             $selectCustomField = $getCustomFields.Content | Where-Object { $_.caption -eq 'Primary Engineer' }
             $getUserDefinedFields = Invoke-ConnectWiseManageAPI -Method 'GET' -Headers $headers -Endpoint "system/userDefinedFields/$($selectCustomField.Id)"
 
-            # Step 2: Get the highest existing ID in the current options
+            # Get the highest existing ID in the current options
             $sortOrder = ([int]($getUserDefinedFields.Content.options.sortOrder | Measure-Object -Maximum).Maximum)
 
-            # Step 3: Define new options, ensuring their IDs are unique
+            # Define new options, ensuring their IDs are unique
             $newCustomFieldsOption = @(
                 [PSCustomObject]@{
                     optionValue  = $($NewUser.DisplayName)
@@ -4659,7 +4660,7 @@ function New-ConnectwisePSAMember {
                 }
             )
 
-            # Step 4: Create the body for the PATCH request
+            # Create the body for the PATCH request
             $customFieldsBody = @(
                 [PSCustomObject]@{
                     op    = "replace"
@@ -4668,14 +4669,14 @@ function New-ConnectwisePSAMember {
                 }
             )
 
-            # Step 5: Send the PATCH request
+            # Send the PATCH request
             $engineerResult = Invoke-ConnectWiseManageAPI -Method 'PATCH' -Headers $headers -Endpoint "system/userDefinedFields/$($selectCustomField.Id)" -Body $customFieldsBody
 
             # EngineerResult attached to return; caller handles success/failure messaging
 
         }
 
-        # 8. Attach engineerResult onto createResult if it was set
+        # Attach engineerResult onto createResult if it was set
         if ($engineerResult) {
             $createResult['EngineerResult'] = $engineerResult
         }
@@ -4721,8 +4722,7 @@ function Invoke-ConnectWiseHomeActivation {
         for ($i = 1; $i -le $Retries; $i++) {
             try {
                 return & $ScriptBlock
-            }
-            catch {
+            } catch {
                 if ($i -eq $Retries) {
                     throw "$ActionName failed after $Retries attempts. Last error: $($_.Exception.Message)"
                 }
@@ -4759,11 +4759,11 @@ function Invoke-ConnectWiseHomeActivation {
         }
 
         $message = $allMessages |
-            Where-Object {
-                $_.subject -match "ConnectWise|activation|SSO"
-            } |
-            Sort-Object receivedDateTime -Descending |
-            Select-Object -First 1
+        Where-Object {
+            $_.subject -match "ConnectWise|activation|SSO"
+        } |
+        Sort-Object receivedDateTime -Descending |
+        Select-Object -First 1
 
         if (-not $message) {
             throw "No ConnectWise activation email found."
@@ -4835,14 +4835,12 @@ function Invoke-ConnectWiseHomeActivation {
         if ($isSuccess) {
             Write-StatusMessage -Message "ConnectWise Home SSO activation confirmed" -Type OK
             return $true
-        }
-        else {
+        } else {
             Write-StatusMessage -Message "Activation response received but success not confirmed" -Type WARN
             Write-StatusMessage -Message "Manual verification may be required in ConnectWise Home" -Type WARN
             return $false
         }
-    }
-    catch {
+    } catch {
         Write-StatusMessage -Message "ConnectWise activation process failed: $($_.Exception.Message)" -Type ERROR
         return $false
     }
@@ -4929,6 +4927,8 @@ function Start-NewUserFinalize {
         if ($ConnectwisePSAUserCreated.Success -eq $true) {
             $summaryParts += "- Member ID: $($ConnectwisePSAUserCreated.Content.id)"
             $summaryParts += "- Member Username: $($ConnectwisePSAUserCreated.Content.identifier)"
+        } elseif ($ConnectwisePSAUserCreated.Reason -eq 'NoTemplateUser') {
+            $summaryParts += "- Skipped: No template user was selected. PSA member creation was not attempted."
         } elseif ($ConnectwisePSAUserCreated.Reason -eq 'NotFound') {
             $summaryParts += "- Skipped: Template user not found in Connectwise PSA. This is expected if the template user does not have a Connectwise PSA account."
             $summaryParts += "Note: If a PSA account was intended, verify the template user email is correct and that the user exists as an active member in Connectwise PSA."
@@ -5332,6 +5332,7 @@ try {
     # Start Group Add Operations
     try {
 
+        $skippedTemplateUserGroups = $false
         $allFilteredGroups = [System.Collections.Generic.List[object]]::new()
         $groupOperationSummary = @{
             CopyUserGroups   = @{
@@ -5507,6 +5508,8 @@ try {
 
     # Step: Create Connectwise PSA User
 
+    $newPSAMemberResults = $null
+
     $psaTokenParameters = @{
         CompanyId  = $config.ConnectWiseManage.CompanyId
         PublicKey  = $config.ConnectWiseManage.PublicKey
@@ -5516,47 +5519,47 @@ try {
 
     $psaHeaders = Get-ConnectWiseManageToken @psaTokenParameters
 
-    if ($userInput.createConnectwisePSAMember -eq $true) {
-        Write-ProgressStep -StepName 'Connectwise PSA Member Creation'
+    Write-ProgressStep -StepName 'Connectwise PSA Member Creation'
 
-        if (-not $templateData.TemplateUser) {
-            Write-StatusMessage -Message "No template user selected for Connectwise PSA user creation. Cannot proceed with PSA user creation." -Type ERROR
-        } else {
-            Write-StatusMessage -Message "Creating Connectwise PSA member based on template user: $($templateData.TemplateUser)" -Type INFO
-
-            $newPSAMemberParams = @{
-                TemplateUserEmail = $templateData.TemplateUser
-                NewUser           = $MgUser
-                NewUserHireDate   = $userInput.employeeHireDate
-                NewUserPassword   = $passwordResult.PlainPassword
-                Headers           = $psaHeaders
-            }
-
-            $newPSAMemberResults = New-ConnectwisePSAMember @newPSAMemberParams
-
-            if ($newPSAMemberResults.Success -and $newPSAMemberResults.Content.id) {
-                Write-StatusMessage -Message "Successfully created Connectwise PSA user: $($newPSAMemberResults.Content.id) - $($newPSAMemberResults.Content.identifier)" -Type OK
-
-                if ($newPSAMemberResults.EngineerResult) {
-                    if ($newPSAMemberResults.EngineerResult.Success) {
-                        Write-StatusMessage -Message "Successfully set as Primary Engineer." -Type OK
-                    } else {
-                        Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error)" -Type WARN
-                    }
-                }
-
-                Invoke-ConnectWiseHomeActivation -User $MgUser -Headers $Script:GraphHeaders
-
-            } else {
-                $cwErrorDetail = if ($newPSAMemberResults.ResponseBody) { " | $($newPSAMemberResults.ResponseBody)" } else { '' }
-                Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error)$cwErrorDetail" -Type ERROR
-            }
-
+    if (-not $templateData.TemplateUser) {
+        Write-StatusMessage -Message "No template user selected. Skipping Connectwise PSA user creation." -Type WARN
+        $newPSAMemberResults = @{
+            Success = $false
+            Reason  = 'NoTemplateUser'
+            Error   = 'No template user was selected. PSA member creation was skipped.'
         }
     } else {
-        Write-StatusMessage -Message "Create Connectwise User option not selected. Skipping..." -Type INFO
-    }
+        Write-StatusMessage -Message "Creating Connectwise PSA member based on template user: $($templateData.TemplateUser)" -Type INFO
 
+        $newPSAMemberParams = @{
+            TemplateUserEmail = $templateData.TemplateUser
+            NewUser           = $MgUser
+            NewUserHireDate   = $userInput.employeeHireDate
+            NewUserPassword   = $passwordResult.PlainPassword
+            Headers           = $psaHeaders
+        }
+
+        $newPSAMemberResults = New-ConnectwisePSAMember @newPSAMemberParams
+
+        if ($newPSAMemberResults.Success -and $newPSAMemberResults.Content.id) {
+            Write-StatusMessage -Message "Successfully created Connectwise PSA user: $($newPSAMemberResults.Content.id) - $($newPSAMemberResults.Content.identifier)" -Type OK
+
+            if ($newPSAMemberResults.EngineerResult) {
+                if ($newPSAMemberResults.EngineerResult.Success) {
+                    Write-StatusMessage -Message "Successfully set as Primary Engineer." -Type OK
+                } else {
+                    Write-StatusMessage -Message "Failed to set as Primary Engineer: $($newPSAMemberResults.EngineerResult.Error)" -Type WARN
+                }
+            }
+
+            Invoke-ConnectWiseHomeActivation -User $MgUser -Headers $Script:GraphHeaders
+
+        } else {
+            $cwErrorDetail = if ($newPSAMemberResults.ResponseBody) { " | $($newPSAMemberResults.ResponseBody)" } else { '' }
+            Write-StatusMessage -Message "Failed to create Connectwise PSA user: $($newPSAMemberResults.Error)$cwErrorDetail" -Type ERROR
+        }
+
+    }
 
     # Step: Send notifications
     Write-ProgressStep -StepName 'Notifications'
@@ -5574,7 +5577,7 @@ A new account has been provisioned and is ready for $($MgUser.displayName). Plea
 Display Name: $($MgUser.displayName)<br>
 Email Address: $($MgUser.Mail)<br>
 Temporary Password: $($passwordResult.PlainPassword)<br>
-$($newPSAMemberResults.Content.identifier ? "ConnectWise Manage Username: $($newPSAMemberResults.Content.identifier)<br>`n" : "")
+$($newPSAMemberResults.Content.identifier ? "ConnectWise Manage Username: $($newPSAMemberResults.Content.identifier)<br>`n" : "")<br><br>
 If you have any questions or need assistance getting them set up, please reach out to Internal IT for assistance.<br><br>
 Thank you,<br>
 "@
@@ -5729,15 +5732,19 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
 
     Write-StatusMessage -Message "Building final summary..." -Type INFO
 
-    Start-NewUserFinalize -User $MgUser `
-        -ManagerDisplayName $($managerResponse.displayName) `
-        #-TemplateUserCheck $TemplateUserCheck `
-        -UserInput $userInput `
-        -SkippedTemplateUserGroups ([bool]$skippedTemplateUserGroups) `
-        -Password $passwordResult.PlainPassword `
-        -AssignedGroupCount $groupAddResults.SuccessCount `
-        -GroupOperationSummary $groupOperationSummary `
-        -ConnectwisePSAUserCreated $newPSAMemberResults
+    $newUserFinalizeParams = @{
+        User                      = $MgUser
+        ManagerDisplayName        = $managerResponse.displayName
+        UserInput                 = $userInput
+        TemplateUserCheck         = $TemplateUserCheck
+        SkippedTemplateUserGroups = [bool]$skippedTemplateUserGroups
+        Password                  = $passwordResult.PlainPassword
+        AssignedGroupCount        = $groupAddResults.SuccessCount
+        GroupOperationSummary     = $groupOperationSummary
+        ConnectwisePSAUserCreated = $newPSAMemberResults
+    }
+
+    Start-NewUserFinalize @newUserFinalizeParams
 
     # Show duration
     $endTime = Get-Date
