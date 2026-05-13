@@ -1262,7 +1262,6 @@ function Get-NewUserRequest {
                 <Button x:Name="btnLocalFromHibob" Content="Load from HiBob" Style="{DynamicResource AccentButtonStyle}" Width="120" Height="32" Margin="0,0,10,0"/>
                 <Button x:Name="btnRefreshLicenses" Content="Refresh Licenses" Width="120" Height="32" Margin="0,0,10,0"/>
                 <CheckBox x:Name="cbInstallSapience" Content="Install Sapience" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                <CheckBox x:Name="cbCreateConnectwisePSAMember" Content="Create Connectwise PSA Member" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </WrapPanel>
         </StackPanel>
 
@@ -1951,7 +1950,6 @@ function Get-NewUserRequest {
                 $txtPostalCode.Text = $jsonContent.postalCode
                 $txtCountry.Text = $jsonContent.country
                 $cbInstallSapience.IsChecked = [bool]$jsonContent.installSapience
-                $cbCreateConnectwisePSAMember.IsChecked = [bool]$jsonContent.createConnectwisePSAMember
 
                 # Set department groups (multi-select) - DISABLED
                 if ($jsonContent.departmentGroupsDISABLED) {
@@ -2324,7 +2322,6 @@ function Get-NewUserRequest {
             $txtPostalCode.Text = $UserData.postalCode
             $txtCountry.Text = $UserData.country
             $cbInstallSapience.IsChecked = [bool]$UserData.installSapience
-            $cbCreateConnectwisePSAMember.IsChecked = [bool]$UserData.createConnectwisePSAMember
 
             # Set usage location
             if ($UserData.usageLocation) {
@@ -2365,7 +2362,6 @@ function Get-NewUserRequest {
         $txtPostalCode.Text = ""
         $txtCountry.Text = ""
         $cbInstallSapience.IsChecked = $false
-        $cbCreateConnectwisePSAMember.IsChecked = $false
         #$lstDepartmentGroups.SelectedItems.Clear()
         Show-StatusMessage -Message "Form has been reset" -Type "Info"
     }
@@ -2430,7 +2426,6 @@ function Get-NewUserRequest {
             testModeEnabled            = $false
             Send8x8ProvisioningTicket  = $false
             InstallSapience            = $false
-            createConnectwisePSAMember = $false
             cloudOnly                  = $true
         }
 
@@ -2474,12 +2469,6 @@ function Get-NewUserRequest {
             $formData.installSapience = $true
         } else {
             $formData.installSapience = $false
-        }
-
-        if ($cbCreateConnectwisePSAMember.IsChecked -eq $true) {
-            $formData.createConnectwisePSAMember = $true
-        } else {
-            $formData.createConnectwisePSAMember = $false
         }
 
         return $formData
