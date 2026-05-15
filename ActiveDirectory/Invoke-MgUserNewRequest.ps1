@@ -622,7 +622,7 @@ function Send-GraphMailMessage {
         [string]$FromAddress,
 
         [Parameter()]
-        [string]$ToAddress,
+        [string[]]$ToAddress,
 
         [Parameter()]
         [string[]]$CcAddress,
@@ -5577,8 +5577,8 @@ Thank you,<br>
                 Content     = $emailContent
             }
 
-            if ($managerResponse.mail) {
-                $newHireNotificationParameters.ToAddress = $managerResponse.mail
+            if ($MgUser.Manager.mail) {
+                $newHireNotificationParameters.ToAddress = $($MgUser.Manager.mail)
             } else {
                 Write-StatusMessage -Message "Manager email not found. Sending new user notification to default email address." -Type WARN
                 $newHireNotificationParameters.ToAddress = $($config.Email.NotificationCcAddress)
@@ -5625,8 +5625,8 @@ Please set up the following user with an Salesforce account.<br><br>
 Display Name: $($MgUser.displayName)<br>
 Mail: $($MgUser.Mail)<br>
 Job Title: $($MgUser.jobTitle)<br>
-Manager Email: $($managerResponse.mail)<br>
-Manager Display Name: $($managerResponse.displayName)<br>
+Manager Email: $($MgUser.Manager.mail)<br>
+Manager Display Name: $($MgUser.Manager.displayName)<br>
 
 <p>
 The user start date is $($userInput.employeeHireDate).<br>
@@ -5657,7 +5657,7 @@ Department: $($MgUser.department)
 Sub Department: $($MgUser.officeLocation)
 Call Center: $callCenter
 User to Copy: $($userInput.userToCopy)
-Manager Email: $($managerResponse.mail)
+Manager Email: $($MgUser.Manager.mail)
 Manager Display Name: $($managerResponse.displayName)
 
 Please do not send the welcome email with the account setup.
