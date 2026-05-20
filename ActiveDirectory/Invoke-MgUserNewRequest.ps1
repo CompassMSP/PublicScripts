@@ -2394,39 +2394,39 @@ function Get-NewUserRequest {
 
         # Store form data in a custom object
         $formData = [PSCustomObject]@{
-            requiredLicense            = @()
-            displayName                = Get-ValueOrNull $txtDisplayName.Text
-            samAccountName             = Get-ValueOrNull $txtSamAccountName.Text
-            domain                     = if ($cboDomain.SelectedItem) { $cboDomain.SelectedItem.ToString() } else { "" }
-            userPrincipalName          = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
-            mobilePhone                = Get-ValueOrNull $txtMobilePhone.Text
-            timeZone                   = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
-            usageLocation              = $usageLocation
-            copyUserOperations         = if ($cboCopyUserOperations.SelectedItem -eq 'None') { $null } elseif ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
-            userToCopy                 = Get-ValueOrNull $txtUserToCopy.Text
-            ancillaryLicense           = @()
-            givenName                  = Get-ValueOrNull $txtGivenName.Text
-            surname                    = Get-ValueOrNull $txtSurname.Text
-            jobTitle                   = Get-ValueOrNull $txtJobTitle.Text
-            department                 = Get-ValueOrNull $txtDepartment.Text
-            companyName                = Get-ValueOrNull $txtCompanyName.Text
-            officeLocation             = Get-ValueOrNull $txtOfficeLocation.Text
-            employeeHireDate           = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
-            manager                    = Get-ValueOrNull $txtManager.Text
-            peopleOpsPartner           = Get-ValueOrNull $txtPeopleOpsPartner.Text
-            employeeId                 = Get-ValueOrNull $txtEmployeeId.Text
-            businessPhone              = Get-ValueOrNull $txtBusinessPhone.Text
-            faxNumber                  = Get-ValueOrNull $txtFaxNumber.Text
-            streetAddress              = Get-ValueOrNull $txtStreetAddress.Text
-            city                       = Get-ValueOrNull $txtCity.Text
-            state                      = Get-ValueOrNull $txtState.Text
-            postalCode                 = Get-ValueOrNull $txtPostalCode.Text
-            country                    = Get-ValueOrNull $txtCountry.Text
-            departmentGroupOptions     = @()
-            testModeEnabled            = $false
-            Send8x8ProvisioningTicket  = $false
-            InstallSapience            = $false
-            cloudOnly                  = $true
+            requiredLicense           = @()
+            displayName               = Get-ValueOrNull $txtDisplayName.Text
+            samAccountName            = Get-ValueOrNull $txtSamAccountName.Text
+            domain                    = if ($cboDomain.SelectedItem) { $cboDomain.SelectedItem.ToString() } else { "" }
+            userPrincipalName         = if ($txtSamAccountName.Text -and $cboDomain.SelectedItem) { "$($txtSamAccountName.Text)@$($cboDomain.SelectedItem)" } else { "" }
+            mobilePhone               = Get-ValueOrNull $txtMobilePhone.Text
+            timeZone                  = if ($cboTimeZone.SelectedItem) { $cboTimeZone.SelectedItem } else { $null }
+            usageLocation             = $usageLocation
+            copyUserOperations        = if ($cboCopyUserOperations.SelectedItem -eq 'None') { $null } elseif ($cboCopyUserOperations.SelectedItem) { $cboCopyUserOperations.SelectedItem } else { $null }
+            userToCopy                = Get-ValueOrNull $txtUserToCopy.Text
+            ancillaryLicense          = @()
+            givenName                 = Get-ValueOrNull $txtGivenName.Text
+            surname                   = Get-ValueOrNull $txtSurname.Text
+            jobTitle                  = Get-ValueOrNull $txtJobTitle.Text
+            department                = Get-ValueOrNull $txtDepartment.Text
+            companyName               = Get-ValueOrNull $txtCompanyName.Text
+            officeLocation            = Get-ValueOrNull $txtOfficeLocation.Text
+            employeeHireDate          = if ($dateEmployeeHireDate.SelectedDate) { $dateEmployeeHireDate.SelectedDate.ToString("yyyy-MM-dd") } else { $null }
+            manager                   = Get-ValueOrNull $txtManager.Text
+            peopleOpsPartner          = Get-ValueOrNull $txtPeopleOpsPartner.Text
+            employeeId                = Get-ValueOrNull $txtEmployeeId.Text
+            businessPhone             = Get-ValueOrNull $txtBusinessPhone.Text
+            faxNumber                 = Get-ValueOrNull $txtFaxNumber.Text
+            streetAddress             = Get-ValueOrNull $txtStreetAddress.Text
+            city                      = Get-ValueOrNull $txtCity.Text
+            state                     = Get-ValueOrNull $txtState.Text
+            postalCode                = Get-ValueOrNull $txtPostalCode.Text
+            country                   = Get-ValueOrNull $txtCountry.Text
+            departmentGroupOptions    = @()
+            testModeEnabled           = $false
+            Send8x8ProvisioningTicket = $false
+            InstallSapience           = $false
+            cloudOnly                 = $true
         }
 
         # Store required licenses in an array of objects with DisplayName and SkuId
@@ -5014,30 +5014,6 @@ function Start-NewUserFinalize {
         "6. If Connectwise PSA member creation failed, please create the member manually and assign the SSO ID to complete setup."
     )
 
-    if ($UserInput.InstallSapience -eq $true) {
-        $summaryParts += @(
-            "",
-            "Sapience Requested:",
-            "----------------------------------------",
-            "This user is required to have Sapience. Please ensure a user is created in the Sapience portal. You will need the following information to create the user in Sapience:",
-            "- First Name: $($User.givenName)",
-            "- Last Name: $($User.surname)",
-            "- Email: $($User.Mail)",
-            "- Worker ID: $($User.EmployeeId)"
-            "- Job Title: $($User.jobTitle)",
-            "- Job Family: $($User.Department)",
-            "- Department: $(if ($User.OfficeLocation) { $User.OfficeLocation } else { $User.Department })"
-            "- Manager: $($ManagerDisplayName)"
-            "- Domain: AzureAD"
-            "- Domain ID: $($User.DisplayName -replace '\s')"
-            "- Work Schedule: Default Work Schedule"
-            "- Activity Collection: On"
-            "- Worker Type: Full-Time"
-            "- App Role: Activity Access"
-            "- Work Location Type (Custom Fields): $($User.City)"
-        )
-    }
-
     # Display summary
     try {
         $summaryMessage = $summaryParts -join "`n"
@@ -5470,6 +5446,12 @@ try {
 
     Add-UserToRequiredGroups -User $mgUser -Groups $requiredGroups
 
+    # Auto-detect Sapience requirement from copied groups
+    if (-not $userInput.InstallSapience -and ($copyGroups.DisplayName -contains 'SapienceIQ Users')) {
+        Write-StatusMessage -Message "Auto-enabling Sapience: 'SapienceIQ Users' found in template user groups" -Type INFO
+        $userInput.InstallSapience = $true
+    }
+
     # Step: Full Access to managedservices@compassmsp.com
     Write-ProgressStep -StepName 'Managed Service Mailbox Assignment'
 
@@ -5613,7 +5595,6 @@ Thank you,<br>
             Write-StatusMessage -Message "Failed to send new user notification email: $($_.Exception.Message)" -Type ERROR
         }
 
-
         # Email for Salesforce
         if ($MgUser.department -in @('Sales')) {
             Write-StatusMessage -Message "User is in Sales department. Sending notification for Salesforce provisioning..." -Type INFO
@@ -5699,8 +5680,69 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
             }
         }
 
+        # Create ticket for Sapience user provisioning on the Internal Board
+        if ($userInput.InstallSapience -eq $true) {
+            Write-StatusMessage -Message "Creating ticket for Sapience user provisioning..." -Type INFO
+            try {
+
+                $emailSubject = "Sapience – New User"
+
+                $emailContent = @"
+This user is required to have Sapience. Please ensure a user is created in the Sapience portal. You will need the following information to create the user in Sapience:.
+
+First Name: $($MgUser.givenName),
+Last Name: $($MgUser.surname),
+Email: $($MgUser.Mail),
+Worker ID: $($MgUser.EmployeeId)
+Job Title: $($MgUser.jobTitle),
+Job Family: $($MgUser.Department),
+Department: $(if ($MgUser.OfficeLocation) { $MgUser.OfficeLocation } else { $MgUser.Department })
+Manager: $($managerResponse.displayName)
+Domain: AzureAD
+Domain ID: $($MgUser.DisplayName -replace '\s')
+Work Schedule: Default Work Schedule
+Activity Collection: On
+Worker Type: Full-Time
+App Role: Activity Access
+Work Location Type (Custom Fields): $($MgUser.City)
+"@
+
+                $body = @{
+                    summary            = $emailSubject
+                    initialDescription = $emailContent
+                    company            = @{
+                        identifier = 'CompassMSP'
+                    }
+                    board              = @{
+                        name = "Internal Service Desk"
+                    }
+                    status             = @{
+                        name = "+New"
+                    }
+                } | ConvertTo-Json -Depth 10
+
+                $baseUrl = 'https://service.mycompass.cloud/v4_6_release/apis/3.0'
+
+                $sapienceTicketResults = Invoke-RestMethod `
+                    -Method Post `
+                    -Uri "$baseUrl/service/tickets" `
+                    -Headers $psaHeaders `
+                    -Body $body `
+                    -ContentType "application/json"
+
+                if ($sapienceTicketResults) {
+                    Write-StatusMessage -Message "Successfully created Sapience provisioning ticket: $($sapienceTicketResults.id)" -Type OK
+                } else {
+                    Write-StatusMessage -Message "Failed to create Sapience provisioning ticket: No response from API" -Type ERROR
+                }
+
+            } catch {
+                Write-StatusMessage -Message "Failed to create Sapience provisioning ticket: $($_.Exception.Message)" -Type ERROR
+            }
+        }
+
     } else {
-        Write-StatusMessage -Message "Test mode is enabled. Skipping Salesforce notification and 8x8 ticket creation." -Type INFO
+        Write-StatusMessage -Message "Test mode is enabled. Skipping Salesforce notification, 8x8 ticket and Sapience ticket creation." -Type INFO
     }
 
     # Step: OneDrive Provisioning
