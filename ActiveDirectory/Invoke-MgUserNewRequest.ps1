@@ -5685,7 +5685,7 @@ The user start date is $($userInput.employeeHireDate), so please send the welcom
             Write-StatusMessage -Message "Creating ticket for Sapience user provisioning..." -Type INFO
             try {
 
-                $emailSubject = "Sapience – New User"
+                $emailSubject = "Sapience – New User: $($MgUser.displayName)"
 
                 $emailContent = @"
 This user is required to have Sapience. Please ensure a user is created in the Sapience portal. You will need the following information to create the user in Sapience:.
