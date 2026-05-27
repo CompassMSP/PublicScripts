@@ -5447,7 +5447,7 @@ try {
     Add-UserToRequiredGroups -User $mgUser -Groups $requiredGroups
 
     # Auto-detect Sapience requirement from copied groups
-    if (-not $userInput.InstallSapience -and ($copyGroups.DisplayName -contains 'SapienceIQ Users')) {
+    if ($userInput.InstallSapience -eq $false -and ($copyGroups.DisplayName -contains 'SapienceIQ Users')) {
         Write-StatusMessage -Message "Auto-enabling Sapience: 'SapienceIQ Users' found in template user groups" -Type INFO
         $userInput.InstallSapience = $true
     }
