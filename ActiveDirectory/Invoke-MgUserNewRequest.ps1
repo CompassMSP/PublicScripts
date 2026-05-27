@@ -4287,12 +4287,33 @@ function Add-UserToRequiredGroups {
             continue
         }
 
+        # Skip dynamic membership groups — members cannot be added manually
+        if ($group.groupTypes -contains 'DynamicMembership') {
+            Write-StatusMessage -Message "Group '$($group.displayName)' uses dynamic membership. Skipping." -Type WARN
+            continue
+        }
+
         # Check membership by ID
         $isMember = $currentGroups | Where-Object { $_.id -eq $group.id }
         if ($null -eq $isMember) {
             Write-StatusMessage -Message "Adding user $($User.DisplayName) to $($group.displayName) group." -Type INFO
             $groupAddUri = "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref"
-            Invoke-RestMethod -Method POST -Uri $groupAddUri -Headers $script:GraphHeaders -Body (@{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($User.id)" } | ConvertTo-Json) -ContentType "application/json" | Out-Null
+            try {
+                Invoke-RestMethod -Method POST -Uri $groupAddUri -Headers $script:GraphHeaders -Body (@{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($User.id)" } | ConvertTo-Json) -ContentType "application/json" | Out-Null
+            } catch {
+                # Graph API cannot add members to mail-enabled groups (distribution/mail-enabled security).
+                # Fall back to Exchange Online for those; warn and skip for anything else.
+                if ($group.mailEnabled -eq $true) {
+                    try {
+                        Add-DistributionGroupMember -Identity $group.mail -Member $User.Mail -ErrorAction Stop
+                        Write-StatusMessage -Message "Added $($User.DisplayName) to '$($group.displayName)' via Exchange Online." -Type INFO
+                    } catch {
+                        Write-StatusMessage -Message "Failed to add $($User.DisplayName) to '$($group.displayName)' via Exchange Online: $($_.Exception.Message)" -Type WARN
+                    }
+                } else {
+                    Write-StatusMessage -Message "Failed to add $($User.DisplayName) to '$($group.displayName)': $($_.Exception.Message)" -Type WARN
+                }
+            }
         } else {
             Write-StatusMessage -Message "User $($User.DisplayName) is already a member of $($group.displayName). Skipping." -Type INFO
         }
@@ -5437,7 +5458,6 @@ try {
         'All Company'
         'KnowBe4'
         'Exclaimer Default'
-        'Exclaimer Add-in'
     )
 
     if ($userInput.InstallSapience -eq $true) {
