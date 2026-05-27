@@ -4287,35 +4287,55 @@ function Add-UserToRequiredGroups {
             continue
         }
 
+        # Skip on-premises synced groups — membership is managed by on-prem AD
+        if ($group.onPremisesSyncEnabled -eq $true) {
+            Write-StatusMessage -Message "Group '$($group.displayName)' is synced from on-premises AD. Skipping." -Type WARN
+            continue
+        }
+
         # Skip dynamic membership groups — members cannot be added manually
         if ($group.groupTypes -contains 'DynamicMembership') {
             Write-StatusMessage -Message "Group '$($group.displayName)' uses dynamic membership. Skipping." -Type WARN
             continue
         }
 
+        $groupType = if ($group.groupTypes -contains 'Unified') {
+            'Unified'
+        } elseif ($group.mailEnabled -and $group.securityEnabled) {
+            'Mail-Enabled Security'
+        } elseif ($group.securityEnabled) {
+            'Security'
+        } elseif ($group.mailEnabled) {
+            'Distribution'
+        } else {
+            'Unknown'
+        }
+
         # Check membership by ID
         $isMember = $currentGroups | Where-Object { $_.id -eq $group.id }
         if ($null -eq $isMember) {
-            Write-StatusMessage -Message "Adding user $($User.DisplayName) to $($group.displayName) group." -Type INFO
-            $groupAddUri = "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref"
-            try {
-                Invoke-RestMethod -Method POST -Uri $groupAddUri -Headers $script:GraphHeaders -Body (@{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($User.id)" } | ConvertTo-Json) -ContentType "application/json" | Out-Null
-            } catch {
-                # Graph API cannot add members to mail-enabled groups (distribution/mail-enabled security).
-                # Fall back to Exchange Online for those; warn and skip for anything else.
-                if ($group.mailEnabled -eq $true) {
-                    try {
-                        Add-DistributionGroupMember -Identity $group.mail -Member $User.Mail -ErrorAction Stop
-                        Write-StatusMessage -Message "Added $($User.DisplayName) to '$($group.displayName)' via Exchange Online." -Type INFO
-                    } catch {
-                        Write-StatusMessage -Message "Failed to add $($User.DisplayName) to '$($group.displayName)' via Exchange Online: $($_.Exception.Message)" -Type WARN
-                    }
-                } else {
+            Write-StatusMessage -Message "Adding user $($User.DisplayName) to '$($group.displayName)' ($groupType)." -Type INFO
+
+            if ($groupType -in @('Unified', 'Security')) {
+                try {
+                    $groupAddUri = "https://graph.microsoft.com/v1.0/groups/$($group.id)/members/`$ref"
+                    Invoke-RestMethod -Method POST -Uri $groupAddUri -Headers $script:GraphHeaders -Body (@{ "@odata.id" = "https://graph.microsoft.com/v1.0/directoryObjects/$($User.id)" } | ConvertTo-Json) -ContentType "application/json" | Out-Null
+                    Write-StatusMessage -Message "Successfully added $($User.DisplayName) to '$($group.displayName)'." -Type OK
+                } catch {
                     Write-StatusMessage -Message "Failed to add $($User.DisplayName) to '$($group.displayName)': $($_.Exception.Message)" -Type WARN
                 }
+            } elseif ($groupType -in @('Distribution', 'Mail-Enabled Security')) {
+                try {
+                    Add-DistributionGroupMember -Identity $group.mail -Member $User.Mail -ErrorAction Stop
+                    Write-StatusMessage -Message "Successfully added $($User.DisplayName) to '$($group.displayName)' via Exchange Online." -Type OK
+                } catch {
+                    Write-StatusMessage -Message "Failed to add $($User.DisplayName) to '$($group.displayName)' via Exchange Online: $($_.Exception.Message)" -Type WARN
+                }
+            } else {
+                Write-StatusMessage -Message "Group '$($group.displayName)' has unsupported type '$groupType'. Skipping." -Type WARN
             }
         } else {
-            Write-StatusMessage -Message "User $($User.DisplayName) is already a member of $($group.displayName). Skipping." -Type INFO
+            Write-StatusMessage -Message "User $($User.DisplayName) is already a member of '$($group.displayName)' ($groupType). Skipping." -Type INFO
         }
     }
 }
@@ -4657,30 +4677,23 @@ function New-ConnectwisePSAMember {
             $selectCustomField = $getCustomFields.Content | Where-Object { $_.caption -eq 'Primary Engineer' }
             $getUserDefinedFields = Invoke-ConnectWiseManageAPI -Method 'GET' -Headers $headers -Endpoint "system/userDefinedFields/$($selectCustomField.Id)"
 
-            # Get the highest existing ID in the current options
+            # Get the highest existing sort order
             $sortOrder = ([int]($getUserDefinedFields.Content.options.sortOrder | Measure-Object -Maximum).Maximum)
 
-            # Define new options, ensuring their IDs are unique
-            $newCustomFieldsOption = @(
+            # Clone the full field definition and append the new option to the existing list.
+            # PATCH is not supported on this endpoint in API 2026.5 — PUT requires the complete definition.
+            $updatedField = $getUserDefinedFields.Content | ConvertTo-Json -Depth 10 | ConvertFrom-Json -AsHashtable
+            $updatedField['options'] = @($getUserDefinedFields.Content.options) + @(
                 [PSCustomObject]@{
-                    optionValue  = $($NewUser.DisplayName)
+                    optionValue  = $NewUser.DisplayName
                     defaultFlag  = $false
                     inactiveFlag = $false
                     sortOrder    = $sortOrder + 1
                 }
             )
 
-            # Create the body for the PATCH request
-            $customFieldsBody = @(
-                [PSCustomObject]@{
-                    op    = "replace"
-                    path  = "options"  # Append to the array
-                    value = $newCustomFieldsOption
-                }
-            )
-
-            # Send the PATCH request
-            $engineerResult = Invoke-ConnectWiseManageAPI -Method 'PATCH' -Headers $headers -Endpoint "system/userDefinedFields/$($selectCustomField.Id)" -Body $customFieldsBody
+            # PUT the complete updated definition
+            $engineerResult = Invoke-ConnectWiseManageAPI -Method 'PUT' -Headers $headers -Endpoint "system/userDefinedFields/$($selectCustomField.Id)" -Body $updatedField
 
             # EngineerResult attached to return; caller handles success/failure messaging
 
