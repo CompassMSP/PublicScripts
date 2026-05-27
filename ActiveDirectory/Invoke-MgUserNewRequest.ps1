@@ -37,6 +37,11 @@ TODO: Add Department Group Mapping on line 3102 at $setDepartmentMappings
     ------------------------------------------------------------------------------
     Version    Date         Changes
     -------    ----------  -------------------------------------------------------
+    4.4.5      2026-05-27   Bug Fixes:
+                            - Fixed issue where Send-GraphMailMessage failed with a Graph API schema error when sending to a single recipient
+                                PowerShell was unwrapping the one-element array from the normalizeAddresses scriptblock, causing toRecipients to serialize as an object instead of an array in the JSON payload.
+                            - Fixed 405 Method Not Allowed error during PSA Primary Engineer field update: PATCH is not supported on system/userDefinedFields in CWM API 2026.5. Converted to PUT with full field definition round-trip.
+
     4.4.4      2026-05-07   Feature Updates:
                             - Added People Ops Partner extraction from HiBob import footer ("This email was sent by [Name].")
                             - Added People Ops Partner form field (txtPeopleOpsPartner) in right column below Manager
@@ -622,10 +627,10 @@ function Send-GraphMailMessage {
         [string]$FromAddress,
 
         [Parameter()]
-        [string[]]$ToAddress,
+        $ToAddress,
 
         [Parameter()]
-        [string[]]$CcAddress,
+        $CcAddress,
 
         [Parameter()]
         [ValidateSet('HTML', 'Text')]
@@ -643,7 +648,7 @@ function Send-GraphMailMessage {
         if ([string]::IsNullOrWhiteSpace($FromAddress)) {
             throw "FromAddress cannot be empty"
         }
-        if ([string]::IsNullOrWhiteSpace($ToAddress)) {
+        if (-not $ToAddress) {
             throw "ToAddress cannot be empty"
         }
 
@@ -654,6 +659,25 @@ function Send-GraphMailMessage {
             $CcAddress = @() # Clear CC in test mode
         }
 
+        # Normalize any address input into Graph recipient objects.
+        # Handles: single string, comma/semicolon-separated string, array, or any mix.
+        $normalizeAddresses = {
+            param($Addresses)
+            @(
+                @($Addresses) |
+                    Where-Object { $_ } |
+                    ForEach-Object { $_ -split '[,;]' } |
+                    ForEach-Object { $_.Trim() } |
+                    Where-Object { $_ } |
+                    ForEach-Object { @{ emailAddress = @{ address = $_ } } }
+            )
+        }
+
+        [array]$toRecipients = & $normalizeAddresses $ToAddress
+        if (-not $toRecipients) {
+            throw "ToAddress must contain at least one valid email address."
+        }
+
         $messageParams = @{
             message         = @{
                 subject      = $Subject
@@ -661,58 +685,47 @@ function Send-GraphMailMessage {
                     contentType = $ContentType
                     content     = $Content
                 }
-                toRecipients = @(
-                    @{
-                        emailAddress = @{
-                            address = $ToAddress.Trim()
-                        }
-                    }
-                )
+                toRecipients = $toRecipients
             }
             saveToSentItems = $false
         }
 
         # Add CC recipients if specified
         if ($CcAddress) {
-            # Convert input to array if it's not already one
-            $ccArray = if ($CcAddress -is [array]) {
-                $CcAddress
-            } else {
-                @($CcAddress)
+            [array]$ccRecipients = & $normalizeAddresses $CcAddress
+            if ($ccRecipients) {
+                $messageParams.message['ccRecipients'] = $ccRecipients
             }
-
-            # Ensure CcAddress is an array and create recipient objects
-            $ccRecipients = @(
-                foreach ($cc in $ccArray) {
-                    @{
-                        emailAddress = @{
-                            address = $cc.ToString().Trim()
-                        }
-                    }
-                }
-            )
-            $messageParams.message['ccRecipients'] = $ccRecipients
         }
 
         # Add attachment if specified
         if ($AttachmentPath) {
-            $attachmentContent = Get-Content -Path $AttachmentPath -AsByteStream
-            $attachmentBase64 = [System.Convert]::ToBase64String($attachmentContent)
+            $attachmentBase64 = [System.Convert]::ToBase64String(
+                [System.IO.File]::ReadAllBytes($AttachmentPath)
+            )
+            $mimeType = switch ([System.IO.Path]::GetExtension($AttachmentPath).TrimStart('.').ToLower()) {
+                'pdf'  { 'application/pdf' }
+                'docx' { 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }
+                'xlsx' { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+                'csv'  { 'text/csv' }
+                'html' { 'text/html' }
+                'json' { 'application/json' }
+                'zip'  { 'application/zip' }
+                { $_ -in 'log', 'txt' } { 'text/plain' }
+                default { 'application/octet-stream' }
+            }
 
             $messageParams.message['attachments'] = @(
                 @{
                     '@odata.type' = '#microsoft.graph.fileAttachment'
-                    name          = $AttachmentName ?? (Split-Path $AttachmentPath -Leaf)
-                    contentType   = 'text/plain'
+                    name          = $AttachmentName ?? [System.IO.Path]::GetFileName($AttachmentPath)
+                    contentType   = $mimeType
                     contentBytes  = $attachmentBase64
                 }
             )
         }
 
-        # Convert message parameters to JSON explicitly
         $jsonBody = $messageParams | ConvertTo-Json -Depth 10 -Compress
-
-        # Use Graph API directly
         $graphUri = "https://graph.microsoft.com/v1.0/users/$FromAddress/sendMail"
         Invoke-RestMethod -Method POST -Uri $graphUri -Headers $script:GraphHeaders -Body $jsonBody -ContentType "application/json" | Out-Null
         Write-StatusMessage -Message "Email notification sent successfully" -Type OK
@@ -2373,7 +2386,7 @@ function Get-NewUserRequest {
             if ([string]::IsNullOrWhiteSpace($value)) {
                 return $null
             }
-            return $value
+            return $value.Trim()
         }
 
         # Determine usageLocation with priority: Country field > Remote City > ComboBox
@@ -3693,9 +3706,21 @@ function Set-UserManager {
         if ($manager.value.Count -gt 0) {
             $managerId = $manager.value[0].id
 
-            # Get the user's ID
+            # Get the user's ID (with retry for filter index replication lag)
             $graphQuery = "https://graph.microsoft.com/v1.0/users?`$filter=userPrincipalName eq '$Identity'"
-            $user = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
+            $maxRetries = 5
+            $retryDelaySec = 10
+            $user = $null
+
+            for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+                $user = Invoke-RestMethod -Method GET -Uri $graphQuery -Headers $script:GraphHeaders
+                if ($user.value.Count -gt 0) { break }
+
+                if ($attempt -lt $maxRetries) {
+                    Write-StatusMessage -Message "User not found: $Identity (attempt $attempt/$maxRetries), retrying in ${retryDelaySec}s..." -Type WARN
+                    Start-Sleep -Seconds $retryDelaySec
+                }
+            }
 
             if ($user.value.Count -gt 0) {
                 $userId = $user.value[0].id
@@ -3708,7 +3733,7 @@ function Set-UserManager {
                 Invoke-RestMethod -Method PUT -Uri "https://graph.microsoft.com/v1.0/users/$userId/manager/`$ref" -Headers $script:GraphHeaders -Body ($updateBody | ConvertTo-Json) -ContentType "application/json" | Out-Null
                 Write-StatusMessage -Message "Successfully set manager for user: $Identity" -Type OK
             } else {
-                Write-StatusMessage -Message "User '$Identity' not found in Microsoft Graph." -Type WARN
+                Write-StatusMessage -Message "User '$Identity' not found in Microsoft Graph after $maxRetries attempts." -Type WARN
             }
         } else {
             Write-StatusMessage -Message "Manager '$ManagerInput' not found in Microsoft Graph." -Type WARN
