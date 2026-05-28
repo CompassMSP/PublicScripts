@@ -5346,6 +5346,7 @@ try {
             $userinput.timeZone = 'US Mountain Standard Time'
         }
         Set-MailboxRegionalConfiguration -Identity $($newUserProperties.Email) -TimeZone $userinput.timeZone
+        Set-MailboxCalendarConfiguration -Identity $($newUserProperties.Email) -WorkingHoursTimeZone $userinput.timeZone
     } else {
         Write-StatusMessage -Message "Timezone for new user not selected. Skipping" -Type ERROR
     }
