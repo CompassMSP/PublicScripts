@@ -1761,7 +1761,7 @@ function Disable-GraphUser {
             $bodyJson = $updateUserParams | ConvertTo-Json -Depth 3
 
             # Send the PATCH request
-            Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)" -Headers $script:GraphHeaders -Body $bodyJson -ContentType "application/json" -ErrorAction Stop
+            $null = Invoke-RestMethod -Method PATCH -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)" -Headers $script:GraphHeaders -Body $bodyJson -ContentType "application/json" -ErrorAction Stop
 
             Write-StatusMessage -Message "User account disabled and attributes cleared" -Type OK
         } catch {
@@ -1797,7 +1797,7 @@ function Remove-UserSessions {
         # Revoke all sessions
         Write-StatusMessage -Message "Revoking all user signed in sessions" -Type INFO
         try {
-            Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/revokeSignInSessions" -Headers $script:GraphHeaders -ErrorAction Stop
+            $null = Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/revokeSignInSessions" -Headers $script:GraphHeaders -ErrorAction Stop
             Write-StatusMessage -Message "Successfully revoked all user sessions" -Type OK
         } catch {
             Write-StatusMessage -Message "Failed to revoke user sessions" -Type ERROR
@@ -1839,7 +1839,7 @@ function Remove-UserSessions {
                 $uri = "https://graph.microsoft.com/v1.0/users/$($User.Id)/authentication/$($methodInfo.Path)/$methodId"
 
                 try {
-                    Invoke-RestMethod -Method DELETE -Uri $uri -Headers $script:GraphHeaders -ErrorAction Stop
+                    $null = Invoke-RestMethod -Method DELETE -Uri $uri -Headers $script:GraphHeaders -ErrorAction Stop
                     Write-StatusMessage -Message "$($methodInfo.Message): $methodId" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove authentication method $methodId of type $authType" -Type ERROR
@@ -1883,7 +1883,7 @@ function Remove-UserSessions {
                     $uri = "https://graph.microsoft.com/v1.0/devices/$($termUserDevice.id)"
                     $body = @{ accountEnabled = $false } | ConvertTo-Json
 
-                    Invoke-RestMethod -Method PATCH -Uri $uri -Headers $script:GraphHeaders -Body $body -ContentType "application/json" -ErrorAction Stop
+                    $null = Invoke-RestMethod -Method PATCH -Uri $uri -Headers $script:GraphHeaders -Body $body -ContentType "application/json" -ErrorAction Stop
 
                     Write-StatusMessage -Message "Successfully disabled device: $($termUserDevice.id)" -Type OK
                 } catch {
@@ -2022,7 +2022,7 @@ function Remove-UserFromEntraDirectoryRoles {
                     Write-StatusMessage -Message "Removing from role: $roleName" -Type INFO
 
                     $removeUri = "https://graph.microsoft.com/v1.0/directoryRoles/$roleId/members/$($User.Id)/`$ref"
-                    Invoke-RestMethod -Method DELETE -Uri $removeUri -Headers $script:GraphHeaders -ErrorAction Stop
+                    $null = Invoke-RestMethod -Method DELETE -Uri $removeUri -Headers $script:GraphHeaders -ErrorAction Stop
 
                     Write-StatusMessage -Message "Successfully removed from role: $roleName" -Type OK
                 } catch {
@@ -2106,7 +2106,7 @@ function Remove-UserFromEntraGroups {
                 try {
                     if ($group.securityEnabled -or $group.groupType -eq 'Unified') {
                         $uri = "https://graph.microsoft.com/v1.0/groups/$($group.Id)/members/$($User.Id)/`$ref"
-                        Invoke-RestMethod -Method DELETE -Uri $uri -Headers $script:GraphHeaders -ErrorAction Stop
+                        $null = Invoke-RestMethod -Method DELETE -Uri $uri -Headers $script:GraphHeaders -ErrorAction Stop
                         Write-StatusMessage -Message "Removed from Security/Unified Group: $($group.DisplayName)" -Type OK
                     } else {
                         # Fallback to Exchange Online for Distribution Groups
@@ -2238,7 +2238,7 @@ function Remove-UserGroupOwnership {
                     # Remove ownership
                     $removeUri = "https://graph.microsoft.com/v1.0/groups/$($group.Id)/owners/$($User.Id)/`$ref"
 
-                    Invoke-RestMethod `
+                    $null = Invoke-RestMethod `
                         -Method DELETE `
                         -Uri $removeUri `
                         -Headers $script:GraphHeaders `
@@ -2318,7 +2318,7 @@ function Remove-UserLicenses {
                         removeLicenses = @($license.skuId)
                     } | ConvertTo-Json -Depth 3
 
-                    Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                    $null = Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Ancillary License: $($license.skuPartNumber)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove Ancillary License $($license.skuPartNumber) - will retry later" -Type WARN
@@ -2334,7 +2334,7 @@ function Remove-UserLicenses {
                         removeLicenses = @($license.skuId)
                     } | ConvertTo-Json -Depth 3
 
-                    Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                    $null = Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
                     Write-StatusMessage -Message "Removed Primary License: $($license.skuPartNumber)" -Type OK
                 } catch {
                     Write-StatusMessage -Message "Failed to remove Primary License $($license.skuPartNumber) - will retry later" -Type WARN
@@ -2360,7 +2360,7 @@ function Remove-UserLicenses {
                                 removeLicenses = @($license.skuId)
                             } | ConvertTo-Json -Depth 3
 
-                            Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
+                            $null = Invoke-RestMethod -Method POST -Uri "https://graph.microsoft.com/v1.0/users/$($User.Id)/assignLicense" -Headers $script:GraphHeaders -Body $licenseBody -ContentType "application/json" -ErrorAction Stop
                             Write-StatusMessage -Message "Successfully removed license on retry: $($license.skuPartNumber)" -Type OK
                             Start-Sleep -Seconds 2
                         } catch {
