@@ -5705,9 +5705,9 @@ Manager Display Name: $($managerResponse.displayName)
 
 Once the account is set up, please email the user's extension to $($dialRecipients). Include direct dial number if one is assigned.
 
-Please do not send the welcome email with the account setup.
+Please do not send the welcome email as part of the account setup.
 
-The user start date is $($userInput.employeeHireDate), so please send the welcome email the day prior to their start.
+The user's start date is $($userInput.employeeHireDate). Please hold the welcome email and send it on their first day of employment so they receive it when they begin their onboarding process.
 "@
 
                 $body = @{
