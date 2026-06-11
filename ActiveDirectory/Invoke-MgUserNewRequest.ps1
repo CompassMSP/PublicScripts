@@ -5608,6 +5608,8 @@ Display Name: $($MgUser.displayName)<br>
 Email Address: $($MgUser.Mail)<br>
 Temporary Password: $($passwordResult.PlainPassword)<br>
 $($newPSAMemberResults.Content.identifier ? "ConnectWise Manage Username: $($newPSAMemberResults.Content.identifier)<br>`n" : "")<br><br>
+Phone Number / Email Signature<br>
+If the user's direct dial (DID) number needs to be added to their email signature, please notify Internal IT and provide the assigned number. This information should have been provided by the Telecom team. Once received, Internal IT will update the user's email signature accordingly.<br><br>
 If you have any questions or need assistance getting them set up, please reach out to Internal IT for assistance.<br><br>
 Thank you,<br>
 "@
@@ -5703,7 +5705,7 @@ User to Copy: $($userInput.userToCopy)
 Manager Email: $($MgUser.Manager.mail)
 Manager Display Name: $($managerResponse.displayName)
 
-Once the account is set up, please email the user's extension to $($dialRecipients). Include direct dial number if one is assigned.
+Once the account is set up, please email the user's extension and direct dial number to $($dialRecipients).
 
 Please do not send the welcome email as part of the account setup.
 
