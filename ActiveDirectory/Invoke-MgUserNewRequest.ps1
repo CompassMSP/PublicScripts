@@ -5684,7 +5684,10 @@ The user start date is $($userInput.employeeHireDate).<br>
             Write-StatusMessage -Message "Creating ticket for 8x8 provisioning..." -Type INFO
             try {
 
-                $emailSubject = "8x8 – New User"
+                $dialRecipients = "$($MgUser.Manager.mail)"
+                if ($PeopleOpsPartnerEmail) { $dialRecipients += ", $PeopleOpsPartnerEmail" }
+
+                $emailSubject = "8x8 – New User: $($MgUser.displayName)"
                 $callCenter = if ($MgUser.officeLocation -in @('Reactive', 'Managed Services Reactive')) { 'Yes' } else { 'No' }
 
                 $emailContent = @"
@@ -5699,6 +5702,8 @@ Call Center: $callCenter
 User to Copy: $($userInput.userToCopy)
 Manager Email: $($MgUser.Manager.mail)
 Manager Display Name: $($managerResponse.displayName)
+
+Once the account is set up, please email the user's extension to $($dialRecipients). Include direct dial number if one is assigned.
 
 Please do not send the welcome email with the account setup.
 
